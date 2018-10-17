@@ -3,7 +3,7 @@
 {-# LANGUAGE GADTs #-}
 module Parse where
 
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, min)
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -42,8 +42,25 @@ import Text.Show.Pretty
 
 
 -- Datatypes
+periodSep :: Parser String -> Parser [String]
+periodSep p = p `sepBy` (symbol ".")
+
+skipOptColon = skipOptional (char ':')
+
+twoDigit :: Parser Int
+twoDigit = read <$> count 2 digit <* skipOptColon
+
+--timestamp :: Parser (Maybe TimeStamp)
+--timestamp = fromList <$> read <$> periodSep twoDigit
 
 
+
+timestamp :: Parser TimeStamp
+--timestamp = fromList <$> fmap read <$> periodSep twoDigit
+timestamp = TimeStamp <$> twoDigit <*> twoDigit <*> twoDigit  <* space <* char 'λ' <* skipOptColon
+
+skip :: Parser p -> Parser ()
+skip p = () <$ p
 
 data MediaType = Play
                | Book
@@ -75,6 +92,10 @@ data TimeStamp = TimeStamp { hr :: Int
                            , sec :: Int }
                            deriving (Eq, Show)
 
+fromList :: [Int] -> Maybe TimeStamp
+fromList (x:(x':(x'':[]))) = Just $ TimeStamp x x' x''
+fromList _ = Nothing
+
 type Headword = T.Text
 type Meaning = T.Text
 
@@ -95,3 +116,6 @@ data Log = Log [(TimeStamp, Entry)]
 
 
 -- ISBN for pgNumbers?
+
+parse :: Parser a -> String -> Result a
+parse p = parseString p mempty 

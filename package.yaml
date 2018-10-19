@@ -26,6 +26,9 @@ dependencies:
 - pretty-show
 - mtl >= 2.2.2
 - raw-strings-qq
+- hspec
+- QuickCheck
+- split
 
 library:
   source-dirs: src
@@ -51,3 +54,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - logParse
+    - hspec
+    - QuickCheck
+    - trifecta

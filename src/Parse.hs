@@ -155,7 +155,7 @@ testLog = [r|
 08:45:37 λ. d tumbler
 08:49:57 λ. d disport
 08:56:30 λ. d larder
-08:57:29 λ. d wainscot, 
+08:57:29 λ. d wainscot
 09:12:16 λ. d fender
 09:14:12 λ. d bleat 
 09:15:48 λ. d dissever
@@ -247,9 +247,15 @@ toDefQuery = fmap mkDefQuery $ char 'd' -- TODO case match on prefix (d vs dvs v
                              *> sepBy (many $ noneOf ",") (symbol ",")
 
 -- WIP, current 
-parseDefQueries :: String -> [(TimeStamp, Maybe DefQuery)]
-parseDefQueries = (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ") 
+parseDefQueries :: String -> [(TimeStamp, DefQuery)]
+parseDefQueries = rmEmptyQueries 
+                . (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ") 
                 . logToEntryGrps
+
+rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)] 
+rmEmptyQueries  = foldr (\(ts, m) rst -> case m of
+                                            Just x -> (ts, x):rst
+                                            Nothing -> rst) []
 
 
 v0 = "08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal"

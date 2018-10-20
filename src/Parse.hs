@@ -3,21 +3,22 @@
 {-# LANGUAGE GADTs #-}
 module Parse where
 
-import Prelude hiding (any, lookup, min)
+import Prelude hiding (any, lookup, min, until)
 
 import Data.Char (isSpace)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Text.RawString.QQ
 import qualified Data.Text.Lazy as TL
-import Text.Trifecta hiding (newline, rendered, render, Rendering, Span)
+import Text.Trifecta hiding (rendered, render, Rendering, Span)
 import Control.Applicative
 import Data.Monoid ((<>))
 import Data.Bifunctor
 import Data.List (stripPrefix, isPrefixOf, intercalate, dropWhile, dropWhileEnd)
-import Data.List.Split (splitOn)
+import qualified Data.List.Split as Split
 import Text.Trifecta.Result (Result(..))
 import Text.Parser.Combinators
+import Text.Parser.LookAhead
 import qualified Text.Trifecta.Result as Tri
 import Data.Maybe (catMaybes)
 
@@ -78,11 +79,11 @@ twoDigit = read <$> count 2 digit <* skipOptColon
 
 timestamp :: Parser TimeStamp
 --timestamp = fromList <$> fmap read <$> periodSep twoDigit
-timestamp = TimeStamp <$> twoDigit 
-                      <*> twoDigit 
-                      <*> twoDigit  
-                      <* space 
-                      <* char 'λ' 
+timestamp = TimeStamp <$> twoDigit
+                      <*> twoDigit
+                      <*> twoDigit
+                      <* space
+                      <* char 'λ'
                       <* char '.'
                       <* space
 
@@ -96,9 +97,9 @@ timestamp = TimeStamp <$> twoDigit
 --      - NB: no support for commentary, explication; include such in a
 --        separate entry.
 --
---   * ▣  for inline definition of headword 
+--   * ▣  for inline definition of headword
 --
---     > "d headword : meaning" 
+--     > "d headword : meaning"
 --
 --   * □  headword comparison
 --
@@ -106,13 +107,13 @@ timestamp = TimeStamp <$> twoDigit
 --     >      --- vs ---
 --     >      headword2 : meaning"
 defMultWords :: Parser [Def]
-defMultWords = undefined --defQueryPrefix *> 
+defMultWords = undefined --defQueryPrefix *>
 
 
-splitByComma = T.split (\c -> c == ',') 
+splitByComma = T.split (\c -> c == ',')
 
-newline :: Parser T.Text
-newline = textSymbol "\n"
+--newline :: Parser T.Text
+--newline = textSymbol "\n"
 
 defQueryPrefix :: T.Text -> T.Text
 defQueryPrefix t = case T.stripPrefix "d " t of
@@ -125,7 +126,7 @@ dropQueryPrefix t = case stripPrefix "d " t of
                      Nothing -> error $ "Expected defQueryPrefix \"d \"; found " ++ "\"" ++ take 4 t ++ "\""
 
 pruneQuery' :: T.Text -> [T.Text]
-pruneQuery' = splitByComma . defQueryPrefix 
+pruneQuery' = splitByComma . defQueryPrefix
 
 data DefQuery = Plural [Headword]
               | Single Headword
@@ -139,7 +140,7 @@ trimDefQuery (Single hw) = Single (trim hw)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
 trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
-rmNull :: DefQuery -> DefQuery 
+rmNull :: DefQuery -> DefQuery
 rmNull (Plural hws) = Plural (filter (not.null) hws)
 rmNull (Single hw) = Single (trim hw)
 rmNull (InlineDef hw meaning) = InlineDef (trim hw) meaning
@@ -157,28 +158,41 @@ testStrInline1 = [r|\
 d word1 : meaning1; meaning2; meaning3;
   followup notes...
 
-  NB: further commentary. all text to next TimeStamp should be lumped into the 
+  NB: further commentary. all text to next TimeStamp should be lumped into the
   meaning
 |]
 
 testLog = [r|
 08:23:30 λ. d quiescence, quiescent, quiesce
-08:24:43 λ. d vouchsafed, 
+08:24:43 λ. d vouchsafed,
             another-word
 08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
+
             second-line
+
+08:38:20 λ.
+
 08:38:20 λ. d elegy : meaning
 08:45:37 λ. d tumbler
 08:49:57 λ. d disport : meaning
 08:56:30 λ. d larder
 08:57:29 λ. d wainscot
 09:12:16 λ. d fender
-09:14:12 λ. d bleat 
+09:14:12 λ. d bleat
 09:15:48 λ. d dissever
 09:24:04 λ. d rhapsody
+        aeou
+        aeou
+        aoeu
+        aeou
+        aeou
+
 |]
 
-isIndented = isPrefixOf "           " 
+ts = "aeou\naeou\naeou\n 09:24:04 λ.\n"
+
+
+isIndented = isPrefixOf "           "
 
 -- 08:58:23 λ. d dahlia : a bushy flower that has the form of a ball of
 -- 08:59:03 λ. d poppy : a red or yellow single-cupped, often cleft flower.
@@ -211,18 +225,18 @@ groupEntries lns =
 -- | USE THIS to split by entry.
 -- E.g., run `logToEntryGrps testLog` to view example log
 logToEntryGrps :: String -> [(TimeStamp, [String])]
-logToEntryGrps = catMaybes 
-               . fmap parseEntry 
-               . groupEntries 
-               . filter (not.null) 
+logToEntryGrps = catMaybes
+               . fmap parseEntry
+               . groupEntries
+               . filter (not.null)
                . lines
 
 restOfStr :: Parser String
 restOfStr = many (noneOf [])
- 
+
 any :: Parser String
 any = many (noneOf [])
- 
+
 
 
 --entry :: Parser (Maybe TimeStamp, String)
@@ -235,11 +249,11 @@ parseEntry :: [String] -> Maybe (TimeStamp, [String])
 parseEntry [] =  Nothing
 parseEntry (ln:lns)
   | isIndented ln = error "Entry lacks TimeStamp."
-  | otherwise = 
+  | otherwise =
     let x = parse ((,) <$> timestamp <*> restOfStr) ln
         --x :: _
      in toMaybe $ (fmap.fmap) (:lns) x
-                    
+
 
 -- the next `headwords`
 
@@ -247,7 +261,7 @@ parseEntry (ln:lns)
 -- | Parse headwords from plural def query variant (e.g. "d word1, ...,
 --  wordN").
 headwords :: String -> [String]
-headwords = splitOn ", " . dropQueryPrefix
+headwords = Split.splitOn ", " . dropQueryPrefix
 
 headwords' :: Parser (TimeStamp, String)
 headwords' = (fmap.fmap) dropQueryPrefix $ (,) <$> timestamp <*> any --sepBy (many $ noneOf ",") (symbol ",")
@@ -270,31 +284,66 @@ inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> any
 combo :: Parser (Maybe DefQuery)
 combo = try (fmap Just inlineMeaning <?> "inline") <|> toDefQuery <?> "default"
 
+-- TODO, wip, recent
+-- | Splits on delimiter
+wip :: Parser (String, String)
+wip = (,) <$> manyTill anyChar (try (string "--- vs ---")) <*> any
+
 parseDefQueries :: String -> [(TimeStamp, DefQuery)]
-parseDefQueries = rmEmptyQueries 
-                . (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ") 
+parseDefQueries = rmEmptyQueries
+                . (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ")
                 . logToEntryGrps
 
 
+-- | Collects lines up first occurrence of pattern `p`.
+untilP :: Parser p -> Parser String
+untilP p = do s <- many (noneOf "\n")
+              newline
+              -- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
+              s' <- try (lookAhead p >> return "") <|> untilP p
+              return $ s ++ s'
 
--- WIP, current 
+-- | Splits entries up by timestamp. From here we need to:
+--
+--  * parse entries into defs, quots, etc. 
+--    N.B: preserve indentation info, as it will be used to group entries
+--
+-- RECENT, WIP (p2), TODO apply def query parser to strings.
+entryStrings :: Parser [String]
+entryStrings = filter (not.null) <$> many entryBody
+
+entryBody :: Parser String
+entryBody = untilP $ (timestamp >> return ()) <|> eof
+
+lpad :: Parser a -> Parser a
+lpad p = whiteSpace *> p
+
+rpad :: Parser a -> Parser a
+rpad p = p <* whiteSpace
+
+pad = rpad . lpad
+
+-- WIP, current (p1)
 parseEntryPrefixes :: String -> [(TimeStamp, EntryPrefix, DefQuery)]
 parseEntryPrefixes = rmEmptyQueriesAndTrimHeadword
                    . fmap (genEntry . (fmap $ intercalate ", "))
                    . logToEntryGrps
-          where genEntry = \(ts, s) -> let (prefix, s') = mkEntryPrefix s 
+          where genEntry = \(ts, s) -> let (prefix, s') = mkEntryPrefix s
                                         in (ts, prefix, join . toMaybe . parse combo $ s')
 
 
-rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)] 
+rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)]
 rmEmptyQueries  = foldr (\(ts, m) rst -> case m of
                                             Just x -> (ts, x):rst
                                             Nothing -> rst) []
 
-rmEmptyQueriesAndTrimHeadword :: [(TimeStamp, EntryPrefix, Maybe DefQuery)] -> [(TimeStamp, EntryPrefix, DefQuery)] 
+rmEmptyQueriesAndTrimHeadword :: [(TimeStamp, EntryPrefix, Maybe DefQuery)] -> [(TimeStamp, EntryPrefix, DefQuery)]
 rmEmptyQueriesAndTrimHeadword  = foldr (\(ts, ep, m) rst -> case m of
                                             Just x -> (ts, ep, rmNull $ trimDefQuery x):rst
                                             Nothing -> rst) []
+
+-- NB: The top level parser is going to look like `many entry', where entry
+-- consumes a valid variant up to, but not including, the next TS or EOF.
 
 
 curr = pPrint $ parseEntryPrefixes testLog
@@ -311,12 +360,20 @@ v1 = "08:38:20 λ. d elegy"
 v2 = "09:24:04 λ. d rhapsody : meaning1; meaning2;..."
 v2' = "rhapsody : meaning1; meaning2;..."
 v3 = [r|
-09:24:04 λ. quotation 
+09:24:04 λ. quotation
 
             "There is no treachery too base for the world to commit. She knew
-            that.  Happiness did not last. She knew that." 
+            that.  Happiness did not last. She knew that."
 
             "To the Lighthouse", by Virgina Woolf
+|]
+
+v4 = [r|
+dvs headword1 : meaning; aeousrcaheosruhoasuerh
+    archoaeusrchaoeush roacheu rahue sarhue achue.
+    --- vs ---
+    headword2 : meaning; aeosrchu archeoau sraheou.
+
 |]
 
 -- | Prefixes (currently supported)
@@ -333,6 +390,14 @@ entryPrefix "read " = Read
 entryPrefix "quotation" = Quote
 entryPrefix _ = Alt
 
+skipEOL = skipMany (oneOf "\n")
+
+tilEOL :: Parser String
+tilEOL = do
+  skipEOL
+  val <- some (noneOf "\n")
+  return val
+
 mkEntryPrefix :: String -> (EntryPrefix, String)
 mkEntryPrefix xs =
   let prefixes = [ "d " , "dvs " , "read " , "quotation" ]
@@ -340,7 +405,7 @@ mkEntryPrefix xs =
                    Just rest -> (entryPrefix p, rest)
                    Nothing -> go ps
    in go prefixes
-  
+
 
 data MediaType = Play
                | Book
@@ -385,7 +450,7 @@ newtype Def = Def (Headword, Maybe Meaning) -- ( headword, optional meaning/def)
 -- ISBN for pgNumbers?
 
 parse :: Parser a -> String -> Result a
-parse p = parseString p mempty 
+parse p = parseString p mempty
 
 show' :: Show a => a -> IO ()
 show' =  pPrint

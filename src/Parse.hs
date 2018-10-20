@@ -5,6 +5,7 @@ module Parse where
 
 import Prelude hiding (any, lookup, min)
 
+import Data.Char (isSpace)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Text.RawString.QQ
@@ -13,7 +14,7 @@ import Text.Trifecta hiding (newline, rendered, render, Rendering, Span)
 import Control.Applicative
 import Data.Monoid ((<>))
 import Data.Bifunctor
-import Data.List (stripPrefix, isPrefixOf, intercalate)
+import Data.List (stripPrefix, isPrefixOf, intercalate, dropWhile, dropWhileEnd)
 import Data.List.Split (splitOn)
 import Text.Trifecta.Result (Result(..))
 import qualified Text.Trifecta.Result as Tri
@@ -86,18 +87,19 @@ timestamp = TimeStamp <$> twoDigit
 
 -- | Definition parsing. The following are valid definition query forms:
 --
---   * a comma separated query list
+--   * ▣  a comma separated query list
 --
 --     > "d word1[, ..., ]"
 --
 --      - works over multiple lines
---      - 
+--      - NB: no support for commentary, explication; include such in a
+--        separate entry.
 --
---   * for inline definition of headword 
+--   * □  for inline definition of headword 
 --
 --     > "d headword : meaning" 
 --
---   * headword comparison
+--   * □  headword comparison
 --
 --     > "dvs headword1 : meaning
 --     >      --- vs ---
@@ -129,6 +131,19 @@ data DefQuery = Plural [Headword]
               | InlineDef Headword Meaning
               | DefVersus Headword Meaning Headword Meaning
               deriving (Eq, Show)
+
+trimDefQuery :: DefQuery -> DefQuery
+trimDefQuery (Plural hws) = Plural (fmap trim hws)
+trimDefQuery (Single hw) = Single (trim hw)
+trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
+trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
+
+rmNull :: DefQuery -> DefQuery 
+rmNull (Plural hws) = Plural (filter (not.null) hws)
+rmNull (Single hw) = Single (trim hw)
+rmNull (InlineDef hw meaning) = InlineDef (trim hw) meaning
+rmNull (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
+
 
 testStrPlural :: String
 testStrPlural = [r| d word1, word2, hyphenated-word3 |]
@@ -241,28 +256,84 @@ mkDefQuery [] = Nothing
 mkDefQuery (w:[]) = Just $ Single w
 mkDefQuery xs = Just $ Plural xs
 
-toDefQuery :: Parser (Maybe DefQuery)
-toDefQuery = fmap mkDefQuery $ char 'd' -- TODO case match on prefix (d vs dvs vs read, etc..)
-                             *> space 
-                             *> sepBy (many $ noneOf ",") (symbol ",")
 
--- WIP, current 
+-- TODO update to accomodate InlineDef, and DefVs variants
+toDefQuery :: Parser (Maybe DefQuery)
+toDefQuery = fmap mkDefQuery $ sepBy (many $ noneOf ",") (symbol ",")
+
+inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
+inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> any
+
 parseDefQueries :: String -> [(TimeStamp, DefQuery)]
 parseDefQueries = rmEmptyQueries 
                 . (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ") 
                 . logToEntryGrps
+
+
+
+-- WIP, current 
+parseEntryPrefixes :: String -> [(TimeStamp, EntryPrefix, DefQuery)]
+parseEntryPrefixes = rmEmptyQueriesAndTrimHeadword
+                   . fmap (genEntry . (fmap $ intercalate ", "))
+                   . logToEntryGrps
+          where genEntry = \(ts, s) -> let (prefix, s') = mkEntryPrefix s 
+                                        in (ts, prefix, join . toMaybe . parse toDefQuery $ s')
+
 
 rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)] 
 rmEmptyQueries  = foldr (\(ts, m) rst -> case m of
                                             Just x -> (ts, x):rst
                                             Nothing -> rst) []
 
+rmEmptyQueriesAndTrimHeadword :: [(TimeStamp, EntryPrefix, Maybe DefQuery)] -> [(TimeStamp, EntryPrefix, DefQuery)] 
+rmEmptyQueriesAndTrimHeadword  = foldr (\(ts, ep, m) rst -> case m of
+                                            Just x -> (ts, ep, rmNull $ trimDefQuery x):rst
+                                            Nothing -> rst) []
+
+
+curr = pPrint $ parseEntryPrefixes testLog
+
+-- TODO trim whitespace from (i) headwords and (ii) second lines of entry
+-- groups.
+trim = dropWhileEnd isSpace . dropWhile isSpace
+
+trimLogEntry = undefined
 
 v0 = "08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal"
 v1 = "08:38:20 λ. d elegy"
 v2 = "09:24:04 λ. d rhapsody : meaning1; meaning2;..."
+v2' = "rhapsody : meaning1; meaning2;..."
+v3 = [r|
+09:24:04 λ. quotation 
 
+            "There is no treachery too base for the world to commit. She knew
+            that.  Happiness did not last. She knew that." 
 
+            "To the Lighthouse", by Virgina Woolf
+|]
+
+-- | Prefixes (currently supported)
+data EntryPrefix = Defn -- | "d "
+                 | DefVs -- | "dvs "
+                 | Read -- | "read ", "begin to read ", or ("start to read"?)
+                 | Quote -- | "quoatation" followed by newline
+                 | Alt -- | everythin else
+                 deriving (Eq, Show)
+
+entryPrefix "d " = Defn
+entryPrefix "dvs " = DefVs
+entryPrefix "read " = Read
+entryPrefix "quotation" = Quote
+entryPrefix _ = Alt
+
+mkEntryPrefix :: String -> (EntryPrefix, String)
+mkEntryPrefix xs =
+  let prefixes = [ "d " , "dvs " , "read " , "quotation" ]
+      go (p:ps) = case stripPrefix p xs of
+                   Just rest -> (entryPrefix p, rest)
+                   Nothing -> go ps
+   in go prefixes
+  
 
 data MediaType = Play
                | Book
@@ -280,9 +351,6 @@ data Author = Author { firstName :: T.Text
 
 type ISBN = T.Text
 
--- | Q: use enum to distinguish between, e.g., aphorisms, humor, insight,
---      etc.?
-type Quotation = T.Text
 
 -- | Represents a piece of textual media.
 data Written = Title Author MediaType (Maybe ISBN)
@@ -303,16 +371,6 @@ type Meaning = String
 
 newtype Def = Def (Headword, Maybe Meaning) -- ( headword, optional meaning/def)
   deriving (Eq, Show)
-
--- | Log entry—a.t.m. only for reading logs.
-data Entry = Defn Def
-           | Writtn Written
-           deriving (Eq, Show)
-
-data Log = Log [(TimeStamp, Entry)]
-  deriving (Eq, Show)
-
-
 
 --type PgNum = Integer
 

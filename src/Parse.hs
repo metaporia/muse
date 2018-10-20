@@ -163,8 +163,13 @@ d word1 : meaning1; meaning2; meaning3;
 |]
 
 testLog = [r|
-08:23:30 λ. d quiescence, quiescent, quiesce
-08:24:43 λ. d vouchsafed,
+oo
+
+
+
+
+    08:23:30 λ. d quiescence, quiescent, quiesce
+  08:24:43 λ. d vouchsafed,
             another-word
 08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
 
@@ -174,11 +179,15 @@ testLog = [r|
 
 08:38:20 λ. d elegy : meaning
 08:45:37 λ. d tumbler
+
+
+eruochaosrecuh
+
 08:49:57 λ. d disport : meaning
 08:56:30 λ. d larder
 08:57:29 λ. d wainscot
 09:12:16 λ. d fender
-09:14:12 λ. d bleat
+    09:14:12 λ. d bleat
 09:15:48 λ. d dissever
 09:24:04 λ. d rhapsody
         aeou
@@ -186,6 +195,7 @@ testLog = [r|
         aoeu
         aeou
         aeou
+09:15:48 λ. d dissever 
 
 |]
 
@@ -296,11 +306,14 @@ parseDefQueries = rmEmptyQueries
 
 
 -- | Collects lines up first occurrence of pattern `p`.
+--
+--
+-- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
 untilP :: Parser p -> Parser String
-untilP p = do s <- many (noneOf "\n")
-              newline
-              -- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
-              s' <- try (lookAhead p >> return "") <|> untilP p
+untilP p = do s <- some (noneOf "\n") <|> return <$> newline
+              --hasNewline <- try (const True <$> newline) <|> (const False <$> eof)
+              
+              s' <- try (lookAhead (lpad p) >> return "") <|> untilP p
               return $ s ++ s'
 
 -- | Splits entries up by timestamp. From here we need to:
@@ -310,10 +323,11 @@ untilP p = do s <- many (noneOf "\n")
 --
 -- RECENT, WIP (p2), TODO apply def query parser to strings.
 entryStrings :: Parser [String]
-entryStrings = filter (not.null) <$> many entryBody
+entryStrings = filter (\s -> (not.null) s && s /= "\n") <$> many entryBody
 
 entryBody :: Parser String
 entryBody = untilP $ (timestamp >> return ()) <|> eof
+
 
 lpad :: Parser a -> Parser a
 lpad p = whiteSpace *> p

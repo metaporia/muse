@@ -17,6 +17,7 @@ import Data.Bifunctor
 import Data.List (stripPrefix, isPrefixOf, intercalate, dropWhile, dropWhileEnd)
 import Data.List.Split (splitOn)
 import Text.Trifecta.Result (Result(..))
+import Text.Parser.Combinators
 import qualified Text.Trifecta.Result as Tri
 import Data.Maybe (catMaybes)
 
@@ -24,7 +25,7 @@ import Control.Monad.Except
 import Control.Monad.State.Class
 import Lib
 
-import Data.Maybe (maybe, isJust)
+import Data.Maybe (maybe, isJust, fromJust)
 
 import Text.Show.Pretty
 
@@ -95,7 +96,7 @@ timestamp = TimeStamp <$> twoDigit
 --      - NB: no support for commentary, explication; include such in a
 --        separate entry.
 --
---   * □  for inline definition of headword 
+--   * ▣  for inline definition of headword 
 --
 --     > "d headword : meaning" 
 --
@@ -166,9 +167,9 @@ testLog = [r|
             another-word
 08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
             second-line
-08:38:20 λ. d elegy
+08:38:20 λ. d elegy : meaning
 08:45:37 λ. d tumbler
-08:49:57 λ. d disport
+08:49:57 λ. d disport : meaning
 08:56:30 λ. d larder
 08:57:29 λ. d wainscot
 09:12:16 λ. d fender
@@ -257,12 +258,17 @@ mkDefQuery (w:[]) = Just $ Single w
 mkDefQuery xs = Just $ Plural xs
 
 
--- TODO update to accomodate InlineDef, and DefVs variants
+-- TODO DefVs variant parser
 toDefQuery :: Parser (Maybe DefQuery)
 toDefQuery = fmap mkDefQuery $ sepBy (many $ noneOf ",") (symbol ",")
 
+-- recent
 inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
 inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> any
+
+-- more recent
+combo :: Parser (Maybe DefQuery)
+combo = try (fmap Just inlineMeaning <?> "inline") <|> toDefQuery <?> "default"
 
 parseDefQueries :: String -> [(TimeStamp, DefQuery)]
 parseDefQueries = rmEmptyQueries 
@@ -277,7 +283,7 @@ parseEntryPrefixes = rmEmptyQueriesAndTrimHeadword
                    . fmap (genEntry . (fmap $ intercalate ", "))
                    . logToEntryGrps
           where genEntry = \(ts, s) -> let (prefix, s') = mkEntryPrefix s 
-                                        in (ts, prefix, join . toMaybe . parse toDefQuery $ s')
+                                        in (ts, prefix, join . toMaybe . parse combo $ s')
 
 
 rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)] 
@@ -300,6 +306,7 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 trimLogEntry = undefined
 
 v0 = "08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal"
+v0' = "prorated, hello, mine, yours, hypochondriacal"
 v1 = "08:38:20 λ. d elegy"
 v2 = "09:24:04 λ. d rhapsody : meaning1; meaning2;..."
 v2' = "rhapsody : meaning1; meaning2;..."

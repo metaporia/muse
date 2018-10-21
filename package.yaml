@@ -33,6 +33,10 @@ dependencies:
 
 library:
   source-dirs: src
+  exposed-modules:
+    - Lib
+    - Parse
+    - Helpers
 
 executables:
   logParse-exe:

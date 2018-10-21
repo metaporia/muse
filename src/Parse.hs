@@ -384,6 +384,7 @@ v1 = "08:38:20 λ. d elegy"
 v2 = "09:24:04 λ. d rhapsody : meaning1; meaning2;..."
 v2' = "rhapsody : meaning1; meaning2;..."
 v3' = "lèse majesté : meaning1; meaning2;..."
+
 v3 = [r|
 09:24:04 λ. quotation
 
@@ -392,6 +393,25 @@ v3 = [r|
 
             Mrs. Ramsey in "To the Lighthouse", by Virgina Woolf
 |]
+
+v3'' = [r|quotation
+
+        "There was no treachery too base for the world to commit. She knew
+        that.  Happiness did not last. She knew that."
+
+        Mrs. Ramsey in "To the Lighthouse", by Virgina Woolf
+|]
+
+
+
+-- N.B.: this strips its own prefix, i.e., "quotation\n".
+quotation :: Parser (String, String)
+quotation = do
+  (string "quotation") <* newline
+  q <- between quot quot (some $ noneOf "\"")
+  titleAuthEtc <- entryBody
+  return (q, titleAuthEtc)
+    where quot = pad (char '"')
 
 v4 = [r|
 dvs headword1 : meaning; aeousrcaheosruhoasuerh

@@ -1,6 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Parse where
 
 import Prelude hiding (any, lookup, min, until)
@@ -34,22 +35,23 @@ toMaybe :: Tri.Result a -> Maybe a
 toMaybe (Tri.Success a) = Just a
 toMaybe (Tri.Failure a) = Nothing
 
-
+--instance {-# OVERLAPPING #-} Show String where
+--  show x = ['"'] ++ x ++ ['"']
 
 
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 
 -- TODO write parsers for the following types from each pattern
--- □  from [r|hh:mm:ss λ.|] to TimeStamp
--- □  from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
--- □  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
+-- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
+-- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
 --    where a <def> is "<word> [: <meaning>]" (the brackets '[' and ']'
 --    indicate that the meaning, mapping is optional. The headword, <word>, is
 --    not.
--- □  from
+-- ▣  from
 -- [r| dvs <def1>
 --         --- vs ---
 --         <def2> |] to  [DefVs]
+-- □  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
 -- □  from "q<pgNum> " to QuotationLocation
 -- □
 
@@ -101,7 +103,7 @@ timestamp = TimeStamp <$> twoDigit
 --
 --     > "d headword : meaning"
 --
---   * □  headword comparison
+--   * ▣  headword comparison
 --
 --     > "dvs headword1 : meaning
 --     >      --- vs ---
@@ -128,27 +130,24 @@ dropQueryPrefix t = case stripPrefix "d " t of
 pruneQuery' :: T.Text -> [T.Text]
 pruneQuery' = splitByComma . defQueryPrefix
 
-data DefQuery = Plural [Headword]
-              | Single Headword
+data DefQuery = Defn [Headword]
               | InlineDef Headword Meaning
               | DefVersus Headword Meaning Headword Meaning
               deriving (Eq, Show)
 
 trimDefQuery :: DefQuery -> DefQuery
-trimDefQuery (Plural hws) = Plural (fmap trim hws)
-trimDefQuery (Single hw) = Single (trim hw)
+trimDefQuery (Defn hws) = Defn (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
 trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
 rmNull :: DefQuery -> DefQuery
-rmNull (Plural hws) = Plural (filter (not.null) hws)
-rmNull (Single hw) = Single (trim hw)
+rmNull (Defn hws) = Defn (filter (not.null) hws)
 rmNull (InlineDef hw meaning) = InlineDef (trim hw) meaning
 rmNull (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
 
-testStrPlural :: String
-testStrPlural = [r| d word1, word2, hyphenated-word3 |]
+testStrDefn :: String
+testStrDefn = [r| d word1, word2, hyphenated-word3 |]
 
 testStrInline0  :: String
 testStrInline0 = "d word1 : meaning1; meaning2; meaning3"
@@ -163,19 +162,12 @@ d word1 : meaning1; meaning2; meaning3;
 |]
 
 testLog = [r|
-oo
-
-
-
-
-    08:23:30 λ. d quiescence, quiescent, quiesce
-  08:24:43 λ. d vouchsafed,
+08:23:30 λ. d quiescence, quiescent, quiesce
+08:24:43 λ. d vouchsafed,
             another-word
 08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
 
             second-line
-
-08:38:20 λ.
 
 08:38:20 λ. d elegy : meaning
 08:45:37 λ. d tumbler
@@ -195,8 +187,9 @@ eruochaosrecuh
         aoeu
         aeou
         aeou
-09:15:48 λ. d dissever 
-
+09:15:48 λ. dvs deport : to transport, to carry away, to conduct (refl.)
+            --- vs ---
+            comport : to endure; carry together; to accord (with)
 |]
 
 ts = "aeou\naeou\naeou\n 09:24:04 λ.\n"
@@ -278,32 +271,56 @@ headwords' = (fmap.fmap) dropQueryPrefix $ (,) <$> timestamp <*> any --sepBy (ma
 
 mkDefQuery :: [String] -> Maybe DefQuery
 mkDefQuery [] = Nothing
-mkDefQuery (w:[]) = Just $ Single w
-mkDefQuery xs = Just $ Plural xs
+mkDefQuery xs = Just $ Defn xs
 
 
 -- TODO DefVs variant parser
-toDefQuery :: Parser (Maybe DefQuery)
-toDefQuery = fmap mkDefQuery $ sepBy (many $ noneOf ",") (symbol ",")
+toDefn :: Parser DefQuery
+toDefn = Defn <$> sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
 
 -- recent
 inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
-inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> any
+inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> entryBody
+
+-- recent
+inlineMeaning' :: Parser DefQuery -- InlineDef Headword Meaning
+inlineMeaning' = InlineDef <$> many (noneOf ":") <* symbol (": ") <*> entryBody
+
+
+
+-- | Splits on delimiter
+toDefVersus :: Parser DefQuery
+toDefVersus = collect <$> p0 <* pad (string "--- vs ---") <*> p1
+  where collect (hw,m) (hw',m') = DefVersus hw m hw' m'
+        -- it's important that this not parse greedily
+        p0 = inlineMeaning' . untilPNoTs $ (string "--- vs ---")
+        p1 = inlineMeaning'  entryBody
+
+        inlineMeaning' p = (,) <$> many (noneOf ":") 
+                             <*  symbol (": ") 
+                             <*> p
+
+
+        
+toEntry :: Parser (TimeStamp, DefQuery)
+toEntry = (,) <$> timestamp <* parseDefPrefix <*> fmap trimDefQuery allThree
+        
+
+-- WIP, TODO, recent
+entries :: Parser [(TimeStamp, DefQuery)]
+entries = some (pad toEntry) 
 
 -- more recent
-combo :: Parser (Maybe DefQuery)
-combo = try (fmap Just inlineMeaning <?> "inline") <|> toDefQuery <?> "default"
+combo :: Parser (DefQuery)
+combo = (try inlineMeaning)  <|> toDefn
 
--- TODO, wip, recent
--- | Splits on delimiter
-wip :: Parser (String, String)
-wip = (,) <$> manyTill anyChar (try (string "--- vs ---")) <*> any
+-- after timestamps
+-- parse order: toDefVersus, inlineMeaning, toDefn, toSingle
+allThree = (try toDefVersus) <|> combo
 
-parseDefQueries :: String -> [(TimeStamp, DefQuery)]
-parseDefQueries = rmEmptyQueries
-                . (fmap.fmap) (join . toMaybe . parse toDefQuery . intercalate ", ")
-                . logToEntryGrps
-
+parseDefPrefix :: Parser String
+parseDefPrefix = (try (string "d "))
+                 <|> symbol "dvs"
 
 -- | Collects lines up first occurrence of pattern `p`.
 --
@@ -316,12 +333,20 @@ untilP p = do s <- some (noneOf "\n") <|> return <$> newline
               s' <- try (lookAhead (lpad p) >> return "") <|> untilP p
               return $ s ++ s'
 
+untilPNoTs :: Parser p -> Parser String
+untilPNoTs p = do s <- some (noneOf "\n") <|> return <$> newline
+                  s' <- try (lookAhead (lpad timestamp) >> return "")
+                        <|>  try (lookAhead (lpad p) >> return "") <|> untilP p
+                  return $ s ++ s'
+              
+
+
 -- | Splits entries up by timestamp. From here we need to:
 --
 --  * parse entries into defs, quots, etc. 
 --    N.B: preserve indentation info, as it will be used to group entries
 --
--- RECENT, WIP (p2), TODO apply def query parser to strings.
+-- apply def query parser to strings.
 entryStrings :: Parser [String]
 entryStrings = filter (\s -> (not.null) s && s /= "\n") <$> many entryBody
 
@@ -337,30 +362,15 @@ rpad p = p <* whiteSpace
 
 pad = rpad . lpad
 
--- WIP, current (p1)
-parseEntryPrefixes :: String -> [(TimeStamp, EntryPrefix, DefQuery)]
-parseEntryPrefixes = rmEmptyQueriesAndTrimHeadword
-                   . fmap (genEntry . (fmap $ intercalate ", "))
-                   . logToEntryGrps
-          where genEntry = \(ts, s) -> let (prefix, s') = mkEntryPrefix s
-                                        in (ts, prefix, join . toMaybe . parse combo $ s')
-
-
 rmEmptyQueries :: [(TimeStamp, Maybe DefQuery)] -> [(TimeStamp, DefQuery)]
 rmEmptyQueries  = foldr (\(ts, m) rst -> case m of
-                                            Just x -> (ts, x):rst
-                                            Nothing -> rst) []
-
-rmEmptyQueriesAndTrimHeadword :: [(TimeStamp, EntryPrefix, Maybe DefQuery)] -> [(TimeStamp, EntryPrefix, DefQuery)]
-rmEmptyQueriesAndTrimHeadword  = foldr (\(ts, ep, m) rst -> case m of
-                                            Just x -> (ts, ep, rmNull $ trimDefQuery x):rst
+                                            Just x -> (ts, rmNull $ trimDefQuery x):rst
                                             Nothing -> rst) []
 
 -- NB: The top level parser is going to look like `many entry', where entry
 -- consumes a valid variant up to, but not including, the next TS or EOF.
 
 
-curr = pPrint $ parseEntryPrefixes testLog
 
 -- TODO trim whitespace from (i) headwords and (ii) second lines of entry
 -- groups.
@@ -373,13 +383,14 @@ v0' = "prorated, hello, mine, yours, hypochondriacal"
 v1 = "08:38:20 λ. d elegy"
 v2 = "09:24:04 λ. d rhapsody : meaning1; meaning2;..."
 v2' = "rhapsody : meaning1; meaning2;..."
+v3' = "lèse majesté : meaning1; meaning2;..."
 v3 = [r|
 09:24:04 λ. quotation
 
-            "There is no treachery too base for the world to commit. She knew
+            "There was no treachery too base for the world to commit. She knew
             that.  Happiness did not last. She knew that."
 
-            "To the Lighthouse", by Virgina Woolf
+            Mrs. Ramsey in "To the Lighthouse", by Virgina Woolf
 |]
 
 v4 = [r|
@@ -390,19 +401,15 @@ dvs headword1 : meaning; aeousrcaheosruhoasuerh
 
 |]
 
--- | Prefixes (currently supported)
-data EntryPrefix = Defn -- | "d "
-                 | DefVs -- | "dvs "
-                 | Read -- | "read ", "begin to read ", or ("start to read"?)
-                 | Quote -- | "quoatation" followed by newline
-                 | Alt -- | everythin else
-                 deriving (Eq, Show)
+v5 = [r| deport : to transport, to carry away, to conduct (refl.)
+        --- vs ---
+        comport : to endure; carry together; to accord (with)
+|]
 
-entryPrefix "d " = Defn
-entryPrefix "dvs " = DefVs
-entryPrefix "read " = Read
-entryPrefix "quotation" = Quote
-entryPrefix _ = Alt
+-- | Examples of headwords:
+--
+-- * "venal" -- [A-Za-z]*
+-- * "lèse majesté" -- [A-Za-z ]
 
 skipEOL = skipMany (oneOf "\n")
 
@@ -411,15 +418,6 @@ tilEOL = do
   skipEOL
   val <- some (noneOf "\n")
   return val
-
-mkEntryPrefix :: String -> (EntryPrefix, String)
-mkEntryPrefix xs =
-  let prefixes = [ "d " , "dvs " , "read " , "quotation" ]
-      go (p:ps) = case stripPrefix p xs of
-                   Just rest -> (entryPrefix p, rest)
-                   Nothing -> go ps
-   in go prefixes
-
 
 data MediaType = Play
                | Book

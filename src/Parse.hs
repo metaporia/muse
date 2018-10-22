@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -15,10 +16,13 @@ module Parse
 
 import Prelude hiding (quot, min)
 import Data.Char (isSpace)
+import Text.RawString.QQ
 import Text.Trifecta hiding (Rendering, Span)
 import Control.Applicative
 import Data.List (dropWhile, dropWhileEnd)
 import Text.Parser.LookAhead
+
+import Text.Show.Pretty (pPrint)
 
 import Control.Monad (void)
 
@@ -110,15 +114,16 @@ trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
 
 toDefn :: Parser DefQuery
-toDefn = Defn <$> sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
+toDefn = Defn <$> (symbol "d" *> sepBy (some $ noneOf ",\n") (symbol ",")) <* entryBody
+
 
 -- recent
 inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
-inlineMeaning = InlineDef <$> many (noneOf ":") <* symbol ": " <*> entryBody
+inlineMeaning = InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
 
 -- | Splits on delimiter
 toDefVersus :: Parser DefQuery
-toDefVersus = collect <$> p0 <* pad (string "--- vs ---") <*> p1
+toDefVersus = collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> p1
   where collect (hw,m) (hw',m') = DefVersus hw m hw' m'
         -- it's important that this not parse greedily
         p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
@@ -130,41 +135,26 @@ toDefVersus = collect <$> p0 <* pad (string "--- vs ---") <*> p1
 
 
         
-toEntry :: Parser (Int, TimeStamp, DefQuery)
-toEntry = (,,) <$> (skipOptional newline *> tabs) <*> timestamp <* parseDefPrefix <*> fmap trimDefQuery parseDefQuery
-        
-
--- We need a "tab" depth parser to determine indentation. To do this, we will
--- count spaces in groups of 4.
 
 -- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces, 
 --  `tab' "       "` returns `pure 1`.
+--
+-- We need a "tab" depth parser to determine indentation. To do this, we will
+-- count spaces in groups of 4.
 tabs :: Parser Int
 tabs = length <$> many (try $ count 4 space) 
 
-
--- more recent q
-combo :: Parser DefQuery
-combo = try inlineMeaning  <|> toDefn
-
--- after timestamps
--- parse order: toDefVersus, inlineMeaning, toDefn, toSingle
-parseDefQuery :: Parser DefQuery
-parseDefQuery = try toDefVersus <|> combo
-
-parseDefPrefix :: Parser String
-parseDefPrefix = try (string "d ")
-                 <|> symbol "dvs"
 
 -- | Collects lines up first occurrence of pattern `p`.
 --
 --
 -- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
 untilP :: Parser p -> Parser String
-untilP p = do s <- some (noneOf "\n") <|> return <$> newline
+untilP p = do s <- some (noneOf "\n") <|> (many newline)
+              --nls <- many newline
               --hasNewline <- try (const True <$> newline) <|> (const False <$> eof)
               
-              s' <- try (lookAhead (lpad p) >> return "") <|> untilP p
+              s' <- try (lookAhead (many space *> p) >> return "") <|> untilP p
               return $ s ++ s'
 
 untilPNoTs :: Parser p -> Parser String
@@ -197,26 +187,119 @@ trim :: String -> String
 trim = dropWhileEnd isSpace . dropWhile isSpace
 
 
+quot :: Parser ()
+quot = void $ pad (char '"')
 
 -- N.B.: this strips its own prefix, i.e., "quotation\n".
-quotation :: Parser (String, String)
+quotation :: Parser Entry
 quotation = do
   _ <- string "quotation" <* newline
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <- entryBody
-  return (q, titleAuthEtc)
-    where quot = pad (char '"')
+  _ <- many newline
+  return $ Quotation q titleAuthEtc
+
+type Title = String
+type Author = String
+
+book :: Parser Entry
+book = do
+  _ <- try (symbol "read") <|> symbol "begin to read"
+  title <- between quot quot (some $ noneOf "\"")
+  _ <- symbol ","
+  _ <- symbol "by"
+  author <- some (noneOf "\n")
+  _ <- entryBody
+  _ <- many newline
+  return $ Read title author
+
+bookTs :: String
+bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
+
+bookTs' :: String
+bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
+
+--parseEntry :: Parser (Int, TimeStamp, Entry)
+--parseEntry = (,,) <$> (skipOptional newline *> tabs)
+--                  <*> timestamp
+--                  <*> 
+
+def :: Parser Entry
+def =  do
+  dq <-  (try toDefVersus 
+     <|>  try inlineMeaning 
+     <|>  toDefn)
+
+  _ <- many newline
+  return . Def . trimDefQuery $ dq
+
+entry :: Parser (Int, TimeStamp, Entry)
+entry = do
+  -- prefix
+  indent <- skipOptional newline *> tabs
+  ts <- timestamp
+
+  -- entry body
+  dq <-  try book 
+     <|> try quotation
+     <|> def
+  return $ (indent, ts, dq)
+  
+
+
 
 -- WIP, recent, TODO: include quotation parser
-entries :: Parser [(Int, TimeStamp, DefQuery)]
-entries = some toEntry <* skipOptional newline
+entries :: Parser [(Int, TimeStamp, Entry)] 
+entries = some entry <* skipOptional newline
   where _ = unused
 
 unused :: a
 unused = undefined
-  where _ = quotation
-        _ = hr
-        _ = min
-        _ = sec
+  where _ = hr >> min >> sec >> pPrint
+        _ = bookTs >> bookTs' >> testLog
+
+type Quote = String
+type Attr = String
+
+data Entry = Def DefQuery
+           | Read Title Author
+           | Quotation Quote Attr
+           deriving (Eq, Show)
+
+
+testLog :: String
+testLog = [r|
+08:23:30 λ. d quiescence, quiescent, quiesce
+08:24:43 λ. d vouchsafed, another-word
+08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
+
+08:38:20 λ. d elegy : meaning
+08:45:37 λ. d tumbler
+
+08:23:30 λ. begin to read "To the Lighthouse", by Virginia Woolf
+
+08:49:57 λ. d disport : meaning
+      gibberish
+
+
+08:56:30 λ. d larder
+
+
+08:59:30 λ. quotation
+  
+            "There was no treachery too for the world to commit. She knew that.
+            No happiness lasted."
+
+            Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
+
+
+08:57:29 λ. d wainscot
+09:12:16 λ. d fender
+        09:14:12 λ. d bleat
+        09:15:48 λ. d dissever
+        09:24:04 λ. d rhapsody
+09:15:48 λ. dvs deport : to transport, to carry away, to conduct (refl.)
+            --- vs ---
+            comport : to endure; carry together; to accord (with) |]
 
 

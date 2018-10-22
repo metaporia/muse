@@ -50,9 +50,8 @@ data MediaType = Play
                deriving (Eq, Show)
 
 
-type Title = T.Text
 
-data Author = Author { firstName :: T.Text
+data Author' = Author { firstName :: T.Text
                      , lastName  :: T.Text
                      , psuedo    :: Maybe T.Text }
                      deriving (Eq, Show)
@@ -61,14 +60,11 @@ type ISBN = T.Text
 
 
 -- | Represents a piece of textual media.
-data Written = Title Author MediaType (Maybe ISBN)
+data Written = Title Author' MediaType (Maybe ISBN)
   deriving (Eq, Show)
 
 type Headword = String
 type Meaning = String
-
-newtype Def = Def (Headword, Maybe Meaning) -- ( headword, optional meaning/def)
-  deriving (Eq, Show)
 
 --type PgNum = Integer
 

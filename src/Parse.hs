@@ -16,6 +16,7 @@ module Parse
 
 import Prelude hiding (quot, min)
 import Data.Char (isSpace)
+import Data.Maybe (fromJust)
 import Text.RawString.QQ
 import Text.Trifecta hiding (Rendering, Span)
 import Control.Applicative
@@ -45,10 +46,10 @@ import Helpers
 -- [r| dvs <def1>
 --         --- vs ---
 --         <def2> |] to  [DefVs]
--- □  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
+-- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
+-- ▣  quotations
 -- □  from "q<pgNum> " to QuotationLocation
--- □
-
+-- □  strip newlines from quotation bodies
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp { hr :: Int
@@ -248,7 +249,6 @@ entry = do
 
 
 
--- WIP, recent, TODO: include quotation parser
 entries :: Parser [(Int, TimeStamp, Entry)] 
 entries = some entry <* skipOptional newline
   where _ = unused
@@ -257,6 +257,10 @@ unused :: a
 unused = undefined
   where _ = hr >> min >> sec >> pPrint
         _ = bookTs >> bookTs' >> testLog
+
+isQuotation :: Entry -> Bool
+isQuotation (Quotation _ _) = True
+isQuotation _ = False
 
 type Quote = String
 type Attr = String
@@ -303,3 +307,38 @@ testLog = [r|
             comport : to endure; carry together; to accord (with) |]
 
 
+testlog :: String
+testlog = [r|
+09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
+    09:55:17 λ. dvs benignant : kind; gracious; favorable;
+                    --- vs ---
+                    benign : gentle, mild, or, medically, non-threatening
+    10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
+                distress; inimical; bent on evil.
+                    --- vs ---
+                    malign : (adj.) having an evil disposition; spiteful; 
+                    medically trheatening; (v.) to slander; to asperse; to show
+                    hatred toward.
+    10:17:40 λ. d inimical, traduce, virulent
+    10:18:12 λ. d sublime, lintel
+    10:24:02 λ. quotation
+        
+                "There was no treachery too base for the world to commit. She
+                knew this. No happiness lasted."
+
+                In "To the Lighthouse", by Virginia Woolf
+    10:25:27 λ. quotation
+
+                "Her simplicity fathomed what clever people falsified."
+        
+                In "To the Lighthouse", by Virginia Woolf
+    10:28:49 λ. d plover
+    10:47:59 λ. d cosmogony
+    10:49:58 λ. quotation
+                
+                "But nevertheless, the fact remained, that is was nearly
+                impossbile to dislike anyone if one looked at them."
+
+                In "To the Lighthouse", by Virginia Woolf
+
+|]

@@ -7,9 +7,11 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module Parse
-  ( parse
-  , timestamp
+  ( DefQuery(..)
+  , Entry(..)
   , entries
+  , parse
+  , timestamp
   , TimeStamp(..)
   ) where
 
@@ -18,13 +20,12 @@ import Control.Monad (void)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd)
 import Data.Maybe (fromJust)
+import Helpers
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
-
-import Helpers
 
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
@@ -200,7 +201,9 @@ type Author = String
 
 book :: Parser Entry
 book = do
-  _ <- try (symbol "read") <|> symbol "begin to read"
+  _ <-
+    try (symbol "read") <|> try (symbol "begin to read") <|>
+    symbol "finish reading"
   title <- between quot quot (some $ noneOf "\"")
   _ <- symbol ","
   _ <- symbol "by"

@@ -48,7 +48,6 @@ extra-deps:
 - mtl-2.2.2
 - git: https://github.com/ndmitchell/ghcid.git
   commit: d6630801d3e65a62a5ff307616251785b0f5c414
-- extra-1.6.12
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

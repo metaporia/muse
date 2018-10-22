@@ -18,7 +18,7 @@ module Parse
 import Control.Applicative
 import Control.Monad (void)
 import Data.Char (isSpace)
-import Data.List (dropWhile, dropWhileEnd)
+import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.Maybe (fromJust)
 import Helpers
 import Prelude hiding (min, quot)
@@ -193,7 +193,7 @@ quotation = do
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <- entryBody
   _ <- many newline
-  return $ Quotation q titleAuthEtc
+  return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc
 
 type Title = String
 

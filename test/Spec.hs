@@ -54,7 +54,7 @@ output =
   , ( 1
     , TimeStamp {hr = 10, min = 24, sec = 2}
     , Quotation
-        "There was no treachery too base for the world to commit. She\n                knew this. No happiness lasted."
+        "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf")
   , ( 1
     , TimeStamp {hr = 10, min = 25, sec = 27}
@@ -66,7 +66,7 @@ output =
   , ( 1
     , TimeStamp {hr = 10, min = 49, sec = 58}
     , Quotation
-        "But nevertheless, the fact remained, that is was nearly\n                impossbile to dislike anyone if one looked at them."
+        "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf")
   ]
 

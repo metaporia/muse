@@ -1,11 +1,55 @@
 # logParse
 
-## log grammar
+## General Rules
 
-### BNF
+* do not exceed one line in a plural def.
+* newlines after entry bodies are acceptable
+* commas and colons are not permitted in headwords
+* add newlines before and after quotation body
+
+
+### Definition Comparison
+```
+dvs headword1 : meaning
+     --- vs ---
+     headword2 : meaning" ## log grammar
+```
+
+### List of Headwords
+```
+d word1, ..., wordN
+```
+
+### Inline Definition
+```
+d headword : meaning
 
 ```
 
+### Quotation
+```
+quotation
+
+"<body>"
+
+<attribution>
+```
+
+### Read
+Either:
+
+```
+read <title>, by <author>
+```
+or,
+
+```
+begin to read <title>, by <author>
+```
+
+### Grammar (incomplete)
+
+```
 <entry> ::= <timeStamp> <def>
 
 <timeStamp> ::= 2DIGIT ":" 2DIGIT ":" 2DIGIT " λ. "
@@ -31,4 +75,4 @@
     <author> ::= <toNextTimeStampOrEOF>
 
 <toNextTimeStampOrEOF> ::= `^(*)?<timestamp> // e.g. `manyTill anyChar (try timestamp)```
-
+```

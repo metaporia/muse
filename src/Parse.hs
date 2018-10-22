@@ -93,6 +93,17 @@ timestamp = TimeStamp <$> twoDigit
 --     > "dvs headword1 : meaning
 --     >      --- vs ---
 --     >      headword2 : meaning"
+--
+--   * ▣  quotation 
+--     
+--     > [r| 
+--     >  quotation
+--     >
+--     >  "There was no treachery too base for the world to commit. She knew
+--     >  that..."
+--     >
+--     >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf 
+--     > |]
 
 
 -- | Examples of headwords:

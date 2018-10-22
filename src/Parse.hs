@@ -2,40 +2,33 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
-
 {-# LANGUAGE ScopedTypeVariables #-}
-
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 
+module Parse
+  ( parse
+  , timestamp
+  , entries
+  , TimeStamp(..)
+  ) where
 
-module Parse 
-  (parse, timestamp, entries, TimeStamp(..))
-  
-    where
-
-import Prelude hiding (quot, min)
-import Data.Char (isSpace)
-import Data.Maybe (fromJust)
-import Text.RawString.QQ
-import Text.Trifecta hiding (Rendering, Span)
 import Control.Applicative
-import Data.List (dropWhile, dropWhileEnd)
-import Text.Parser.LookAhead
-
-import Text.Show.Pretty (pPrint)
-
 import Control.Monad (void)
+import Data.Char (isSpace)
+import Data.List (dropWhile, dropWhileEnd)
+import Data.Maybe (fromJust)
+import Prelude hiding (min, quot)
+import Text.Parser.LookAhead
+import Text.RawString.QQ
+import Text.Show.Pretty (pPrint)
+import Text.Trifecta hiding (Rendering, Span)
 
 import Helpers
 
-
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
-
-
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
-
 -- TODO write parsers for the following types from each pattern
 -- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
 -- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
@@ -50,13 +43,14 @@ import Helpers
 -- ▣  quotations
 -- □  from "q<pgNum> " to QuotationLocation
 -- □  strip newlines from quotation bodies
+toplevelNote = undefined
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
-data TimeStamp = TimeStamp { hr :: Int
-                           , min :: Int
-                           , sec :: Int }
-                           deriving (Eq, Show)
-
+data TimeStamp = TimeStamp
+  { hr :: Int
+  , min :: Int
+  , sec :: Int
+  } deriving (Eq, Show)
 
 skipOptColon :: Parser ()
 skipOptColon = skipOptional (char ':')
@@ -66,13 +60,10 @@ twoDigit = read <$> count 2 digit <* skipOptColon
 
 timestamp :: Parser TimeStamp
 --timestamp = fromList <$> fmap read <$> periodSep twoDigit
-timestamp = TimeStamp <$> twoDigit
-                      <*> twoDigit
-                      <*> twoDigit
-                      <* space
-                      <* char 'λ'
-                      <* char '.'
-                      <* space
+timestamp =
+  TimeStamp <$> twoDigit <*> twoDigit <*> twoDigit <* space <* char 'λ' <*
+  char '.' <*
+  space
 
 -- | Definition parsing. The following are valid definition query forms:
 --
@@ -104,49 +95,44 @@ timestamp = TimeStamp <$> twoDigit
 --     >
 --     >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf 
 --     > |]
-
-
 -- | Examples of headwords:
 --
 -- * "venal" -- [A-Za-z]*
 -- * "lèse majesté" -- [A-Za-z ]
-
-
-
-
-data DefQuery = Defn [Headword]
-              | InlineDef Headword Meaning
-              | DefVersus Headword Meaning Headword Meaning
-              deriving (Eq, Show)
+data DefQuery
+  = Defn [Headword]
+  | InlineDef Headword
+              Meaning
+  | DefVersus Headword
+              Meaning
+              Headword
+              Meaning
+  deriving (Eq, Show)
 
 trimDefQuery :: DefQuery -> DefQuery
 trimDefQuery (Defn hws) = Defn (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
 trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
-
 toDefn :: Parser DefQuery
-toDefn = Defn <$> (symbol "d" *> sepBy (some $ noneOf ",\n") (symbol ",")) <* entryBody
-
+toDefn =
+  Defn <$> (symbol "d" *> sepBy (some $ noneOf ",\n") (symbol ",")) <* entryBody
 
 -- recent
 inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
-inlineMeaning = InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
+inlineMeaning =
+  InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
 
 -- | Splits on delimiter
 toDefVersus :: Parser DefQuery
-toDefVersus = collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> p1
-  where collect (hw,m) (hw',m') = DefVersus hw m hw' m'
+toDefVersus =
+  collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> p1
+  where
+    collect (hw, m) (hw', m') = DefVersus hw m hw' m'
         -- it's important that this not parse greedily
-        p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
-        p1 = inlineMeaning'  entryBody
-
-        inlineMeaning' p = (,) <$> many (noneOf ":") 
-                             <*  symbol ": " 
-                             <*> p
-
-
-        
+    p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
+    p1 = inlineMeaning' entryBody
+    inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
 
 -- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces, 
 --  `tab' "       "` returns `pure 1`.
@@ -154,37 +140,35 @@ toDefVersus = collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> 
 -- We need a "tab" depth parser to determine indentation. To do this, we will
 -- count spaces in groups of 4.
 tabs :: Parser Int
-tabs = length <$> many (try $ count 4 space) 
-
+tabs = length <$> many (try $ count 4 space)
 
 -- | Collects lines up first occurrence of pattern `p`.
 --
 --
 -- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
 untilP :: Parser p -> Parser String
-untilP p = do s <- some (noneOf "\n") <|> (many newline)
+untilP p = do
+  s <- some (noneOf "\n") <|> (many newline)
               --nls <- many newline
               --hasNewline <- try (const True <$> newline) <|> (const False <$> eof)
-              
-              s' <- try (lookAhead (many space *> p) >> return "") <|> untilP p
-              return $ s ++ s'
+  s' <- try (lookAhead (many space *> p) >> return "") <|> untilP p
+  return $ s ++ s'
 
 untilPNoTs :: Parser p -> Parser String
-untilPNoTs p = do s <- some (noneOf "\n") <|> return <$> newline
-                  s' <- try (lookAhead (lpad timestamp) >> return "")
-                        <|>  try (lookAhead (lpad p) >> return "") <|> untilP p
-                  return $ s ++ s'
-              
-
+untilPNoTs p = do
+  s <- some (noneOf "\n") <|> return <$> newline
+  s' <-
+    try (lookAhead (lpad timestamp) >> return "") <|>
+    try (lookAhead (lpad p) >> return "") <|>
+    untilP p
+  return $ s ++ s'
 
 -- | Splits entries up by timestamp. From here we need to:
 --
 --  * parse entries into defs, quots, etc. 
 --    N.B: preserve indentation info, as it will be used to group entries
-
 entryBody :: Parser String
 entryBody = untilP $ void timestamp <|> eof
-
 
 lpad :: Parser a -> Parser a
 lpad p = whiteSpace *> p
@@ -197,7 +181,6 @@ pad = rpad . lpad
 
 trim :: String -> String
 trim = dropWhileEnd isSpace . dropWhile isSpace
-
 
 quot :: Parser ()
 quot = void $ pad (char '"')
@@ -212,6 +195,7 @@ quotation = do
   return $ Quotation q titleAuthEtc
 
 type Title = String
+
 type Author = String
 
 book :: Parser Entry
@@ -235,55 +219,52 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 --parseEntry = (,,) <$> (skipOptional newline *> tabs)
 --                  <*> timestamp
 --                  <*> 
-
 def :: Parser Entry
-def =  do
-  dq <-  (try toDefVersus 
-     <|>  try inlineMeaning 
-     <|>  toDefn)
-
+def = do
+  dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
   _ <- many newline
   return . Def . trimDefQuery $ dq
 
 entry :: Parser (Int, TimeStamp, Entry)
-entry = do
+entry
   -- prefix
+ = do
   indent <- skipOptional newline *> tabs
   ts <- timestamp
-
   -- entry body
-  dq <-  try book 
-     <|> try quotation
-     <|> def
+  dq <- try book <|> try quotation <|> def
   return $ (indent, ts, dq)
-  
 
-
-
-entries :: Parser [(Int, TimeStamp, Entry)] 
+entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
-  where _ = unused
+  where
+    _ = unused
 
 unused :: a
 unused = undefined
-  where _ = hr >> min >> sec >> pPrint
-        _ = bookTs >> bookTs' >> testLog
+  where
+    _ = hr >> min >> sec >> pPrint
+    _ = bookTs >> bookTs' >> testLog
 
 isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _) = True
 isQuotation _ = False
 
 type Quote = String
+
 type Attr = String
 
-data Entry = Def DefQuery
-           | Read Title Author
-           | Quotation Quote Attr
-           deriving (Eq, Show)
-
+data Entry
+  = Def DefQuery
+  | Read Title
+         Author
+  | Quotation Quote
+              Attr
+  deriving (Eq, Show)
 
 testLog :: String
-testLog = [r|
+testLog =
+  [r|
 08:23:30 λ. d quiescence, quiescent, quiesce
 08:24:43 λ. d vouchsafed, another-word
 08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
@@ -317,9 +298,9 @@ testLog = [r|
             --- vs ---
             comport : to endure; carry together; to accord (with) |]
 
-
 testlog :: String
-testlog = [r|
+testlog =
+  [r|
 09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
     09:55:17 λ. dvs benignant : kind; gracious; favorable;
                     --- vs ---

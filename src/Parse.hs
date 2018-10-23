@@ -45,8 +45,8 @@ import Text.Trifecta hiding (Rendering, Span)
 -- ▣  strip newlines from quotation bodies
 -- □  from "q<pgNum> " to QuotationLocation
 -- □  from "q<pgNum> \"<quotation>\"
--- □  from "(commentary | note | N.B.)"
--- □  from "synthesis of <title>, by <author>"
+-- □  from "(note | N.B.)", containing some specialization
+-- □  from "(commentary | synthesis of <title>, by <author>"
 --    N.B.: optionally consume attribution info, but prefer to depend upon
 --    gruoping of (log) entries by title.
 toplevelNote = undefined
@@ -91,15 +91,15 @@ timestamp =
 --     >      --- vs ---
 --     >      headword2 : meaning"
 --
---   * ▣  quotation 
---     
---     > [r| 
+--   * ▣  quotation
+--
+--     > [r|
 --     >  quotation
 --     >
 --     >  "There was no treachery too base for the world to commit. She knew
 --     >  that..."
 --     >
---     >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf 
+--     >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
 --     > |]
 -- | Examples of headwords:
 --
@@ -140,7 +140,7 @@ toDefVersus =
     p1 = inlineMeaning' entryBody
     inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
 
--- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces, 
+-- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces,
 --  `tab' "       "` returns `pure 1`.
 --
 -- We need a "tab" depth parser to determine indentation. To do this, we will
@@ -171,7 +171,7 @@ untilPNoTs p = do
 
 -- | Splits entries up by timestamp. From here we need to:
 --
---  * parse entries into defs, quots, etc. 
+--  * parse entries into defs, quots, etc.
 --    N.B: preserve indentation info, as it will be used to group entries
 entryBody :: Parser String
 entryBody = untilP $ void timestamp <|> eof
@@ -191,7 +191,18 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 quot :: Parser ()
 quot = void $ pad (char '"')
 
--- N.B.: this strips its own prefix, i.e., "quotation\n".
+-- | Parse an quotation entry (body, without timestamp) of the form:
+--
+--  > "quotation
+--  >
+--  >  <quotation-content>
+--  >
+--  > <attribution>"
+--
+--  Meant to store quotable excerpts for retrieval.
+--
+--  TODO: conditionally omit capture of attribution when it can be inferred
+--  from indentation context.
 quotation :: Parser Entry
 quotation = do
   _ <- string "quotation" <* newline
@@ -199,6 +210,27 @@ quotation = do
   titleAuthEtc <- entryBody
   _ <- many newline
   return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc
+
+
+-- | Parse an commentary entry (body, without timestamp) of the form:
+--
+--  > "(commentary | synthesis)
+--  >
+--  >  <content>"
+--
+-- Stores synthesis of, or commentary on, some piece of text, or merely the
+-- surrounding definitions, quotations, etc.
+--
+-- TODO: context awareness (see above todo)
+commentary :: Parser Entry
+commentary = do
+  _ <- try (symbol "commentary") <|> symbol "synthesis"
+  body <- entryBody
+  _ <- many newline
+  return . Commentary . unlines . fmap trim . lines $ body
+
+
+
 
 type Title = String
 
@@ -226,7 +258,7 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 --parseEntry :: Parser (Int, TimeStamp, Entry)
 --parseEntry = (,,) <$> (skipOptional newline *> tabs)
 --                  <*> timestamp
---                  <*> 
+--                  <*>
 def :: Parser Entry
 def = do
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
@@ -240,7 +272,7 @@ entry
   indent <- skipOptional newline *> tabs
   ts <- timestamp
   -- entry body
-  dq <- try book <|> try quotation <|> def
+  dq <- try book <|> try quotation <|> try commentary <|> def
   return $ (indent, ts, dq)
 
 entries :: Parser [(Int, TimeStamp, Entry)]
@@ -259,6 +291,7 @@ isQuotation (Quotation _ _) = True
 isQuotation _ = False
 
 type Quote = String
+type Body = String
 
 type Attr = String
 
@@ -268,6 +301,7 @@ data Entry
          Author
   | Quotation Quote
               Attr
+  | Commentary Body
   deriving (Eq, Show)
 
 testLog :: String
@@ -290,7 +324,7 @@ testLog =
 
 
 08:59:30 λ. quotation
-  
+
             "There was no treachery too for the world to commit. She knew that.
             No happiness lasted."
 
@@ -316,13 +350,13 @@ testlog =
     10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
                 distress; inimical; bent on evil.
                     --- vs ---
-                    malign : (adj.) having an evil disposition; spiteful; 
+                    malign : (adj.) having an evil disposition; spiteful;
                     medically trheatening; (v.) to slander; to asperse; to show
                     hatred toward.
     10:17:40 λ. d inimical, traduce, virulent
     10:18:12 λ. d sublime, lintel
     10:24:02 λ. quotation
-        
+
                 "There was no treachery too base for the world to commit. She
                 knew this. No happiness lasted."
 
@@ -330,13 +364,13 @@ testlog =
     10:25:27 λ. quotation
 
                 "Her simplicity fathomed what clever people falsified."
-        
+
                 In "To the Lighthouse", by Virginia Woolf
     10:28:49 λ. d plover
     10:47:59 λ. d cosmogony
     10:47:59 λ. d -let
     10:49:58 λ. quotation
-                
+
                 "But nevertheless, the fact remained, that is was nearly
                 impossbile to dislike anyone if one looked at them."
 

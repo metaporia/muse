@@ -22,6 +22,17 @@ main =
     describe "Parse testlog" $ do
       it "parse entries testlog" $
         example $ do (toMaybe $ parse entries testlog) `shouldBe` (Just output)
+    -- commentary
+    describe "Parse commentary entry variant 1" $ do
+      it "parse entries commentTs" $
+        example $ do
+          (toMaybe $ parse entries commentTs) `shouldBe` (Just commentTsOutput)
+    -- commentary
+    describe "Parse commentary entry variant 2" $ do
+      it "parse entries commentTs'" $
+        example $ do
+          (toMaybe $ parse entries commentTs') `shouldBe`
+            (Just commentTsOutput')
 
 -- `parse entries teslog`
 output :: [(Int, TimeStamp, Entry)]
@@ -68,6 +79,48 @@ output =
     , Quotation
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf")
+  ]
+
+commentTs :: String
+commentTs =
+  [r|20:30:00 λ. commentary
+    
+I found myself extremely aggravated by the claustrophobia-inducing parental
+harassment Alan and Buddy's Father--with his anger--, and the Mother--with
+her hypochondriacal whining. This repressive treatment--nay, parental
+abuse--may have tapped long-suppressed issues of mine with authoritarian
+hyper-management.
+
+|]
+
+commentTsOutput :: [(Int, TimeStamp, Entry)]
+commentTsOutput =
+  [ ( 0
+    , TimeStamp {hr = 20, min = 30, sec = 0}
+    , Commentary
+        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
+  ]
+
+commentTs' :: String
+commentTs' =
+  [r|20:30:00 λ. synthesis
+
+I found myself extremely aggravated by the claustrophobia-inducing parental
+harassment Alan and Buddy's Father--with his anger--, and the Mother--with
+her hypochondriacal whining. This repressive treatment--nay, parental
+abuse--may have tapped long-suppressed issues of mine with authoritarian
+hyper-management.
+
+15:39:30 λ. d hello
+|]
+
+commentTsOutput' :: [(Int, TimeStamp, Entry)]
+commentTsOutput' =
+  [ ( 0
+    , TimeStamp {hr = 20, min = 30, sec = 0}
+    , Commentary
+        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
+  , (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn ["hello"]))
   ]
 
 toMaybe :: Tri.Result a -> Maybe a

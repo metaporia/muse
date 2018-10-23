@@ -47,6 +47,18 @@ or,
 begin to read <title>, by <author>
 ```
 
+### Commentary
+
+Stores synthesis of, or commentary on, some piece of text, or merely the
+surrounding definitions, quotations, etc.
+
+Parses an commentary entry (body, without timestamp) of the form:
+```
+"(commentary | synthesis)
+
+ <content>"
+```
+
 ### Grammar (incomplete)
 
 ```

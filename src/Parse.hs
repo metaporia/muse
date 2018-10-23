@@ -42,8 +42,13 @@ import Text.Trifecta hiding (Rendering, Span)
 --         <def2> |] to  [DefVs]
 -- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
 -- ▣  quotations
+-- ▣  strip newlines from quotation bodies
 -- □  from "q<pgNum> " to QuotationLocation
--- □  strip newlines from quotation bodies
+-- □  from "q<pgNum> \"<quotation>\"
+-- □  from "(commentary | note | N.B.)"
+-- □  from "synthesis of <title>, by <author>"
+--    N.B.: optionally consume attribution info, but prefer to depend upon
+--    gruoping of (log) entries by title.
 toplevelNote = undefined
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
@@ -329,6 +334,7 @@ testlog =
                 In "To the Lighthouse", by Virginia Woolf
     10:28:49 λ. d plover
     10:47:59 λ. d cosmogony
+    10:47:59 λ. d -let
     10:49:58 λ. quotation
                 
                 "But nevertheless, the fact remained, that is was nearly

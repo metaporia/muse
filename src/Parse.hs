@@ -13,6 +13,12 @@ module Parse
   , parse
   , timestamp
   , TimeStamp(..)
+  , relDur
+  , RelDur(..)
+  , Quote
+  , Author
+  , Body
+  , Title
   ) where
 
 import Control.Applicative
@@ -377,3 +383,46 @@ testlog =
                 In "To the Lighthouse", by Virginia Woolf
 
 |]
+
+
+
+data RelDur = RelDur { yy :: Int
+                     , mm :: Int
+                     , dd :: Int
+                     } deriving (Eq, Show)
+
+index :: [a] -> [(Int, a)]
+index xs = zip [len, len-1..0] xs
+  where len = length xs - 1
+
+toInt :: [Int] -> Int
+toInt = foldr (\(pow, el) res -> (10^pow) * el + res) 0 . index 
+
+digits :: Parser Int
+digits = read <$> some digit
+
+day :: Parser Int
+day = digits <* char 'd'
+week :: Parser Int
+week = digits <* char 'w'
+
+month :: Parser Int
+month = digits <* char 'm'
+
+year :: Parser Int
+year = digits <* char 'y'
+
+
+-- Defaults to '00d00m00y' a.t.m.
+dmy :: Parser RelDur
+dmy = do
+  d <- try day <|> return 0
+  m <- try month <|> return 0
+  y <- try year <|> return 0
+  return $ RelDur y m d
+
+-- | Parse `RelDur`
+relDur :: Parser RelDur
+relDur = dmy
+
+

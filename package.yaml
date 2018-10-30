@@ -30,6 +30,7 @@ dependencies:
 - QuickCheck
 - split
 - parsers
+- time
 
 library:
   source-dirs: src
@@ -48,6 +49,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - logParse
+    - optparse-applicative
+    - time
 
 tests:
   logParse-test:
@@ -57,6 +60,7 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -main-is Test
     dependencies:
     - logParse
     - hspec

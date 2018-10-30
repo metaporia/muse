@@ -1,0 +1,1 @@
+--command "stack ghci app/Main.hs src/Parse.hs src/Lib.hs --ghci-options=-fobject-code"

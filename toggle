@@ -1,0 +1,17 @@
+#!/bin/fish
+
+# toggles whether ghcid lints Main.hs or Spec.hs (which problem is avoidable by
+# having a separate projet for executables)
+
+ls -l (pwd)/.ghcid | rg main
+
+switch $status
+    case 0
+        rm (pwd)/.ghcid; and ln -s (pwd)/.ghcid.test (pwd)/.ghcid
+        echo linting tests
+
+    case 1
+        rm (pwd)/.ghcid; and ln -s (pwd)/.ghcid.main (pwd)/.ghcid
+        echo linting main
+end
+

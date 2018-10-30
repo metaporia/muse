@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module Main where
+module Test where
 
 import Parse
 import Prelude hiding (min)

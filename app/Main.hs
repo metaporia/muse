@@ -121,12 +121,12 @@ search today = Input <$> (toUTC today
 defs :: Parser Bool
 defs = switch $ long "definitions" 
   <> short 'd' 
-  <> help "Collect definitions left-over entries."
+  <> help "Collect definitions of left-over entries."
 
 quotes :: Parser Bool
 quotes = switch $ long "quotations" 
   <> short 'q' 
-  <> help "Collect quotations from remaining entries."
+  <> help "Collect quotations of remaining entries."
 
 entryToSearchResult :: Entry -> SearchResult
 entryToSearchResult (Def dq) = Def' (show dq)
@@ -137,11 +137,16 @@ entryToSearchResult (Commentary s) = Commentary' s
 author :: Parser String
 author =
   strOption
-    (long "author" <> short 'a' <> value "" <> help "Substring/affix of author")
+    (long "author" 
+    <> metavar "SUBSTR"
+    <> short 'a' <> value "" <> help "Substring/affix of author")
 
 title :: Parser String
 title =
-  strOption (long "title" <> short 't' <> value "" <> help "Affix of title")
+  strOption 
+    (long "title" 
+    <> metavar "SUBSTR"
+    <> short 't' <> value "" <> help "Affix of title")
 
 data Sample = Sample
   { hello :: String
@@ -170,7 +175,9 @@ within :: Parser RelDur
 within =
   option
     relDurReader
-    (long "within" <> help "How far back within logs to apply search filters" <>
+    (long "within" 
+    <> metavar "REL_DATE"
+    <> help "Lower bound of search filter range" <>
      short 'w' <>
      value (RelDur 0 6 0))
 

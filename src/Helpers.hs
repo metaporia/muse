@@ -1,13 +1,11 @@
 module Helpers where
 
 --import Prelude hiding (any, lookup, min, until)
-
-
-import           Control.Applicative
-import           Data.List (isPrefixOf)
+import Control.Applicative
+import Data.List (isPrefixOf)
 import qualified Data.Text as T
-import           Text.Trifecta hiding (rendered, render, Rendering, Span)
-import           Text.Show.Pretty
+import Text.Show.Pretty
+import Text.Trifecta hiding (Rendering, Span, render, rendered)
 import qualified Text.Trifecta.Result as Tri
 
 toMaybe :: Tri.Result a -> Maybe a
@@ -20,10 +18,8 @@ periodSep p = p `sepBy` (symbol ".")
 skipOptDot :: Parser ()
 skipOptDot = skipOptional (char '.')
 
-
 skipEOL :: Parser ()
 skipEOL = skipMany (oneOf "\n")
-
 
 isIndented :: [Char] -> Bool
 isIndented = isPrefixOf "           "
@@ -33,9 +29,7 @@ collectIndented :: [String] -> ([String], [String]) -- (rst, collected)
 collectIndented [] = ([], [])
 collectIndented (ln:lns)
   | isIndented ln = (ln :) <$> collectIndented lns
-  | otherwise = (ln:lns, [])
-
-
+  | otherwise = (ln : lns, [])
 
 tilEOL :: Parser String
 tilEOL = do
@@ -43,37 +37,36 @@ tilEOL = do
   val <- some (noneOf "\n")
   return val
 
-data MediaType = Play
-               | Book
-               | ShortStory
-               | Other
-               deriving (Eq, Show)
+data MediaType
+  = Play
+  | Book
+  | ShortStory
+  | Other
+  deriving (Eq, Show)
 
-
-
-data Author' = Author { firstName :: T.Text
-                     , lastName  :: T.Text
-                     , psuedo    :: Maybe T.Text }
-                     deriving (Eq, Show)
+data Author' = Author
+  { firstName :: T.Text
+  , lastName :: T.Text
+  , psuedo :: Maybe T.Text
+  } deriving (Eq, Show)
 
 type ISBN = T.Text
 
-
 -- | Represents a piece of textual media.
-data Written = Title Author' MediaType (Maybe ISBN)
+data Written =
+  Title Author'
+        MediaType
+        (Maybe ISBN)
   deriving (Eq, Show)
 
 type Headword = String
+
 type Meaning = String
 
 --type PgNum = Integer
-
-
 -- ISBN for pgNumbers?
-
 parse :: Parser a -> String -> Result a
 parse p = parseString p mempty
 
 show' :: Show a => a -> IO ()
-show' =  pPrint
-
+show' = pPrint

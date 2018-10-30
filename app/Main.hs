@@ -97,7 +97,8 @@ data Input a = Input
   , endDateTime :: Day
   , authorPred :: String -> Bool
   , titlePred :: String -> Bool
-  , mapped :: Entry -> a
+  , definitions :: Bool
+  , quotations :: Bool
   }
 
 -- | Convert duration, combined with the system time, into UTC time. See the
@@ -109,10 +110,23 @@ toUTC day (RelDur y m d) =
   addGregorianYearsRollOver y . addGregorianMonthsRollOver m . addDays d $ day
 
 search :: Day -> Parser (Input SearchResult)
-search today =
-  Input <$> (toUTC today <$> within) <*> pure today <*> fmap isInfixOf author <*>
-  fmap isInfixOf title <*>
-  pure entryToSearchResult
+search today = Input <$> (toUTC today 
+                     <$> within) 
+                     <*> pure today 
+                     <*> (isInfixOf <$> author)
+                     <*> (isInfixOf <$> title)
+                     <*> defs
+                     <*> quotes
+
+defs :: Parser Bool
+defs = switch $ long "definitions" 
+  <> short 'd' 
+  <> help "Collect definitions left-over entries."
+
+quotes :: Parser Bool
+quotes = switch $ long "quotations" 
+  <> short 'q' 
+  <> help "Collect quotations from remaining entries."
 
 entryToSearchResult :: Entry -> SearchResult
 entryToSearchResult (Def dq) = Def' (show dq)
@@ -160,15 +174,6 @@ within =
      short 'w' <>
      value (RelDur 0 6 0))
 
-main' :: IO ()
-main' = greet =<< execParser opts
-  where
-    opts =
-      info
-        (sample <**> helper)
-        (fullDesc <> progDesc "Print a greeting for TARGET" <>
-         header "hello - a test for optparse-applicative")
-
 main :: IO ()
 main = do
   today <- utctDay <$> getCurrentTime
@@ -180,10 +185,10 @@ main = do
   runSearch =<< execParser opts
 
 runSearch :: Input SearchResult -> IO ()
-runSearch (Input s e _ _ _) =
-  putStrLn $ show s ++ "\n" ++ show e ++ "\nfancy search magick!"
-
-greet :: Sample -> IO ()
-greet (Sample h False n rd) =
-  putStrLn $ "Hello, " ++ h ++ replicate n '!' ++ ('\n' : show rd)
-greet _ = return ()
+runSearch (Input s e _ _ dfs qts) =
+  putStrLn $
+  show s ++
+  "\n" ++
+  show e ++
+  "\ncollect defs: " ++
+  show dfs ++ "\ncollect quotations: " ++ show qts ++ "\nfancy search magick!"

@@ -8,6 +8,8 @@ import Data.List (isInfixOf)
 import Data.Monoid ((<>))
 import qualified Text.Trifecta.Result as Tri
 import Data.Time
+import Data.Time.Calendar
+import Data.Time.Clock (utctDay)
 
 -- Questions:
 --
@@ -88,25 +90,26 @@ data SearchResult = Def' String
 
 -- | Represents filters and entry maps extracted from CLI invocation.
 data Input a = Input
-  { startDateTime :: RelDur -- TODO replace with DateTime
-  , endDateTime :: UTCTime
+  { startDateTime :: Day
+  , endDateTime :: Day
   , authorPred :: String -> Bool
   , titlePred :: String -> Bool
   , mapped :: Entry -> a
   }
 
 
-data SysTime = SysTime
-
 
 -- | Convert duration, combined with the system time, into UTC time. See the
 -- `time` library.
-toUTC :: RelDur -> SysTime -> UTCTime
-toUTC = undefined
+--
+-- TODO: handle d/m/y excess w/ rollover
+toUTC :: Day -> RelDur -> Day
+toUTC day (RelDur y m d) =
+  addGregorianYearsRollOver y . addGregorianMonthsRollOver m . addDays d $ day
 
-search :: UTCTime -> Parser (Input SearchResult)
+search :: Day -> Parser (Input SearchResult)
 search today = Input
-      <$> within
+      <$> (toUTC today <$> within)
       <*> pure today
       <*> fmap isInfixOf author 
       <*> fmap isInfixOf title
@@ -173,8 +176,6 @@ within = option relDurReader
         <> value (RelDur 0 6 0)
          )
 
-
-
 main' :: IO ()
 main' = greet =<< execParser opts
   where
@@ -185,7 +186,7 @@ main' = greet =<< execParser opts
 
 main :: IO ()
 main = do
-  today <- getCurrentTime
+  today <- utctDay <$> getCurrentTime
   let opts = info (search today <**> helper)
             ( fullDesc
            <> progDesc "Run logParse search filters."
@@ -193,7 +194,7 @@ main = do
   runSearch =<< execParser opts
 
 runSearch :: Input SearchResult -> IO ()
-runSearch _ = print "fancy search magick!"
+runSearch (Input s e _ _ _) = putStrLn $ show s ++ "\n" ++ show e ++ "\nfancy search magick!"
 
 greet :: Sample -> IO ()
 greet (Sample h False n rd) =

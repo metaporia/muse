@@ -385,31 +385,34 @@ testlog =
 |]
 
 
-
-data RelDur = RelDur { yy :: Int
-                     , mm :: Int
-                     , dd :: Int
+-- | Relative duration, conversion from which expects rollover, not clipping,
+-- as this is meant as a container for user-entered years, months, and days.
+-- Thus, `RelDur 1000 1000 1000` ought to be a valid input to whichever
+-- conversion function is used.
+data RelDur = RelDur { yy :: Integer
+                     , mm :: Integer
+                     , dd :: Integer
                      } deriving (Eq, Show)
 
 index :: [a] -> [(Int, a)]
 index xs = zip [len, len-1..0] xs
   where len = length xs - 1
 
-toInt :: [Int] -> Int
-toInt = foldr (\(pow, el) res -> (10^pow) * el + res) 0 . index 
+toInteger :: [Integer] -> Integer
+toInteger = foldr (\(pow, el) res -> (10^pow) * el + res) 0 . index 
 
-digits :: Parser Int
+digits :: Parser Integer
 digits = read <$> some digit
 
-day :: Parser Int
+day :: Parser Integer
 day = digits <* char 'd'
-week :: Parser Int
+week :: Parser Integer
 week = digits <* char 'w'
 
-month :: Parser Int
+month :: Parser Integer
 month = digits <* char 'm'
 
-year :: Parser Int
+year :: Parser Integer
 year = digits <* char 'y'
 
 

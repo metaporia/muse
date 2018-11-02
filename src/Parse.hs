@@ -54,6 +54,7 @@ import Text.Trifecta hiding (Rendering, Span)
 -- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
 -- ▣  quotations
 -- ▣  strip newlines from quotation bodies
+-- □  improve error messages
 -- □  from "q<pgNum> " to QuotationLocation
 -- □  from "q<pgNum> \"<quotation>\"
 -- □  from "(note | N.B.)", containing some specialization
@@ -295,7 +296,7 @@ entry
   indent <- skipOptional newline *> tabs
   ts <- timestamp
   -- entry body
-  dq <- try book <|> try quotation <|> try commentary <|> def
+  dq <- (try book <|> try quotation <|> try commentary <|> def) <?> "found no valid prefix"
   return $ (indent, ts, dq)
 
 entries :: Parser [(Int, TimeStamp, Entry)]

@@ -31,6 +31,10 @@ dependencies:
 - split
 - parsers
 - time
+- yaml-config
+- aeson
+- directory
+- bytestring
 
 library:
   source-dirs: src

@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Parse
   ( DefQuery(..)
@@ -13,16 +14,20 @@ module Parse
   , parse
   , timestamp
   , TimeStamp(..)
+  , toMaybe
   , relDur
   , RelDur(..)
   , Quote
   , Author
   , Body
   , Title
+  , parseByteString
   ) where
 
 import Control.Applicative
 import Control.Monad (void)
+import Data.Aeson
+import GHC.Generics
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.Maybe (fromJust)
@@ -62,7 +67,13 @@ data TimeStamp = TimeStamp
   { hr :: Int
   , min :: Int
   , sec :: Int
-  } deriving (Eq, Show)
+  } deriving (Eq, Generic, Show)
+
+instance ToJSON TimeStamp where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON TimeStamp
+
 
 skipOptColon :: Parser ()
 skipOptColon = skipOptional (char ':')
@@ -119,7 +130,13 @@ data DefQuery
               Meaning
               Headword
               Meaning
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance ToJSON DefQuery where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON DefQuery
+
 
 trimDefQuery :: DefQuery -> DefQuery
 trimDefQuery (Defn hws) = Defn (fmap trim hws)
@@ -308,7 +325,12 @@ data Entry
   | Quotation Quote
               Attr
   | Commentary Body
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance ToJSON Entry where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Entry
 
 testLog :: String
 testLog =

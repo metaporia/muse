@@ -1,0 +1,4 @@
+# read only
+log-dir: /home/aporia/sputum/muse
+
+cache-dir: /home/aporia/.cache/muse

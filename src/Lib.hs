@@ -1,14 +1,13 @@
-{-# LANGUAGE GADTSyntax #-} 
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
-module Lib
-    ( someFunc
-    ) where
+{-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
+  OverloadedStrings #-}
 
-import Parse
+module Lib
+  ( someFunc
+  ) where
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
+
 
 -- Returns the first successful result.
 --choice :: (a -> Maybe b) -> [a] -> Maybe b
@@ -31,4 +30,5 @@ someFunc = putStrLn "someFunc"
 --    let x = m
 --     in --undefined 
 --       P $ \ int bool -> m (int.f) (bool.f)
-       
+
+

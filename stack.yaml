@@ -46,6 +46,7 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - mtl-2.2.2
+- yaml-config-0.4.0
 - git: https://github.com/ndmitchell/ghcid.git
   commit: d6630801d3e65a62a5ff307616251785b0f5c414
 

@@ -1,15 +1,27 @@
+{-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
+   OverloadedStrings #-}
 module Main where
 
 import Lib
 import Parse
 
+import Prelude hiding (lookup, log)
+import Data.Aeson
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import Data.List (isInfixOf)
+import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Time
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
 import Options.Applicative
 import qualified Text.Trifecta.Result as Tri
+import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
+import System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
+import System.Environment (getEnv)
 
 -- Questions:
 --
@@ -95,8 +107,8 @@ data SearchResult
 data Input a = Input
   { startDateTime :: Day
   , endDateTime :: Day
-  , authorPred :: String -> Bool
-  , titlePred :: String -> Bool
+  , authorPred :: Author -> Bool
+  , titlePred :: Title -> Bool
   , definitions :: Bool
   , quotations :: Bool
   }
@@ -189,7 +201,7 @@ main = do
           (search today <**> helper)
           (fullDesc <> progDesc "Run logParse search filters." <>
            header "muse - a reading log search interface")
-  runSearch =<< execParser opts
+  execParser opts >>= runSearch 
 
 runSearch :: Input SearchResult -> IO ()
 runSearch (Input s e _ _ dfs qts) =
@@ -199,3 +211,124 @@ runSearch (Input s e _ _ dfs qts) =
   show e ++
   "\ncollect defs: " ++
   show dfs ++ "\ncollect quotations: " ++ show qts ++ "\nfancy search magick!"
+
+
+
+-- config
+data MuseConf = MuseConf
+  { log :: T.Text
+  , cache :: T.Text
+  , home :: T.Text
+  } deriving (Eq, Show)
+
+loadMuseConf :: IO MuseConf
+loadMuseConf = do
+  config <- load "./config.yaml"
+  home' <- getEnv "HOME"
+  let home = T.pack home'
+      -- defaults
+      logDef = home <> "/.muse"
+      cacheDef = home `T.append` "/.cache/muse"
+      -- lookup
+      logDir = lookupDefault "log-dir" logDef config
+      cacheDir = lookupDefault "cache-dir" cacheDef config
+  mapM_ T.putStrLn ["muse config: ", logDir, cacheDir]
+  return $ MuseConf logDir cacheDir home
+
+writeMuseConf :: MuseConf -> IO MuseConf
+writeMuseConf mc@(MuseConf log cache home) = do
+  let conf = "log-dir: " <> log <> "\n\ncache-dir: " <> cache
+  createDirectoryIfMissing True $ T.unpack  (home <> "/.muse")
+  T.writeFile (T.unpack $ home <> "/.muse/config.yaml") conf
+  return mc
+
+
+-- muse init:
+-- 1. prompt for config file creation, default at ~/.muse
+-- 2. check whether (a) logDir and (b) cacheDir exist.
+--    i.  if both (a) and (b) hold, then proceed to (3)
+--    ii. otherwise prompt for missing locations, write choices to ~/.muse
+-- 3. parse log dir; serialize successful results ([Int, TS, Entry]) to
+--    cacheDir/entries (bucket by month); collect filenames of parse failures 
+--    into cacheDir/failures. 
+--
+--    -  write valid date range to config ?
+--    TODO tag generation based on entry grouping
+-- 4. 
+
+
+-- | Prompt user for log dir, cache dir, 
+prompt :: IO MuseConf
+prompt = do
+  home' <- getEnv "HOME"
+  let home = T.pack home'
+      defConfPath = home <> "/.muse"
+      defCacheDir = home <> "/.cache/muse"
+  -- 1. prompt for config file creation, default at ~/.muse
+  --T.putStr $ "Enter path to config directory (default: " <> defConfPath <> "): "
+  --resp <- T.getLine
+  --let confPath :: T.Text
+  --    confPath =
+  --      case resp of
+  --        "" -> defConfPath
+  --        _ -> resp
+  T.putStr $ "Enter path to entry directory (default: " <> defConfPath <> "/entries/): "
+  resp <- T.getLine
+  let entryDir :: T.Text
+      entryDir =
+        case resp of
+          "" -> defConfPath <> "/entries"
+          _ -> resp
+  T.putStr $ "Enter path to cache directory (default: " <> defCacheDir <> "): "
+  resp <- T.getLine
+  let cacheDir =
+        case resp of
+          "" -> defCacheDir
+          _ -> resp
+      conf = MuseConf entryDir defConfPath cacheDir
+  writeMuseConf conf
+
+
+
+-- | Creates ~/.muse/{entries/,config.yaml} and ~/.cache/muse/entries.
+museInit :: IO MuseConf
+museInit = do
+  -- TODO enable custom locations
+  home' <- getEnv "HOME"
+  let home = T.pack home'
+      defConfPath = home <> "/.muse/config.yaml"
+      defCacheDir  = home <> "/.cache/muse/"
+      defLogDir   = home <> "/.muse/entries/"
+      defaults    = MuseConf defLogDir defCacheDir home
+  T.putStrLn $ "Config file located at " <> home <> "/.muse/config.yaml"
+  -- create config & conf dir
+  mc <- writeMuseConf defaults
+  createDirectoryIfMissing True . T.unpack $ (cache mc) <> "/parsedEntries"
+  createDirectoryIfMissing True $ T.unpack (log mc) 
+  
+  parseAllEntries mc
+  return mc
+
+-- | Parse all entries from logDir into cacheDir/entries.
+parseAllEntries :: MuseConf -> IO ()
+parseAllEntries mc@(MuseConf log cache home) = do
+  -- read in log file names; parse 'em
+  fps <- listDirectory (T.unpack log)
+  let parse fp =
+        (,) <$> pure fp <*>
+        (toMaybe . parseByteString entries mempty <$> B.readFile (T.unpack log ++ fp))
+      invert =
+        \(fp, me) ->
+          case me of
+            Just e -> Just (fp, e)
+            Nothing -> Nothing
+
+      -- parseAndLabel :: IO [(String, [(Int, TimeStamp, Entry)])]
+  entryGroups <- fmap (catMaybes . fmap invert) . sequence $ parse <$> fps
+  -- encode entrygroups to json, write each to cacheDir
+  sequence_ $ fmap (\(fp, eg) -> BL.writeFile (T.unpack cache ++ "/parsedEntries/" ++ fp) (encode eg)) entryGroups
+
+-- TODO centralize file path generation--save yourself the headache later of
+-- mismatched paths!
+parsedEntryDir :: MuseConf -> T.Text
+parsedEntryDir = undefined

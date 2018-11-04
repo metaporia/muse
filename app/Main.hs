@@ -95,13 +95,16 @@ data Search a = Search
 data DateTime =
   DateTime
 
+-- TODO replace w/ newtype wrapper around `Entry`
 data SearchResult
   = Def' String
   | Quotation' Quote
                Author
+               (Maybe PgNum)
   | Commentary' Body
   | Read' Title
           Author
+  | PN' PageNum
                   -- | Entry' String -- ?
   deriving (Eq, Show)
 
@@ -144,9 +147,10 @@ quotes = switch $ long "quotations"
 
 entryToSearchResult :: Entry -> SearchResult
 entryToSearchResult (Def dq) = Def' (show dq)
-entryToSearchResult (Quotation b attr) = Quotation' b attr
+entryToSearchResult (Quotation b attr pg) = Quotation' b attr pg
 entryToSearchResult (Read t a) = Read' t a
 entryToSearchResult (Commentary s) = Commentary' s
+entryToSearchResult (PN pg) = PN' pg
 
 author :: Parser String
 author =

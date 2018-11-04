@@ -16,6 +16,8 @@ module Parse
   , TimeStamp(..)
   , toMaybe
   , relDur
+  , PageNum(..)
+  , PgNum
   , RelDur(..)
   , Quote
   , Author
@@ -60,6 +62,9 @@ import Text.Trifecta hiding (Rendering, Span)
 -- ▣  from "(commentary | synthesis of <title>, by <author>"
 --    N.B.: optionally consume attribution info, but prefer to depend upon
 -- ▣  deprecate comma before <auth> attribution
+-- ▣  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
+-- □  (!!) factor `entryBody` and `newline` discardment out of entry variant parsers
+--    and into `entry`
 -- □  improve error messages
 -- □  from "q<pgNum> " to QuotationLocation
 -- □  from "q<pgNum> \"<quotation>\"
@@ -83,8 +88,7 @@ import Text.Trifecta hiding (Rendering, Span)
 --    type; default to "book"?
 -- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
 -- □  ignore indentation preserving/setting timestamps
--- □  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
--- □  chapter numbers, for instance, "ch <num"
+-- □  (?) chapter numbers, for instance, "ch <num"
 -- □  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
 --    or ban elipsis for untimestamped entries
 --  [r|...
@@ -99,8 +103,10 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  (unprefixed?) life log entries
 --    □  fix the unprefixed
 --    □  parse "do <act>"
---    □  "distract <activity>" (meaningful only when nested inside "do")
---    □  custom keywords for frequent actions, e.g., "hap", "walk"
+--    □  "distract <activity>" (meaningful only when nested inside "do[: ]");
+--       support list syntax (semicolons or bullets?)
+--    □  custom keywords for frequent actions, e.g., "hap", "walk", "coffee",
+--       "eat (breakfast | lunch | dinner | snack) <food-desc>"
 --    □  closing timestamp with "done ..."?
 -- □  ignore all meta log info, e.g., containing:
 --    - "muse"
@@ -168,8 +174,9 @@ timestamp =
 --
 -- * "venal" -- [A-Za-z]*
 -- * "lèse majesté" -- [A-Za-z ]
+
 data DefQuery
-  = Defn [Headword]
+  = Defn (Maybe PgNum) [Headword]
   | InlineDef Headword
               Meaning
   | DefVersus Headword
@@ -183,15 +190,19 @@ instance ToJSON DefQuery where
 
 instance FromJSON DefQuery
 
+type PgNum = Integer
 
 trimDefQuery :: DefQuery -> DefQuery
-trimDefQuery (Defn hws) = Defn (fmap trim hws)
+trimDefQuery (Defn pg hws) = Defn pg (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
 trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
 
 toDefn :: Parser DefQuery
-toDefn =
-  Defn <$> (symbol "d" *> sepBy (some $ noneOf ",\n") (symbol ",")) <* entryBody
+toDefn = do
+  _ <- symbolic 'd'
+  pg <- optional digits
+  headwords <- sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
+  return $ Defn pg headwords
 
 -- recent
 inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
@@ -274,11 +285,12 @@ quot = void $ pad (char '"')
 --  from indentation context.
 quotation :: Parser Entry
 quotation = do
-  _ <- lpad $ symbol "quotation" 
+  _ <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
+  pg <- optional digits
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <- entryBody
   _ <- many newline
-  return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc
+  return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc pg
 
 
 -- | Parse an commentary entry (body, without timestamp) of the form:
@@ -329,24 +341,43 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 --parseEntry = (,,) <$> (skipOptional newline *> tabs)
 --                  <*> timestamp
 --                  <*>
+-- TODO handle "\n    \n" w/o parser fantods
 def :: Parser Entry
 def = do
-  -- TODO handle "\n    \n" w/o parser fantods
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
   _ <- many $ try (void (some space) <* void newline) <|> void newline
   -- _ <- many (try space <* newline) <?> "consume solitary spaces on newline"
   -- _ <- try (void $ some space) <|> try (void newline) 
   return . Def . trimDefQuery $ dq
 
+-- | Extracts page number as one of form: 
+--
+--  - "p<num>"  -- page number 
+--  - "s<num>"  -- pg at start of reading session 
+--  - "e<num>" -- pg at end of reading session 
+--  - "f<num>" -- pg at end of book; shorthand for completion of book
+page :: Parser Entry
+page = do
+  p <-
+    try (symbolic 'p') <|> try (symbolic 's') <|> try (symbolic 'e') <|>
+    symbolic 'f'
+  pg <- digits
+  _ <- entryBody
+  _ <- many newline
+  return . PN $
+    case p of
+      'p' -> Page pg
+      's' -> PStart pg
+      'e' -> PEnd pg
+      'f' -> PFinish pg
+
 entry :: Parser (Int, TimeStamp, Entry)
-entry
-  -- prefix
- = do
+entry = do
   indent <- skipOptional newline *> tabs
   ts <- timestamp
   -- entry body
-  dq <- (try book <|> try quotation <|> try commentary <|> def) -- <?> "found no valid prefix"
-  return $ (indent, ts, dq)
+  e <- (try book <|> try quotation <|> try commentary <|> try def <|> page) -- <?> "found no valid prefix"
+  return $ (indent, ts, e)
 
 entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
@@ -360,7 +391,7 @@ unused = undefined
     _ = bookTs >> bookTs' >> testLog
 
 isQuotation :: Entry -> Bool
-isQuotation (Quotation _ _) = True
+isQuotation (Quotation _ _ _) = True
 isQuotation _ = False
 
 type Quote = String
@@ -368,13 +399,26 @@ type Body = String
 
 type Attr = String
 
+data PageNum = Page PgNum
+             | PStart PgNum
+             | PEnd PgNum
+             | PFinish PgNum
+             deriving (Eq, Show, Generic)
+
+instance ToJSON PageNum where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON PageNum
+
 data Entry
   = Def DefQuery
   | Read Title
          Author
   | Quotation Quote
               Attr
+              (Maybe PgNum)
   | Commentary Body
+  | PN PageNum
   deriving (Eq, Generic, Show)
 
 instance ToJSON Entry where
@@ -432,7 +476,7 @@ testlog =
                     medically trheatening; (v.) to slander; to asperse; to show
                     hatred toward.
     10:17:40 λ. d inimical, traduce, virulent
-    10:18:12 λ. d sublime, lintel
+    10:18:12 λ. d48 sublime, lintel
     10:24:02 λ. quotation
 
                 "There was no treachery too base for the world to commit. She

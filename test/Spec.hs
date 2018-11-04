@@ -9,6 +9,7 @@ import Prelude hiding (min)
 import Test.Hspec
 import Text.RawString.QQ
 import qualified Text.Trifecta.Result as Tri
+import Text.Show.Pretty (pPrint)
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
@@ -34,6 +35,14 @@ main =
         example $ do
           (toMaybe $ parse entries commentTs') `shouldBe`
             (Just commentTsOutput')
+    -- pgNum
+    describe "test pgNum: \"(s | e | p | f)<num>\"" $ do
+      it "parse entries testPgNum" $
+        example $ do
+          (toMaybe $ parse entries testPgNum) `shouldBe`
+            (Just testPgNumOutput)
+
+
 
 -- `parse entries teslog`
 output :: [(Int, TimeStamp, Entry)]
@@ -59,27 +68,27 @@ output =
            "(adj.) having an evil disposition; spiteful; \n                    medically trheatening; (v.) to slander; to asperse; to show\n                    hatred toward."))
   , ( 1
     , TimeStamp {hr = 10, min = 17, sec = 40}
-    , Def (Defn ["inimical", "traduce", "virulent"]))
+    , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
   , ( 1
     , TimeStamp {hr = 10, min = 18, sec = 12}
-    , Def (Defn ["sublime", "lintel"]))
+    , Def (Defn (Just 38) ["sublime", "lintel"]))
   , ( 1
     , TimeStamp {hr = 10, min = 24, sec = 2}
     , Quotation
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
-        "In \"To the Lighthouse\", by Virginia Woolf")
+        "In \"To the Lighthouse\", by Virginia Woolf" Nothing)
   , ( 1
     , TimeStamp {hr = 10, min = 25, sec = 27}
     , Quotation
         "Her simplicity fathomed what clever people falsified."
-        "In \"To the Lighthouse\", by Virginia Woolf")
-  , (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn ["plover"]))
-  , (1, TimeStamp {hr = 10, min = 47, sec = 59}, Def (Defn ["cosmogony"]))
+        "In \"To the Lighthouse\", by Virginia Woolf" Nothing)
+  , (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
+  , (1, TimeStamp {hr = 10, min = 47, sec = 59}, Def (Defn Nothing ["cosmogony"]))
   , ( 1
     , TimeStamp {hr = 10, min = 49, sec = 58}
     , Quotation
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
-        "In \"To the Lighthouse\", by Virginia Woolf")
+        "In \"To the Lighthouse\", by Virginia Woolf" (Just 38))
   ]
 
 commentTs :: String
@@ -121,7 +130,7 @@ commentTsOutput' =
     , TimeStamp {hr = 20, min = 30, sec = 0}
     , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
-  , (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn ["hello"]))
+  , (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
   ]
 
 -- test data
@@ -140,6 +149,30 @@ d word1 : meaning1; meaning2; meaning3;
   NB: further commentary. all text to next TimeStamp should be lumped into the
   meaning
 |]
+
+testPgNum :: String
+testPgNum = [r|
+08:38:20 λ. p38 
+08:38:20 λ. s 38 
+08:38:20 λ. e38
+08:38:20 λ. f38 
+08:38:20 λ. p  38
+|]
+
+testPgNumOutput :: [(Int, TimeStamp, Entry)]
+testPgNumOutput = 
+  [ ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (Page 38) )
+  , ( 0
+    , TimeStamp { hr = 8 , min = 38 , sec = 20 }
+    , PN (PStart 38)
+    )
+  , ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (PEnd 38) )
+  , ( 0
+    , TimeStamp { hr = 8 , min = 38 , sec = 20 }
+    , PN (PFinish 38)
+    )
+  , ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (Page 38) )
+  ]
 
 testLog :: String
 testLog =
@@ -222,22 +255,22 @@ testlog =
                     malign : (adj.) having an evil disposition; spiteful; 
                     medically trheatening; (v.) to slander; to asperse; to show
                     hatred toward.
-    10:17:40 λ. d inimical, traduce, virulent
-    10:18:12 λ. d sublime, lintel
+    10:17:40 λ. d 38 inimical, traduce, virulent
+    10:18:12 λ. d38 sublime, lintel
     10:24:02 λ. quotation
         
                 "There was no treachery too base for the world to commit. She
                 knew this. No happiness lasted."
 
                 In "To the Lighthouse", by Virginia Woolf
-    10:25:27 λ. quotation
+    10:25:27 λ. q
 
                 "Her simplicity fathomed what clever people falsified."
         
                 In "To the Lighthouse", by Virginia Woolf
     10:28:49 λ. d plover
     10:47:59 λ. d cosmogony
-    10:49:58 λ. quotation
+    10:49:58 λ. q38
                 
                 "But nevertheless, the fact remained, that is was nearly
                 impossbile to dislike anyone if one looked at them."

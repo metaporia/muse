@@ -229,7 +229,7 @@ quot = void $ pad (char '"')
 --  from indentation context.
 quotation :: Parser Entry
 quotation = do
-  _ <- string "quotation" <* newline
+  _ <- lpad (string "quotation") <* newline
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <- entryBody
   _ <- many newline
@@ -296,7 +296,7 @@ entry
   indent <- skipOptional newline *> tabs
   ts <- timestamp
   -- entry body
-  dq <- (try book <|> try quotation <|> try commentary <|> def) <?> "found no valid prefix"
+  dq <- (try book <|> try quotation <|> try commentary <|> def) -- <?> "found no valid prefix"
   return $ (indent, ts, dq)
 
 entries :: Parser [(Int, TimeStamp, Entry)]
@@ -405,6 +405,13 @@ testlog =
 
                 In "To the Lighthouse", by Virginia Woolf
 
+|]
+q = [r|10:49:58 λ. quotation
+
+            "But nevertheless, the fact remained, that is was nearly
+            impossbile to dislike anyone if one looked at them."
+
+            In "To the Lighthouse", by Virginia Woolf
 |]
 
 

@@ -3,6 +3,7 @@
 
 module Test where
 
+
 import Parse
 import Prelude hiding (min)
 import Test.Hspec
@@ -122,10 +123,6 @@ commentTsOutput' =
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
   , (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn ["hello"]))
   ]
-
-toMaybe :: Tri.Result a -> Maybe a
-toMaybe (Tri.Success a) = Just a
-toMaybe (Tri.Failure _) = Nothing
 
 -- test data
 testStrDefn :: String

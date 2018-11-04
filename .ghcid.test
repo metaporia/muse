@@ -1,1 +1,1 @@
---command "stack ghci --ghci-options=-fobject-code --test test/Spec.hs"
+--command "stack ghci --test test/Spec.hs"

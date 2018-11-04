@@ -8,7 +8,6 @@ module Lib
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
-
 -- Returns the first successful result.
 --choice :: (a -> Maybe b) -> [a] -> Maybe b
 --choice f xs = foldr go Nothing xs

@@ -4,12 +4,14 @@ module Main where
 
 import Lib
 import Parse
+import Helpers
 
 import Prelude hiding (lookup, log)
+import Control.Monad (void)
 import Data.Aeson
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, sort, intercalate)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -194,7 +196,10 @@ within =
      value (RelDur 0 6 0))
 
 main :: IO ()
-main = do
+main = void museInit
+    
+main' :: IO ()
+main' = do
   today <- utctDay <$> getCurrentTime
   let opts =
         info
@@ -293,19 +298,17 @@ prompt = do
 -- | Creates ~/.muse/{entries/,config.yaml} and ~/.cache/muse/entries.
 museInit :: IO MuseConf
 museInit = do
-  -- TODO enable custom locations
   home' <- getEnv "HOME"
   let home = T.pack home'
       defConfPath = home <> "/.muse/config.yaml"
-      defCacheDir  = home <> "/.cache/muse/"
-      defLogDir   = home <> "/.muse/entries/"
-      defaults    = MuseConf defLogDir defCacheDir home
+      defCacheDir = home <> "/.cache/muse/"
+      defLogDir = home <> "/.muse/entries/"
+      defaults = MuseConf defLogDir defCacheDir home
   T.putStrLn $ "Config file located at " <> home <> "/.muse/config.yaml"
   -- create config & conf dir
   mc <- writeMuseConf defaults
   createDirectoryIfMissing True . T.unpack $ (cache mc) <> "/parsedEntries"
-  createDirectoryIfMissing True $ T.unpack (log mc) 
-  
+  createDirectoryIfMissing True $ T.unpack (log mc)
   parseAllEntries mc
   return mc
 
@@ -313,22 +316,41 @@ museInit = do
 parseAllEntries :: MuseConf -> IO ()
 parseAllEntries mc@(MuseConf log cache home) = do
   -- read in log file names; parse 'em
-  fps <- listDirectory (T.unpack log)
-  let parse fp =
+  fps <- sort <$> listDirectory (T.unpack log)
+  let parse :: String -> IO (String, Either String [(Int, TimeStamp, Entry)])
+      parse fp =
         (,) <$> pure fp <*>
-        (toMaybe . parseByteString entries mempty <$> B.readFile (T.unpack log ++ fp))
+        (showErr . parseByteString entries mempty <$> B.readFile (T.unpack log ++ fp))
+
+      invert :: (fp, Maybe e) -> Maybe (fp, e)
       invert =
         \(fp, me) ->
           case me of
             Just e -> Just (fp, e)
             Nothing -> Nothing
 
-      -- parseAndLabel :: IO [(String, [(Int, TimeStamp, Entry)])]
-  entryGroups <- fmap (catMaybes . fmap invert) . sequence $ parse <$> fps
-  -- encode entrygroups to json, write each to cacheDir
+      parseAndShowErrs :: IO [(String, [(Int, TimeStamp, Entry)])]
+      parseAndShowErrs = sequence (parse <$> fps) >>= showOrCollect
+
+      showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
+      showOrCollect =
+        let sideBar = unlines . fmap ("> " ++) . lines
+        in foldr
+             (\(fp, e) rest ->
+                case e -- render errros w filename, `ErrInfo`
+                      of
+                  Left err -> putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
+                  Right res -> ((fp, res) :) <$> rest)
+             (return [])
+
+  entryGroups <- parseAndShowErrs
   sequence_ $ fmap (\(fp, eg) -> BL.writeFile (T.unpack cache ++ "/parsedEntries/" ++ fp) (encode eg)) entryGroups
 
--- TODO centralize file path generation--save yourself the headache later of
--- mismatched paths!
+-- TODO 
+--
+-- □  centralize file path generation--save yourself the headache later of
+--    mismatched paths!
+-- on parse failure, show user err info
+--
 parsedEntryDir :: MuseConf -> T.Text
 parsedEntryDir = undefined

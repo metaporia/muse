@@ -12,6 +12,11 @@ toMaybe :: Tri.Result a -> Maybe a
 toMaybe (Tri.Success a) = Just a
 toMaybe (Tri.Failure _) = Nothing
 
+-- | Show `ErrInfo`
+showErr :: Tri.Result a -> Either String a
+showErr (Tri.Success a) = Right a
+showErr (Tri.Failure (ErrInfo doc _)) = Left $ show doc
+
 periodSep :: Parser String -> Parser [String]
 periodSep p = p `sepBy` (symbol ".")
 

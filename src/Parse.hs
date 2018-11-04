@@ -41,7 +41,10 @@ import Text.Trifecta hiding (Rendering, Span)
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
--- TODO write parsers for the following types from each pattern
+
+
+-- | TODO 
+--
 -- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
 -- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
 --    where a <def> is "<word> [: <meaning>]" (the brackets '[' and ']'
@@ -54,13 +57,55 @@ import Text.Trifecta hiding (Rendering, Span)
 -- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
 -- ▣  quotations
 -- ▣  strip newlines from quotation bodies
+-- ▣  from "(commentary | synthesis of <title>, by <author>"
+--    N.B.: optionally consume attribution info, but prefer to depend upon
+-- ▣  deprecate comma before <auth> attribution
 -- □  improve error messages
 -- □  from "q<pgNum> " to QuotationLocation
 -- □  from "q<pgNum> \"<quotation>\"
 -- □  from "(note | N.B.)", containing some specialization
--- □  from "(commentary | synthesis of <title>, by <author>"
---    N.B.: optionally consume attribution info, but prefer to depend upon
---    gruoping of (log) entries by title.
+--    grouping of (log) entries by title.
+--
+--    Example note at the end of a def. needs label; one of: "N.B.", "ref",
+--    etc., or quotation (perhaps add to Quotation a "clarificatory" bool?)
+--  [r| 19:32:42 λ. d adverse, averse
+-- 
+--    "Men have an aversion to what breaks in upon their habits; a reluctance and
+--    repugnance to what crosses their will; a disgust at what offends their
+--    sensibilities; and are often governed by antipathies for which they can
+--    give no good reason." - See {Dislike}
+--  |]
+-- 
+-- □  finish multiple books at once?
+-- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
+--    distinguish between syntaxes?
+-- □  parse "read (book | article | play ) <title>, by <author>" to specify media
+--    type; default to "book"?
+-- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
+-- □  ignore indentation preserving/setting timestamps
+-- □  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
+-- □  chapter numbers, for instance, "ch <num"
+-- □  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
+--    or ban elipsis for untimestamped entries
+--  [r|...
+--     [<abbr-ts>] - <activity>
+--     ...
+--   |]
+--   - expansion syntax for, e.g., "read ("A", "B", "C"), by <auth>" where the
+--   <auth> attribution ditributes over the titles?
+--
+-- □  add "research" keyword?
+-- □  add citation/external reference entry type, as in, "see <ref>", "see @<link>"
+-- □  (unprefixed?) life log entries
+--    □  fix the unprefixed
+--    □  parse "do <act>"
+--    □  "distract <activity>" (meaningful only when nested inside "do")
+--    □  custom keywords for frequent actions, e.g., "hap", "walk"
+--    □  closing timestamp with "done ..."?
+-- □  ignore all meta log info, e.g., containing:
+--    - "muse"
+--    - "muse-pre"
+--    - "muse-interim"
 toplevelNote = undefined
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
@@ -229,7 +274,7 @@ quot = void $ pad (char '"')
 --  from indentation context.
 quotation :: Parser Entry
 quotation = do
-  _ <- lpad (string "quotation") <* newline
+  _ <- lpad $ symbol "quotation" 
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <- entryBody
   _ <- many newline
@@ -262,12 +307,13 @@ type Author = String
 
 book :: Parser Entry
 book = do
+  _ <- whiteSpace
   _ <-
     try (symbol "read") <|> try (symbol "begin to read") <|>
-    symbol "finish reading"
+    try (symbol "finish reading") <|> symbol "finish"
   title <- between quot quot (some $ noneOf "\"")
-  _ <- symbol ","
-  _ <- symbol "by"
+  _ <- optional $ symbol "," -- 
+  _ <- symbol "by" <?> "expected attribution"
   author <- some (noneOf "\n")
   _ <- entryBody
   _ <- many newline
@@ -285,8 +331,11 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 --                  <*>
 def :: Parser Entry
 def = do
+  -- TODO handle "\n    \n" w/o parser fantods
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
-  _ <- many newline
+  _ <- many $ try (void (some space) <* void newline) <|> void newline
+  -- _ <- many (try space <* newline) <?> "consume solitary spaces on newline"
+  -- _ <- try (void $ some space) <|> try (void newline) 
   return . Def . trimDefQuery $ dq
 
 entry :: Parser (Int, TimeStamp, Entry)
@@ -404,7 +453,6 @@ testlog =
                 impossbile to dislike anyone if one looked at them."
 
                 In "To the Lighthouse", by Virginia Woolf
-
 |]
 q = [r|10:49:58 λ. quotation
 

@@ -87,9 +87,9 @@ output =
     , Def
         (DefVersus
            "malignant"
-           "(adj.) disposed to inflict suffering or cause\n                distress; inimical; bent on evil."
+           "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
            "malign"
-           "(adj.) having an evil disposition; spiteful; \n                    medically trheatening; (v.) to slander; to asperse; to show\n                    hatred toward."))
+           "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
   , ( 1
     , TimeStamp {hr = 10, min = 17, sec = 40}
     , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))

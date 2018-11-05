@@ -83,7 +83,7 @@ import Text.Trifecta hiding (Rendering, Span)
 -- 
 -- □  finish multiple books at once?
 -- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
---    distinguish between syntaxes?
+--    distinguish between syntaxes, collect?
 -- □  parse "read (book | article | play ) <title>, by <author>" to specify media
 --    type; default to "book"?
 -- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
@@ -197,8 +197,10 @@ type PgNum = Integer
 
 trimDefQuery :: DefQuery -> DefQuery
 trimDefQuery (Defn pg hws) = Defn pg (fmap trim hws)
-trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) meaning
-trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) m (trim h') m'
+trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
+trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) (trim' m) (trim h') (trim' m')
+
+trim' = intercalate " " . fmap trim . lines
 
 toDefn :: Parser DefQuery
 toDefn = do

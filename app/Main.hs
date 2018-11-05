@@ -8,7 +8,7 @@ import Helpers
 
 import Prelude hiding (lookup, log)
 import Control.Monad (void)
-import Data.Aeson
+import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.List (isInfixOf, sort, intercalate)
@@ -105,6 +105,7 @@ data SearchResult
   | Read' Title
           Author
   | PN' PageNum
+  | Null'
                   -- | Entry' String -- ?
   deriving (Eq, Show)
 
@@ -151,6 +152,7 @@ entryToSearchResult (Quotation b attr pg) = Quotation' b attr pg
 entryToSearchResult (Read t a) = Read' t a
 entryToSearchResult (Commentary s) = Commentary' s
 entryToSearchResult (PN pg) = PN' pg
+entryToSearchResult Null = Null'
 
 author :: Parser String
 author =

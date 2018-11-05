@@ -48,6 +48,20 @@ main =
           (toMaybe $ parse entries testLonelySpaces) `shouldBe`
             (Just testLonelySpacesOutput)
 
+    describe "parse null entries (those w only timestamps)" $ do
+      it "parse entries testLonelySpaces" $
+        example $ do
+          (toMaybe $ parse entries testNull) `shouldBe`
+            (Just testNullOutput)
+
+
+testNull :: String
+testNull = [r|
+    12:10:01 λ. 
+|]
+
+testNullOutput :: [(Int, TimeStamp, Entry)]
+testNullOutput = [(1, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
 
 testLonelySpaces :: String
 testLonelySpaces = [r|

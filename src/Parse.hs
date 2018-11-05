@@ -28,7 +28,7 @@ module Parse
 
 import Control.Applicative
 import Control.Monad (void)
-import Data.Aeson
+import Data.Aeson hiding (Null)
 import GHC.Generics
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
@@ -384,11 +384,11 @@ page = do
 
 entry :: Parser (Int, TimeStamp, Entry)
 entry = do
-  --_ <- many $ try (void (some space) <* void newline) <?> "lonely spaces"
   indent <- skipOptional (try emptyLines) *> tabs
-  ts <- timestamp  <?> "timestamp"
-  -- entry body
-  e <- (try book <|> try quotation <|> try commentary <|> try def <|> page) -- <?> "found no valid prefix"
+  ts <- timestamp <?> "timestamp"
+  e <-
+    (try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
+     return Null) -- <?> "found no valid prefix"
   _ <- void (skipOptional emptyLines) <|> eof
   return $ (indent, ts, e)
 
@@ -432,6 +432,7 @@ data Entry
               (Maybe PgNum)
   | Commentary Body
   | PN PageNum
+  | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
 
 instance ToJSON Entry where

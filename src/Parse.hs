@@ -369,6 +369,7 @@ def = do
 --  - "f<num>" -- pg at end of book; shorthand for completion of book
 page :: Parser Entry
 page = do
+  _ <- skipOptional (many space)
   p <-
     try (symbolic 'p') <|> try (symbolic 's') <|> try (symbolic 'e') <|>
     symbolic 'f'

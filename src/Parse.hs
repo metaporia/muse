@@ -44,7 +44,7 @@ import Text.Trifecta hiding (Rendering, Span)
 --  show x = ['"'] ++ x ++ ['"']
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 
-
+-- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
 -- | TODO 
 --
 -- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
@@ -133,12 +133,15 @@ skipOptColon = skipOptional (char ':')
 twoDigit :: Parser Int
 twoDigit = read <$> count 2 digit <* skipOptColon
 
+-- | Collects timestamp of the form "14:19:00 λ. ".
+-- N.B. Collect tabs before invoking `timestapm` as it will greedily consume
+-- preceeding whitespace.
 timestamp :: Parser TimeStamp
---timestamp = fromList <$> fmap read <$> periodSep twoDigit
-timestamp =
-  TimeStamp <$> twoDigit <*> twoDigit <*> twoDigit <* space <* char 'λ' <*
-  char '.' <*
-  space
+timestamp = do 
+  h <- lpad twoDigit
+  m <- twoDigit
+  s <- twoDigit <* space <* char 'λ' <* char '.' <* space -- todo replace `char '.'` with `symbolic '.'`.
+  return $ TimeStamp h m s
 
 -- | Definition parsing. The following are valid definition query forms:
 --
@@ -337,6 +340,10 @@ bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
 bookTs' :: String
 bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 
+
+emptyLines :: Parser [String]
+emptyLines = some . try $ manyTill space newline 
+
 --parseEntry :: Parser (Int, TimeStamp, Entry)
 --parseEntry = (,,) <$> (skipOptional newline *> tabs)
 --                  <*> timestamp
@@ -345,9 +352,11 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 def :: Parser Entry
 def = do
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
-  _ <- many $ try (void (some space) <* void newline) <|> void newline
+  -- _ <- many $ try (void (some space) <* void newline) <|> void newline <?> "lonely spaces"
   -- _ <- many (try space <* newline) <?> "consume solitary spaces on newline"
-  -- _ <- try (void $ some space) <|> try (void newline) 
+--  _ <- many (void newline <|> void (some space) <* void newline)
+--  _ <- many $ try (void (some space) <* newline) <|> void newline
+--  _ <- emptyLines
   return . Def . trimDefQuery $ dq
 
 -- | Extracts page number as one of form: 
@@ -361,7 +370,7 @@ page = do
   p <-
     try (symbolic 'p') <|> try (symbolic 's') <|> try (symbolic 'e') <|>
     symbolic 'f'
-  pg <- digits
+  pg <- digits <?> "page digits"
   _ <- entryBody
   _ <- many newline
   return . PN $
@@ -373,10 +382,12 @@ page = do
 
 entry :: Parser (Int, TimeStamp, Entry)
 entry = do
-  indent <- skipOptional newline *> tabs
-  ts <- timestamp
+  --_ <- many $ try (void (some space) <* void newline) <?> "lonely spaces"
+  indent <- skipOptional (try emptyLines) *> tabs
+  ts <- timestamp  <?> "timestamp"
   -- entry body
   e <- (try book <|> try quotation <|> try commentary <|> try def <|> page) -- <?> "found no valid prefix"
+  _ <- void (skipOptional emptyLines) <|> eof
   return $ (indent, ts, e)
 
 entries :: Parser [(Int, TimeStamp, Entry)]
@@ -489,7 +500,6 @@ testlog =
 
                 In "To the Lighthouse", by Virginia Woolf
     10:28:49 λ. d plover
-    10:47:59 λ. d cosmogony
     10:47:59 λ. d -let
     10:49:58 λ. quotation
 
@@ -497,6 +507,7 @@ testlog =
                 impossbile to dislike anyone if one looked at them."
 
                 In "To the Lighthouse", by Virginia Woolf
+  
 |]
 q = [r|10:49:58 λ. quotation
 
@@ -549,5 +560,16 @@ dmy = do
 -- | Parse `RelDur`
 relDur :: Parser RelDur
 relDur = dmy
+
+testLonelySpaces :: String
+testLonelySpaces = [r|
+
+    12:10:01 λ. d sylvan
+    
+   
+14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+ 
+
+|]
 
 

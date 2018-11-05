@@ -40,9 +40,33 @@ main =
       it "parse entries testPgNum" $
         example $ do
           (toMaybe $ parse entries testPgNum) `shouldBe`
-            (Just testPgNumOutput)
+            (Just testPgNumOutput) 
+    -- skip lonely spaces
+    describe "skip lines containing only spaces" $ do
+      it "parse entries testLonelySpaces" $
+        example $ do
+          (toMaybe $ parse entries testLonelySpaces) `shouldBe`
+            (Just testLonelySpacesOutput)
 
 
+testLonelySpaces :: String
+testLonelySpaces = [r|
+    12:10:01 λ. d sylvan
+    
+
+14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+ 
+
+ 
+|]
+
+testLonelySpacesOutput :: [(Int, TimeStamp, Entry)]
+testLonelySpacesOutput =
+  [ (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+  , ( 0
+    , TimeStamp {hr = 14, min = 19, sec = 0}
+    , Read "Witches Abroad" "Terry Pratchett")
+  ]
 
 -- `parse entries teslog`
 output :: [(Int, TimeStamp, Entry)]

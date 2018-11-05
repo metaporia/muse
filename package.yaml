@@ -42,6 +42,7 @@ library:
     - Lib
     - Parse
     - Helpers
+    - Search
 
 executables:
   logParse-exe:

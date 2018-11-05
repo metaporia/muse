@@ -9,6 +9,7 @@
 
 module Parse
   ( DefQuery(..)
+  , day'
   , Entry(..)
   , entries
   , entryOrDump
@@ -42,6 +43,7 @@ import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
+import Data.Time
 
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
@@ -114,6 +116,9 @@ import Text.Trifecta hiding (Rendering, Span)
 --    - "muse"
 --    - "muse-pre"
 --    - "muse-interim"
+-- □  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
+--    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
+--    by day, or some other small unit
 toplevelNote = undefined
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
@@ -616,4 +621,13 @@ multiple lines
 
 |]
 
+day' :: Parser (Maybe Day)
+day' = do
+  let twoDigits = read <$> count 2 digit
+  y <- read . ("20"++) <$> count 2 digit
+  char '.'
+  m <- twoDigits
+  char '.'
+  d <- twoDigits
+  return $ fromGregorianValid (fromIntegral y) m d
 

@@ -5,6 +5,8 @@ module Main where
 import Lib
 import Parse
 import Helpers
+import Search
+
 
 import Prelude hiding (lookup, log)
 import Control.Monad (void)
@@ -95,40 +97,19 @@ data Search a = Search
 data DateTime =
   DateTime
 
--- TODO replace w/ newtype wrapper around `Entry`
-data SearchResult
-  = Def' String
-  | Quotation' Quote
-               Author
-               (Maybe PgNum)
-  | Commentary' Body
-  | Read' Title
-          Author
-  | PN' PageNum
-  | Null'
-                  -- | Entry' String -- ?
-  deriving (Eq, Show)
-
--- | Represents filters and entry maps extracted from CLI invocation.
-data Input a = Input
-  { startDateTime :: Day
-  , endDateTime :: Day
-  , authorPred :: Author -> Bool
-  , titlePred :: Title -> Bool
-  , definitions :: Bool
-  , quotations :: Bool
-  }
 
 -- | Convert duration, combined with the system time, into UTC time. See the
 -- `time` library.
 --
 -- TODO: handle d/m/y excess w/ rollover
-toUTC :: Day -> RelDur -> Day
-toUTC day (RelDur y m d) =
-  addGregorianYearsRollOver y . addGregorianMonthsRollOver m . addDays d $ day
+subRelDur :: Day -> RelDur -> Day
+subRelDur day (RelDur y m d) =
+  addGregorianYearsRollOver (negate y) .
+  addGregorianMonthsRollOver (negate m) . addDays (negate d) $
+  day
 
 search :: Day -> Parser (Input SearchResult)
-search today = Input <$> (toUTC today 
+search today = Input <$> (subRelDur today 
                      <$> within) 
                      <*> pure today 
                      <*> (isInfixOf <$> author)
@@ -201,11 +182,11 @@ within =
      short 'w' <>
      value (RelDur 0 6 0))
 
-main :: IO ()
-main =  loadMuseConf >>= parseAllEntries
-    
 main' :: IO ()
-main' = do
+main' =  loadMuseConf >>= parseAllEntries
+    
+main :: IO ()
+main = do
   today <- utctDay <$> getCurrentTime
   let opts =
         info
@@ -215,14 +196,24 @@ main' = do
   execParser opts >>= runSearch 
 
 runSearch :: Input SearchResult -> IO ()
-runSearch (Input s e _ _ dfs qts) =
+runSearch (Input s e _ _ dfs qts) = do
+  let dateFilter = do
+        mc <- loadMuseConf
+        fps <- listDirectory . T.unpack $ entryCache mc
+        filterBy s e <$> pathsToDays fps
+  filtered <- dateFilter
   putStrLn $
-  show s ++
-  "\n" ++
-  show e ++
-  "\ncollect defs: " ++
-  show dfs ++ "\ncollect quotations: " ++ show qts ++ "\nfancy search magick!"
-
+    "start date: " ++
+    show s ++
+    "\n" ++
+    "end date: " ++
+    show e ++
+    "\ncollect defs: " ++
+    show dfs ++
+    "\ncollect quotations: " ++
+    show qts ++
+    "\nfancy search magick!" ++
+    "\nfiltered dates (to be searched):\n" ++ show filtered
 
 
 -- config
@@ -231,6 +222,9 @@ data MuseConf = MuseConf
   , cache :: T.Text
   , home :: T.Text
   } deriving (Eq, Show)
+
+entryCache :: MuseConf -> T.Text
+entryCache (MuseConf _ cache _) = cache <> "/parsedEntries"
 
 loadMuseConf :: IO MuseConf
 loadMuseConf = do

@@ -202,7 +202,7 @@ within =
      value (RelDur 0 6 0))
 
 main :: IO ()
-main = void museInit
+main =  loadMuseConf >>= parseAllEntries
     
 main' :: IO ()
 main' = do
@@ -238,8 +238,8 @@ loadMuseConf = do
   home' <- getEnv "HOME"
   let home = T.pack home'
       -- defaults
-      logDef = home <> "/.muse"
-      cacheDef = home `T.append` "/.cache/muse"
+      logDef = home <> "/.muse/entries/"
+      cacheDef = home `T.append` "/.cache/muse/"
       -- lookup
       logDir = lookupDefault "log-dir" logDef config
       cacheDir = lookupDefault "cache-dir" cacheDef config
@@ -322,11 +322,18 @@ museInit = do
 parseAllEntries :: MuseConf -> IO ()
 parseAllEntries mc@(MuseConf log cache home) = do
   -- read in log file names; parse 'em
+  putStrLn $ show mc
   fps <- sort <$> listDirectory (T.unpack log)
-  let parse :: String -> IO (String, Either String [(Int, TimeStamp, Entry)])
+  let --parse' :: String -> IO (String, Either String [(Int, TimeStamp, Entry)])
+      --parse' fp =
+      --  (,) <$> pure fp <*>
+      --  (showErr . parseByteString entries mempty <$> B.readFile (T.unpack log ++ "/" ++ fp))
+
+      parse :: String -> IO (String, Either String [LogEntry])
       parse fp =
         (,) <$> pure fp <*>
-        (showErr . parseByteString entries mempty <$> B.readFile (T.unpack log ++ fp))
+        (showErr . parseByteString logEntries mempty <$> B.readFile (T.unpack log ++ "/" ++ fp))
+
 
       invert :: (fp, Maybe e) -> Maybe (fp, e)
       invert =
@@ -335,7 +342,10 @@ parseAllEntries mc@(MuseConf log cache home) = do
             Just e -> Just (fp, e)
             Nothing -> Nothing
 
-      parseAndShowErrs :: IO [(String, [(Int, TimeStamp, Entry)])]
+      --parseAndShowErrs' :: IO [(String, [(Int, TimeStamp, Entry)])]
+      --parseAndShowErrs' = sequence (parse <$> fps) >>= showOrCollect
+
+      parseAndShowErrs :: IO [(String, [LogEntry])]
       parseAndShowErrs = sequence (parse <$> fps) >>= showOrCollect
 
       showOrCollect :: [(String, Either String res)] -> IO [(String, res)]

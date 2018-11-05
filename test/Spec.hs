@@ -54,9 +54,46 @@ main =
           (toMaybe $ parse entries testNull) `shouldBe`
             (Just testNullOutput)
 
+    describe "parse dump: \"...\n<multi-line-dump-body>\n...\"" $ do
+      it "parse (some entryOrDump testDump" $
+        example $ do
+          (toMaybe $ parse logEntries testDump) `shouldBe`
+            (Just testDumpOutput)
+
+testDump :: String
+testDump = [r|
+...
+dump aeouoaeu
+second line
+...
+
+    12:10:01 λ. d sylvan
+...    
+dump body
+multiple lines
+... 
+   
+14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+ 
+
+|]
+
+testDumpOutput :: [LogEntry]
+testDumpOutput =
+  [ Dump "dump aeouoaeu\nsecond line\n"
+  , TabTsEntry
+      (0, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+  , Dump "dump body\nmultiple lines\n"
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 14, min = 19, sec = 0}
+      , Read "Witches Abroad" "Terry Pratchett")
+  ]
+
 
 testNull :: String
-testNull = [r|
+testNull =
+  [r|
     12:10:01 λ. 
 |]
 

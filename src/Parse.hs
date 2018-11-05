@@ -11,6 +11,9 @@ module Parse
   ( DefQuery(..)
   , Entry(..)
   , entries
+  , entryOrDump
+  , LogEntry(..)
+  , logEntries
   , parse
   , timestamp
   , TimeStamp(..)
@@ -63,11 +66,20 @@ import Text.Trifecta hiding (Rendering, Span)
 --    N.B.: optionally consume attribution info, but prefer to depend upon
 -- ▣  deprecate comma before <auth> attribution
 -- ▣  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
+-- ▣  ignore indentation preserving/setting timestamps (see `Entry::Null`)
+-- ▣  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
+--    or ban elipsis for untimestamped entries
+--  [r|...
+--     [<abbr-ts>] - <activity>
+--     ...
+--   |]
+--   - expansion syntax for, e.g., "read ("A", "B", "C"), by <auth>" where the
+--   <auth> attribution ditributes over the titles?
+--   - first pass will merely collect the string surrounded by ellipses
+-- ▣  from "q<pgNum> \"<quotation>\"
 -- □  (!!) factor `entryBody` and `newline` discardment out of entry variant parsers
---    and into `entry`
+--    and into `entry` (see `emptyLines`)
 -- □  improve error messages
--- □  from "q<pgNum> " to QuotationLocation
--- □  from "q<pgNum> \"<quotation>\"
 -- □  from "(note | N.B.)", containing some specialization
 --    grouping of (log) entries by title.
 --
@@ -87,17 +99,7 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  parse "read (book | article | play ) <title>, by <author>" to specify media
 --    type; default to "book"?
 -- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
--- □  ignore indentation preserving/setting timestamps
 -- □  (?) chapter numbers, for instance, "ch <num"
--- □  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
---    or ban elipsis for untimestamped entries
---  [r|...
---     [<abbr-ts>] - <activity>
---     ...
---   |]
---   - expansion syntax for, e.g., "read ("A", "B", "C"), by <auth>" where the
---   <auth> attribution ditributes over the titles?
---
 -- □  add "research" keyword?
 -- □  add citation/external reference entry type, as in, "see <ref>", "see @<link>"
 -- □  (unprefixed?) life log entries
@@ -259,7 +261,7 @@ untilPNoTs p = do
 --  * parse entries into defs, quots, etc.
 --    N.B: preserve indentation info, as it will be used to group entries
 entryBody :: Parser String
-entryBody = untilP $ void timestamp <|> eof
+entryBody = untilPNoTs $ void (symbol "...") <|> void timestamp <|> eof
 
 lpad :: Parser a -> Parser a
 lpad p = whiteSpace *> p
@@ -383,6 +385,34 @@ page = do
       'e' -> PEnd pg
       'f' -> PFinish pg
 
+dump :: Parser LogEntry
+dump =
+  let el = symbol "..."
+  in Dump <$> (many space *> el *> manyTill anyChar el)
+
+
+data LogEntry = Dump String
+              | TabTsEntry (Int, TimeStamp, Entry)
+                deriving (Eq, Show, Generic)
+
+instance ToJSON LogEntry where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON LogEntry
+
+
+entryOrDump :: Parser LogEntry
+entryOrDump = do
+  _ <- skipOptional (try emptyLines) 
+  let entry' = do indent <- tabs
+                  ts <- timestamp <?> "timestamp"
+                  e <- (try book <|> try quotation <|> try commentary <|> try def <|> try page <|> return Null) 
+                  return $ TabTsEntry (indent, ts, e)
+
+  e <- try dump <|> entry'
+  _ <- void (skipOptional emptyLines) <|> eof
+  return $ e
+
 entry :: Parser (Int, TimeStamp, Entry)
 entry = do
   indent <- skipOptional (try emptyLines) *> tabs
@@ -397,6 +427,9 @@ entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
   where
     _ = unused
+
+logEntries :: Parser [LogEntry]
+logEntries = some entryOrDump
 
 unused :: a
 unused = undefined
@@ -565,11 +598,18 @@ dmy = do
 relDur :: Parser RelDur
 relDur = dmy
 
-testLonelySpaces :: String
-testLonelySpaces = [r|
+testDump :: String
+testDump = [r|
+...
+dump aeouoaeu
+second line
+...
 
     12:10:01 λ. d sylvan
-    
+...    
+dump body
+multiple lines
+... 
    
 14:19:00 λ. read "Witches Abroad", by Terry Pratchett
  

@@ -442,7 +442,8 @@ entries = some entry <* skipOptional newline
 
 logEntries :: Parser [LogEntry]
 logEntries =
-  const [] <$> ((try (void $ many space) <|> skipOptional emptyLines) *> eof)<|>
+  const [] <$>
+  (try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof") *>
   some entryOrDump
 
 unused :: a

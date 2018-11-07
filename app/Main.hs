@@ -123,7 +123,7 @@ data InputType
 parse' :: Parser InputType
 parse' =
   File <$> fileInput <|> StdIn <$> stdInput <|> allEntries <|>
-  pure (All True True)
+  pure (All False False)
 
 allEntries :: Parser InputType
 allEntries =
@@ -177,7 +177,7 @@ toplevel today =
        "parse"
        (info
           (Parse <$> parse' <**> helper)
-          (progDesc "Parse entries; a bare invocation runs 'parse --all --ignore-cache'")) <>
+          (progDesc "Parse entries; a bare invocation runs 'parse --all'")) <>
      command
        "lint"
        (info

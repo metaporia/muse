@@ -20,6 +20,7 @@ module Parse
   , TimeStamp(..)
   , toMaybe
   , relDur
+  , trim
   , PageNum(..)
   , PgNum
   , RelDur(..)
@@ -33,18 +34,17 @@ module Parse
 import Control.Applicative
 import Control.Monad (void)
 import Data.Aeson hiding (Null)
-import GHC.Generics
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.Maybe (fromJust)
+import Data.Time
+import GHC.Generics
 import Helpers
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
-import Data.Time
-
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.

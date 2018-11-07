@@ -1,27 +1,28 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings #-}
+   OverloadedStrings, MultiWayIf #-}
 module Search where
 
-import Parse
-import Helpers
-
-import Prelude hiding (lookup, log)
-import Control.Monad (void)
-import Data.Aeson hiding (Null)
+import           Control.Monad (void)
+import           Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.List (isInfixOf, sort, intercalate)
-import Data.Maybe (catMaybes)
-import Data.Monoid ((<>))
+import           Data.List (isInfixOf, sort, intercalate)
+import           Data.Maybe (catMaybes)
+import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Time
-import Data.Time.Calendar
-import Data.Time.Clock (utctDay)
+import           Data.Text.Metrics (levenshtein)
+import           Data.Time
+import           Data.Time.Calendar
+import           Data.Time.Clock (utctDay)
+import           Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
+import           Helpers
+import           Parse
+import           Prelude hiding (lookup, log)
+import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
+import           System.Environment (getEnv)
+import           Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta.Result as Tri
-import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
-import System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
-import System.Environment (getEnv)
 
 
 

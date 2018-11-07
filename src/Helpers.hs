@@ -1,11 +1,11 @@
 module Helpers where
 
 --import Prelude hiding (any, lookup, min, until)
-import Control.Applicative
-import Data.List (isPrefixOf)
+import           Control.Applicative
+import           Data.List (isPrefixOf)
 import qualified Data.Text as T
-import Text.Show.Pretty
-import Text.Trifecta hiding (Rendering, Span, render, rendered)
+import           Text.Show.Pretty
+import           Text.Trifecta hiding (Rendering, Span, render, rendered)
 import qualified Text.Trifecta.Result as Tri
 
 toMaybe :: Tri.Result a -> Maybe a

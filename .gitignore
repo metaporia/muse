@@ -1,4 +1,6 @@
 .stack-work/
 logParse.cabal
 errs
+TAGS
+ctags
 *~

@@ -110,6 +110,93 @@ search today = Input <$> (subRelDur today
                      <*> defs
                      <*> quotes
 
+data InputType
+  = File FilePath
+  | StdIn String
+  | All -- ^ Parse all entries in `entrySource`
+        Bool -- ^ Silence errors?
+        Bool -- ^ Ignore parsed entry cache?
+  deriving (Eq, Show)
+
+-- | A bare invocation will default to `parse --all --ignore-cache`, which
+-- parses all entries, uses parsed entry cache, and displays parse errors.
+parse' :: Parser InputType
+parse' =
+  File <$> fileInput <|> StdIn <$> stdInput <|> allEntries <|>
+  pure (All True True)
+
+allEntries :: Parser InputType
+allEntries =
+  (\_ s i -> All s i) <$>
+  switch
+    (long "all" <> short 'a' <>
+     help "Parse all entries in 'log-dir' (see ~/.muse/config.yaml)") <*>
+  quiet <*>
+  ignore
+
+stdInput :: Parser String
+stdInput =
+  option
+    str
+    (metavar "LOG_CONTENT" <> long "stdin" <> short 's' <>
+     help "Parse from stdin") <**>
+  helper
+
+fileInput :: Parser FilePath
+fileInput =
+  option
+    str
+    (long "file" <> metavar "FILE" <> help "Read in log from file" <> short 'f') <**>
+  helper
+
+init :: Parser Invocation
+init = Init <$> quiet <*> ignore
+
+quiet :: Parser Bool
+quiet =
+  switch
+    (long "quiet" <> short 'q' <> help "Suppress log parser error messages")
+
+ignore :: Parser Bool
+ignore =
+  switch
+    (long "ignore-cache" <> short 'i' <>
+     help "Reparse all entries, ignore cache (overwrites cache)")
+
+toplevel :: Day -> Parser Invocation
+toplevel today =
+  subparser
+    (command
+       "search"
+       (info
+          (Search <$> search today <**> helper)
+          (progDesc
+             "Search log entries by date, author, or title; extract\
+              \ definitions or quotations.")) <>
+     command
+       "parse"
+       (info
+          (Parse <$> parse' <**> helper)
+          (progDesc "Parse entries; a bare invocation runs 'parse --all --ignore-cache'")) <>
+     command
+       "lint"
+       (info
+          (pure Lint)
+          (progDesc "TBD; for, e.g., author attribution validation")) <>
+     command
+       "init"
+       (info
+          (init <**> helper)
+          (progDesc
+             "Initialize config file, cache directory, and entry log\
+             \ directory; parse all entries in 'log-dir'")))
+
+data Invocation
+  = Search (Input SearchResult)
+  | Parse InputType
+  | Lint
+  | Init Bool -- ^ Suppress log parse errors
+         Bool -- ^ Reparse cached entries
 defs :: Parser Bool
 defs = switch $ long "definitions" 
   <> short 'd' 
@@ -153,19 +240,41 @@ within =
      value (RelDur 0 6 0))
 
 main' :: IO ()
-main' =  loadMuseConf >>= parseAllEntries
-    
+main' =
+  loadMuseConf >>= parseAllEntries True False
+
 main :: IO ()
 main = do
   today <- utctDay <$> getCurrentTime
+  execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
+    dispatch
+
+main'' :: IO ()
+main'' = do
+  today <- utctDay <$> getCurrentTime
   let opts =
         info
-          (search today <**> helper)
+          (helper <*> search today)
           (fullDesc <> progDesc "Run logParse search filters." <>
            header "muse - a reading log search interface")
   execParser opts >>= runSearch 
 
-runSearch :: Input SearchResult -> IO ()
+dispatch :: Invocation -> IO ()
+dispatch (Search inp) = putStrLn "searching...\n" >> runSearch inp
+dispatch (Lint) = putStrLn "linting"
+dispatch (Init quiet ignoreCache) = do
+  putStrLn  "initializing...\n" -- ++ showMuseConf mc
+  void $ museInit quiet ignoreCache
+dispatch (Parse it) = do
+  mc <- loadMuseConf
+  putStrLn  "parsing..."
+  s <- case it of
+      File fp -> readFile fp
+      StdIn s -> return s
+      All silence ignore -> parseAllEntries silence ignore mc >> return ""
+  putStrLn s
+
+runSearch :: Input SearchResult -> IO () 
 runSearch (Input s e _ _ dfs qts) = do
   let dateFilter = do
         mc <- loadMuseConf
@@ -188,20 +297,25 @@ runSearch (Input s e _ _ dfs qts) = do
 
 -- config
 data MuseConf = MuseConf
-  { log :: T.Text
+  { log :: T.Text -- ^ * "$HOME/.muse/entries
   , cache :: T.Text
   , home :: T.Text
   } deriving (Eq, Show)
 
 entryCache :: MuseConf -> T.Text
-entryCache (MuseConf _ cache _) = cache <> "/parsedEntries"
+entryCache (MuseConf _ cache _) = cache <> "parsedEntries"
 
+entrySource :: MuseConf -> T.Text
+entrySource = log
+
+
+
+-- | Expects config at  $HOME/.muse/config.yaml
 loadMuseConf :: IO MuseConf
 loadMuseConf = do
-  config <- load "./config.yaml"
   home' <- getEnv "HOME"
+  config <- load $ home' ++ "/.muse/config.yaml"
   let home = T.pack home'
-      -- defaults
       logDef = home <> "/.muse/entries/"
       cacheDef = home `T.append` "/.cache/muse/"
       -- lookup
@@ -209,6 +323,10 @@ loadMuseConf = do
       cacheDir = lookupDefault "cache-dir" cacheDef config
   mapM_ T.putStrLn ["muse config: ", logDir, cacheDir]
   return $ MuseConf logDir cacheDir home
+
+
+showMuseConf :: MuseConf -> String
+showMuseConf = show
 
 writeMuseConf :: MuseConf -> IO MuseConf
 writeMuseConf mc@(MuseConf log cache home) = do
@@ -258,52 +376,76 @@ prompt = do
 
 
 -- | Creates ~/.muse/{entries/,config.yaml} and ~/.cache/muse/entries.
-museInit :: IO MuseConf
-museInit = do
+--
+-- TODO check if file exists before overwriting/tampering with it!!
+--
+museInit :: Bool -> Bool -> IO MuseConf
+museInit quiet ignoreCache = do
   home' <- getEnv "HOME"
   let home = T.pack home'
       defConfPath = home <> "/.muse/config.yaml"
+      defConfPath' = T.unpack defConfPath
       defCacheDir = home <> "/.cache/muse/"
       defLogDir = home <> "/.muse/entries/"
       defaults = MuseConf defLogDir defCacheDir home
-  T.putStrLn $ "Config file located at " <> home <> "/.muse/config.yaml"
+  T.putStrLn $ "Expects configuration file at: " <> home <> defConfPath <> "\n"
   -- create config & conf dir
-  mc <- writeMuseConf defaults
-  createDirectoryIfMissing True . T.unpack $ (cache mc) <> "/parsedEntries"
+  
+  doesExist <- doesFileExist defConfPath'
+  mc <- if doesExist
+           then loadMuseConf
+           else writeMuseConf defaults
+  createDirectoryIfMissing True . T.unpack $ entryCache mc -- (cache mc) <> "/parsedEntries"
+  T.putStrLn $ entryCache mc <> " and " <> log mc <> " found or created."
   createDirectoryIfMissing True $ T.unpack (log mc)
-  parseAllEntries mc
+  parseAllEntries quiet ignoreCache mc
   return mc
 
 -- | Parse all entries from logDir into cacheDir/entries.
-parseAllEntries :: MuseConf -> IO ()
-parseAllEntries mc@(MuseConf log cache home) = do
+-- TODO pass counter through `showErrOrCollect` to tally parse errors
+parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
   -- read in log file names; parse 'em
-  putStrLn $ show mc
+ = do
+  --putStrLn $ show mc
   fps <- sort <$> listDirectory (T.unpack log)
-  let --parse' :: String -> IO (String, Either String [(Int, TimeStamp, Entry)])
-      --parse' fp =
-      --  (,) <$> pure fp <*>
-      --  (showErr . parseByteString entries mempty <$> B.readFile (T.unpack log ++ "/" ++ fp))
+  -- 
+  let selectModified :: [FilePath] -> IO [FilePath]
+      -- | Check, if for a given log file a parsed file has been cached, 
+      --   whether the log's modification date is greater than the that of the 
+      --   cached json.
+      selectModified fps = 
+        if ignoreCache 
+           then putStrLn "ignoring parsed entry cache" >> return fps
+           else foldr
+          (\fp rest -> do
+            -- check for cache existence
+             existsCache <- doesFileExist $ T.unpack (entryCache mc) ++ fp
+             if existsCache
+                then do -- compare cache and log modification times
+                  logMd <- getModificationTime $ T.unpack (entrySource mc) ++ fp
+                  cacheMd <- getModificationTime $ T.unpack (entryCache mc) ++ fp
+                  if cacheMd >= logMd
+                     then (fp :) <$> rest
+                     else rest
+                else rest)
+          (return []) fps
 
       parse :: String -> IO (String, Either String [LogEntry])
       parse fp =
         (,) <$> pure fp <*>
-        (showErr . parseByteString logEntries mempty <$> B.readFile (T.unpack log ++ "/" ++ fp))
-
+        (showErr . parseByteString logEntries mempty <$>
+         B.readFile (T.unpack log ++ "/" ++ fp))
 
       invert :: (fp, Maybe e) -> Maybe (fp, e)
-      invert =
-        \(fp, me) ->
-          case me of
-            Just e -> Just (fp, e)
-            Nothing -> Nothing
+      invert (fp, me) =
+        case me of
+          Just e -> Just (fp, e)
+          Nothing -> Nothing
 
-      --parseAndShowErrs' :: IO [(String, [(Int, TimeStamp, Entry)])]
-      --parseAndShowErrs' = sequence (parse <$> fps) >>= showOrCollect
-
-      parseAndShowErrs :: IO [(String, [LogEntry])]
-      parseAndShowErrs = sequence (parse <$> fps) >>= showOrCollect
-
+      parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
+      parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
+      
       showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
       showOrCollect =
         let sideBar = unlines . fmap ("> " ++) . lines
@@ -311,12 +453,21 @@ parseAllEntries mc@(MuseConf log cache home) = do
              (\(fp, e) rest ->
                 case e -- render errros w filename, `ErrInfo`
                       of
-                  Left err -> putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
+                  Left err ->
+                    if quiet
+                      then rest
+                      else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
                   Right res -> ((fp, res) :) <$> rest)
              (return [])
 
-  entryGroups <- parseAndShowErrs
-  sequence_ $ fmap (\(fp, eg) -> BL.writeFile (T.unpack cache ++ "/parsedEntries/" ++ fp) (encode eg)) entryGroups
+  if quiet then putStrLn "\nSuppressing entry parse error output" else return ()
+  entryGroups <- selectModified fps >>= parseAndShowErrs
+  sequence_ $
+    fmap
+      (\(fp, eg) ->
+         BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
+      entryGroups
+
 
 -- TODO 
 --

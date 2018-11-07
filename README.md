@@ -2,11 +2,17 @@
 
 ## General Rules
 
-* do not exceed one line in a plural def.
+* do not exceed one line in a plural def
 * newlines after entry bodies are acceptable
 * commas and colons are not permitted in headwords
 * add newlines before and after quotation body
+* indentation is parsed by tabs made up of four spaces (as of yet
+  unconfigurably so)
+* avoid comma before a <read>'s author attribution--it is, however, permitted
+* timestamps without a body are allowed but not encouraged
 
+N.B. '[<expr>]' in an entry example or grammar specification indicates that
+<expr> is optional
 
 ### Definition Comparison
 ```
@@ -17,7 +23,7 @@ dvs headword1 : meaning
 
 ### List of Headwords
 ```
-d word1, ..., wordN
+d [<pg-num>] word1, ..., wordN
 ```
 
 ### Inline Definition
@@ -28,7 +34,7 @@ d headword : meaning
 
 ### Quotation
 ```
-quotation
+quotation [<page-num>]
 
 "<body>"
 
@@ -36,16 +42,21 @@ quotation
 ```
 
 ### Read
-Either:
+One of:
 
 ```
-read <title>, by <author>
+read <title>[,] by <author>
 ```
-or,
 
 ```
-begin to read <title>, by <author>
+begin to read <title>[,] by <author>
 ```
+
+```
+finsh [reading] <title>[,] by <author>
+```
+
+
 
 ### Commentary
 
@@ -59,17 +70,28 @@ Parses an commentary entry (body, without timestamp) of the form:
  <content>"
 ```
 
-### Grammar (incomplete)
+### Dump
+As yet devoid of internal formatting, e.g.:
 
 ```
-<entry> ::= <timeStamp> <def>
+...
+<optionally-multi-line-dump-body>
+...
+```
+
+### Beware the incomplete grammar 
+
+This lags behind the implementation; for up-to-date information on the grammar
+see ./src/Parse.hs (for the implementation) and ./test/Spec.hs (for tests).
+
+```
+<entry> ::= <timeStamp> (<def> | <read> | <dump> | <quotation>)
 
 <timeStamp> ::= 2DIGIT ":" 2DIGIT ":" 2DIGIT " λ. "
 
 <def> ::= <defPlural> | <defSingle> | <defInline> | <DefVs>
 
-    <defPlural> ::= <headword> { ", " <headword> } // one + zero or more
-    <defSingle> ::= <headword>
+    <defPlural> ::= [<page-num>] <headword> { ", " <headword> } // one + zero or more
     <defInline> ::= <headword> " : " <meaning>
     <DefVs>     ::= <headword> " : " <meaning'> 
                     "--- vs ---" 
@@ -85,6 +107,7 @@ Parses an commentary entry (body, without timestamp) of the form:
     
     <title> ::= "[^"]*"
     <author> ::= <toNextTimeStampOrEOF>
+
 
 <toNextTimeStampOrEOF> ::= `^(*)?<timestamp> // e.g. `manyTill anyChar (try timestamp)```
 ```

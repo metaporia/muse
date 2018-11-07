@@ -79,10 +79,14 @@ import Text.Trifecta hiding (Rendering, Span)
 --   <auth> attribution ditributes over the titles?
 --   - first pass will merely collect the string surrounded by ellipses
 -- ▣  from "q<pgNum> \"<quotation>\"
--- □  (!!) factor `entryBody` and `newline` discardment out of entry variant parsers
+-- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 -- □  improve error messages
--- □  from "(note | N.B.)", containing some specialization
+-- -- (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
+--    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
+--    "the exhaust of your rage"!)
+-- □  (!!!) parse n.b.s after all entry types
+--    from "(note | N.B.)", containing some specialization
 --    grouping of (log) entries by title.
 --
 --    Example note at the end of a def. needs label; one of: "N.B.", "ref",
@@ -413,11 +417,10 @@ entryOrDump = do
         ts <- timestamp <?> "timestamp"
         e <-
           (try book <|> try quotation <|> try commentary <|> try def <|>
-           try page <|>
-           return Null)
+           try page <|> (const Null <$> many space <?> "null entry"))
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> entry'
-  _ <- void (skipOptional emptyLines) <|> eof
+  _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
   return $ e
 
 
@@ -438,7 +441,9 @@ entries = some entry <* skipOptional newline
     _ = unused
 
 logEntries :: Parser [LogEntry]
-logEntries = some entryOrDump
+logEntries =
+  const [] <$> ((try (void $ many space) <|> skipOptional emptyLines) *> eof)<|>
+  some entryOrDump
 
 unused :: a
 unused = undefined
@@ -468,6 +473,8 @@ instance ToJSON PageNum where
 
 instance FromJSON PageNum
 
+-- TODO add N.B. field to as many variants as possible (poss. by adding (N.B |
+-- n.b. | nota bene) parser to `untilP` in entryBody
 data Entry
   = Def DefQuery
   | Read Title

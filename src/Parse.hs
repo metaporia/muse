@@ -447,15 +447,17 @@ isQuotation (Quotation _ _ _) = True
 isQuotation _ = False
 
 type Quote = String
+
 type Body = String
 
 type Attr = String
 
-data PageNum = Page PgNum
-             | PStart PgNum
-             | PEnd PgNum
-             | PFinish PgNum
-             deriving (Eq, Show, Generic)
+data PageNum
+  = Page PgNum
+  | PStart PgNum
+  | PEnd PgNum
+  | PFinish PgNum
+  deriving (Eq, Show, Generic)
 
 instance ToJSON PageNum where
   toEncoding = genericToEncoding defaultOptions

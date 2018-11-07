@@ -35,6 +35,7 @@ dependencies:
 - aeson
 - directory
 - bytestring
+- text-metrics
 
 library:
   source-dirs: src

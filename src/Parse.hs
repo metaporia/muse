@@ -323,8 +323,6 @@ commentary = do
   return . Commentary . unlines . fmap trim . lines $ body
 
 
-
-
 type Title = String
 
 type Author = String
@@ -334,10 +332,12 @@ book = do
   _ <- whiteSpace
   _ <-
     try (symbol "read") <|> try (symbol "begin to read") <|>
-    try (symbol "finish reading") <|> symbol "finish"
+    try (symbol "finish reading") <|>
+    symbol "finish"
   title <- between quot quot (some $ noneOf "\"")
   _ <- optional $ symbol "," -- 
   _ <- symbol "by" <?> "expected attribution"
+  isCanonical <- option False $ symbol "canonical" *> return True
   author <- some (noneOf "\n")
   _ <- entryBody
   _ <- many newline
@@ -349,9 +349,8 @@ bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
 bookTs' :: String
 bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 
-
 emptyLines :: Parser [String]
-emptyLines = some . try $ manyTill space newline 
+emptyLines = some . try $ manyTill space newline
 
 --parseEntry :: Parser (Int, TimeStamp, Entry)
 --parseEntry = (,,) <$> (skipOptional newline *> tabs)
@@ -395,10 +394,10 @@ dump =
   let el = symbol "..."
   in Dump <$> (many space *> el *> manyTill anyChar el)
 
-
-data LogEntry = Dump String
-              | TabTsEntry (Int, TimeStamp, Entry)
-                deriving (Eq, Show, Generic)
+data LogEntry
+  = Dump String
+  | TabTsEntry (Int, TimeStamp, Entry)
+  deriving (Eq, Show, Generic)
 
 instance ToJSON LogEntry where
   toEncoding = genericToEncoding defaultOptions
@@ -408,15 +407,19 @@ instance FromJSON LogEntry
 
 entryOrDump :: Parser LogEntry
 entryOrDump = do
-  _ <- skipOptional (try emptyLines) 
-  let entry' = do indent <- tabs
-                  ts <- timestamp <?> "timestamp"
-                  e <- (try book <|> try quotation <|> try commentary <|> try def <|> try page <|> return Null) 
-                  return $ TabTsEntry (indent, ts, e)
-
+  _ <- skipOptional (try emptyLines)
+  let entry' = do
+        indent <- tabs
+        ts <- timestamp <?> "timestamp"
+        e <-
+          (try book <|> try quotation <|> try commentary <|> try def <|>
+           try page <|>
+           return Null)
+        return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> entry'
   _ <- void (skipOptional emptyLines) <|> eof
   return $ e
+
 
 entry :: Parser (Int, TimeStamp, Entry)
 entry = do
@@ -424,7 +427,8 @@ entry = do
   ts <- timestamp <?> "timestamp"
   e <-
     (try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
-     return Null) -- <?> "found no valid prefix"
+     return Null -- <?> "found no valid prefix"
+     )
   _ <- void (skipOptional emptyLines) <|> eof
   return $ (indent, ts, e)
 

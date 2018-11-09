@@ -101,12 +101,12 @@ subRelDur day (RelDur y m d) =
   addGregorianMonthsRollOver (negate m) . addDays (negate d) $
   day
 
-search :: Day -> Parser (Input SearchResult)
+search :: Day -> Parser Input
 search today = Input <$> (subRelDur today 
                      <$> within) 
                      <*> pure today 
-                     <*> (isInfixOf <$> author)
-                     <*> (isInfixOf <$> title)
+                     <*> (fmap isInfixOf <$> author)
+                     <*> (fmap isInfixOf <$> title)
                      <*> defs
                      <*> quotes
 
@@ -192,7 +192,7 @@ toplevel today =
              \ directory; parse all entries in 'log-dir'")))
 
 data Invocation
-  = Search (Input SearchResult)
+  = Search Input
   | Parse InputType
   | Lint
   | Init Bool -- ^ Suppress log parse errors
@@ -274,13 +274,22 @@ dispatch (Parse it) = do
       All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
-runSearch :: Input SearchResult -> IO () 
-runSearch (Input s e _ _ dfs qts) = do
+-- | As yet, this searches only pre-parsed `LogEntry`s.
+runSearch :: Input -> IO () 
+runSearch input@(Input s e tp ap dfs qts) = do
   let dateFilter = do
         mc <- loadMuseConf
         fps <- listDirectory . T.unpack $ entryCache mc
-        filterBy s e <$> pathsToDays fps
-  filtered <- dateFilter
+        dates <- filterBy s e <$> pathsToDays fps
+        let cachePath = (T.unpack (entryCache mc) ++)
+            entries =
+              loadFiles (cachePath . dayToPath <$> dates) >>=
+              return . catMaybes . decodeEntries
+              -- TODO print date above each days `[LogEntry]`
+            filtered = fmap (filterWith input) <$> entries
+        return filtered
+
+  filtered <- join dateFilter
   putStrLn $
     "start date: " ++
     show s ++

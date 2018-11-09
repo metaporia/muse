@@ -18,20 +18,18 @@ import           Data.Time.Clock (utctDay)
 import           Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
 import           Helpers
 import           Parse
-import           Prelude hiding (lookup, log)
+import           Prelude hiding (lookup, log, min)
 import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
 import           System.Environment (getEnv)
 import           Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta.Result as Tri
 
-
-
 -- | Represents filters and entry maps extracted from CLI invocation.
-data Input a = Input
+data Input = Input
   { startDateTime :: Day
   , endDateTime :: Day
-  , authorPred :: Author -> Bool
-  , titlePred :: Title -> Bool
+  , authorPred :: Maybe (Author -> Bool)
+  , titlePred :: Maybe (Title -> Bool)
   , definitions :: Bool
   , quotations :: Bool
   }
@@ -46,14 +44,12 @@ data SearchResult
   | Read' Title
           Author
   | PN' PageNum
-  | Null'
-                  -- | Entry' String -- ?
+  | Null' | Entry' String -- ?
   deriving (Eq, Show)
 
 
-x :: Input SearchResult -> [LogEntry]
+x :: Input -> [LogEntry]
 x = undefined
-
 
 -- | How to filter by date:
 --

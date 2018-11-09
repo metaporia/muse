@@ -2,7 +2,7 @@
    OverloadedStrings #-}
 module Main where
 
-import           Control.Monad (void)
+import           Control.Monad (join, void, (>=>))
 import           Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -24,6 +24,7 @@ import           Search
 import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory, getModificationTime)
 import           System.Environment (getEnv)
 import qualified Text.Trifecta.Result as Tri
+import           Text.Show.Pretty (pPrint)
 
 -- Questions:
 --
@@ -215,19 +216,19 @@ entryToSearchResult (Commentary s) = Commentary' s
 entryToSearchResult (PN pg) = PN' pg
 entryToSearchResult Null = Null'
 
-author :: Parser String
+author :: Parser (Maybe String)
 author =
-  strOption
+  option (fmap Just str)
     (long "author" 
     <> metavar "SUBSTR"
-    <> short 'a' <> value "" <> help "Substring/affix of author")
+    <> short 'a' <> value Nothing <> help "Substring/affix of author")
 
-title :: Parser String
+title :: Parser (Maybe String)
 title =
-  strOption 
+  option (fmap Just str)
     (long "title" 
     <> metavar "SUBSTR"
-    <> short 't' <> value "" <> help "Affix of title")
+    <> short 't' <> value Nothing <> help "Affix of title")
 
 within :: Parser RelDur
 within =
@@ -300,8 +301,10 @@ runSearch input@(Input s e tp ap dfs qts) = do
     show dfs ++
     "\ncollect quotations: " ++
     show qts ++
-    "\nfancy search magick!" ++
-    "\nfiltered dates (to be searched):\n" ++ show filtered
+    "\nfancy search magick!" -- ++ "\nfiltered dates (to be searched):\n" ++ show filtered
+  -- TODO map quote, def, projections as requested
+  sequence_ . concat . (fmap . fmap) pPrint $ filtered
+  return ()
 
 
 -- config
@@ -412,6 +415,29 @@ museInit quiet ignoreCache = do
   parseAllEntries quiet ignoreCache mc
   return mc
 
+
+-- | List file names in log source directory
+lsEntrySource :: MuseConf -> IO [FilePath]
+lsEntrySource = listDirectory . T.unpack . entrySource
+
+-- | List file names (per day) of parsed `LogEntry`s.
+lsEntryCache :: MuseConf -> IO [FilePath]
+lsEntryCache = listDirectory . T.unpack . entryCache
+
+-- | Load contents at file paths.
+loadFiles :: [FilePath] -> IO [BL.ByteString]
+loadFiles = sequence . fmap BL.readFile
+
+-- | Load cached files.
+loadCachedEntries :: MuseConf -> IO [BL.ByteString]
+loadCachedEntries = lsEntryCache >=> loadFiles 
+
+decodeEntries :: [BL.ByteString] -> [Maybe [LogEntry]]
+decodeEntries = fmap decode
+
+decodeCachedEntries :: MuseConf -> IO [Maybe [LogEntry]]
+decodeCachedEntries = fmap decodeEntries <$>  loadCachedEntries
+
 -- | Parse all entries from logDir into cacheDir/entries.
 -- TODO pass counter through `showErrOrCollect` to tally parse errors
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
@@ -482,9 +508,8 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
 
 -- TODO 
 --
--- □  centralize file path generation--save yourself the headache later of
+-- ▣  centralize file path generation--save yourself the headache later of
 --    mismatched paths!
--- on parse failure, show user err info
 --
-parsedEntryDir :: MuseConf -> T.Text
-parsedEntryDir = undefined
+--    See `entryCache` and `entrySource`
+-- on parse failure, show user err info

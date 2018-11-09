@@ -2,8 +2,14 @@
   OverloadedStrings #-}
 
 module Lib
-  ( someFunc
+  ( module Parse
+  , module Search
+  , module Helpers
   ) where
+
+import Parse
+import Helpers
+import Search
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"

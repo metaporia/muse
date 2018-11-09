@@ -1,9 +1,10 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings, MultiWayIf #-}
+   OverloadedStrings, TupleSections, MultiWayIf #-}
 module Search where
 
-import           Control.Monad (void)
+import           Control.Monad (void, (>=>))
 import           Data.Aeson hiding (Null)
+import           Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.List (isInfixOf, sort, intercalate)
@@ -76,6 +77,11 @@ showInvalidNames es = foldr f (return []) es
 pathsToDays :: [FilePath] -> IO [Day]
 pathsToDays = showInvalidNames . pathsToDays'
 
+dayToPath :: Day -> String
+dayToPath = replace '-' '.' . drop 2 . show 
+
+replace :: Eq b => b -> b -> [b] -> [b]
+replace a b = map (\x -> if (a == x) then b else x)
 
 
 filterBy :: Day -- ^ start date (lower bound)
@@ -84,12 +90,8 @@ filterBy :: Day -- ^ start date (lower bound)
          -> [Day]
 filterBy l u = filter (\d -> d >= l && d <= u) 
 
-genEntryPred :: Input SearchResult -> (LogEntry -> Bool)
-genEntryPred (Input _ _ auth title _ _) (TabTsEntry (tab, ts, ent)) = undefined
-
-
 type Tag = String
-type TagPred = String -> Bool -- | Tag predicate.
+type TagPred = String -> Bool -- Tag predicate.
 -- TODO
 -- Crawls a `[LogEntry]` and applies to indented/nested (depth>=1) entries a
 -- tag generated from the first-level parent.
@@ -182,8 +184,7 @@ all' :: [T.Text]
 all' = dostoevskys ++ tolstoys ++ eliots ++ cowards
 
 rate :: T.Text -> [T.Text] -> [(Int, T.Text)]
-rate canonical = fmap $ \w -> (textDiff canonical w, w) 
-
+rate canonical = fmap $ \w -> (textDiff canonical w, w)
 
 -- auto-complete
 -- Qs: 
@@ -207,3 +208,200 @@ rate canonical = fmap $ \w -> (textDiff canonical w, w)
 --      if not show top matches (above satisfaction threshold)
 
 
+tagNestedEntriesByAuthPred :: (Author -> Bool) -> [LogEntry] -> [[LogEntry]]
+tagNestedEntriesByAuthPred authPred [] = []
+tagNestedEntriesByAuthPred authPred (x:xs)
+  | doesAuthorSatisfy authPred x =
+    case x of
+      TabTsEntry (tabs, _, _) ->
+        let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
+        in belong : tagNestedEntriesByAuthPred authPred rest
+      Dump _ -> [] -- this case sholud NEVER occur
+  | otherwise = tagNestedEntriesByAuthPred authPred xs
+
+
+filterWith :: Input -> [LogEntry] -> [[LogEntry]]
+filterWith input [] = []
+filterWith input (x:xs)
+  | doesReadSatisfy input x =
+    case x of
+      TabTsEntry (tabs, _, _) ->
+        let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
+        in belong : filterWith input rest
+      Dump _ -> [] -- this case sholud NEVER occur
+  | otherwise = filterWith input xs
+                                
+takeWhileRest :: (a -> Bool) -> [a] -> ([a], [a])
+takeWhileRest pred [] = ([],[])
+takeWhileRest pred (x:xs) 
+  | pred x = go x $ takeWhileRest pred xs
+  | otherwise = ([], x:xs)
+  where go x (as, bs) = (x:as, bs)
+
+doesAuthorSatisfy :: (Author -> Bool) -> LogEntry -> Bool
+doesAuthorSatisfy authPred (TabTsEntry (_, _, (Read _ author))) = authPred author
+doesAuthorSatisfy _ _ = False
+
+doesTitleSatisfy :: (Title -> Bool) -> LogEntry -> Bool
+doesTitleSatisfy titlePred (TabTsEntry (_, _, (Read title _))) = titlePred title
+doesTitleSatisfy _ _ = False
+
+-- | For each present read predicate (a.t.m. only on author and title strings)
+-- apply both to `LogEntry` if it's `Read` of `Entry`.
+doesReadSatisfy :: Input -> LogEntry -> Bool
+doesReadSatisfy (Input sd ed ap tp ds qs) le = 
+  case getEntry le >>= getRead of
+    Just (t, a) -> case (tp <*> pure t, ap <*> pure a) of
+                     (Just t, Just a) -> t && a
+                     (Just t, Nothing) -> t
+                     (Nothing, Just a) -> a
+                     (Nothing, Nothing) -> False
+    Nothing -> False
+   --   x = fmap first tp <*> (fmap second ap <*> pair)
+
+
+-- | Takes parent (read entry's) indentation level, a log entry
+doesEntryBelongToParent :: Int -> LogEntry -> Bool
+doesEntryBelongToParent tabs (Dump _) = False -- breaks on dumps
+doesEntryBelongToParent tabs (TabTsEntry (tabs', _, _))
+  | tabs' > tabs = True
+  | otherwise = False
+
+-- | Takes between first two successes of element predicate. The first element
+-- to satisfy is included, the second is not. The rest of the list is the
+-- second element of the returned tuple. Elements before the the first element
+-- to satisfy are discarded. E.g.,
+--
+-- >>> takeUntil (> 2) [0, 1, 3, 0, 2, -1, 4, 6, 7]
+-- ([3, 0, 2, -1], [4, 6, 7])
+takeFromUntil :: (a -> Bool) -> [a] -> ([a], [a], [a])
+takeFromUntil pred = breakAgain . break pred
+  where
+    breakAgain (ys, []) = (ys, [], [])
+    breakAgain (ys, (x:xs)) =
+      let (span, rest) = (x :) <$> break pred xs
+      in (ys, span, rest)
+
+testLogWithDumpOutput :: [LogEntry]
+testLogWithDumpOutput =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 55, sec = 17}
+      , Def
+          (DefVersus
+             "benignant"
+             "kind; gracious; favorable;"
+             "benign"
+             "gentle, mild, or, medically, non-threatening"))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 11, sec = 45}
+      , Def
+          (DefVersus
+             "malignant"
+             "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+             "malign"
+             "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 18, sec = 12}
+      , Def (Defn (Just 38) ["sublime", "lintel"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
+          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "Her simplicity fathomed what clever people falsified."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 28, sec = 49}
+      , Def (Defn Nothing ["plover"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 47, sec = 59}
+      , Def (Defn Nothing ["cosmogony"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 49, sec = 58}
+      , Quotation
+          "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          (Just 38))
+  ]
+
+-- | `LogEntry` projections.
+getEntry :: LogEntry -> Maybe Entry
+getEntry (Dump _) = Nothing
+getEntry (TabTsEntry (_, _, entry)) = Just entry
+
+getDump :: LogEntry -> Maybe String
+getDump (Dump s) = Just s
+getDump _ = Nothing
+
+-- `Entry` projections
+getDefQuery :: Entry -> Maybe DefQuery
+getDefQuery (Def dq) = Just dq
+getDefQuery _ = Nothing
+
+getPageNum :: Entry -> Maybe PageNum
+getPageNum (PN pg) = Just pg
+getPageNum _ = Nothing
+
+getRead :: Entry -> Maybe (Title, Author)
+getRead (Read t a) = Just (t, a)
+getRead _ = Nothing
+
+getQuotation :: Entry -> Maybe (Quote, Attr, Maybe PgNum)
+getQuotation (Quotation q a mpg) = Just (q, a, mpg)
+getQuotation _ = Nothing
+
+getCommentary :: Entry -> Maybe Body 
+getCommentary (Commentary b) = Just b
+getCommentary _ = Nothing
+
+
+-- Composed `LogEntry` and `Entry` projections.
+projectDefQuery :: LogEntry -> Maybe DefQuery
+projectDefQuery = getEntry >=> getDefQuery
+
+projectQuotation = getEntry >=> getQuotation
+
+projectPageNum = getEntry >=> getPageNum
+
+projectRead = getEntry >=> getRead
+
+projectCommentary = getEntry >=> getCommentary
+
+project :: LogEntry -> Maybe DefQuery
+project (TabTsEntry (_, _, (Def dq))) = Just dq
+project _ = Nothing
+
+
+
+projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
+projectDef (TabTsEntry (_, _, (Def dq))) =
+  case dq of
+    Defn mPg headwords -> flip (,) Nothing <$> headwords
+    InlineDef hw meaning -> [(hw, Just meaning)]
+    DefVersus hw m hw' m' -> [(hw, Just m), (hw', Just m')]
+projectDef _ = []

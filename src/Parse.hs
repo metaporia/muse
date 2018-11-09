@@ -23,6 +23,7 @@ module Parse
   , trim
   , PageNum(..)
   , PgNum
+  , Attr
   , RelDur(..)
   , Quote
   , Author

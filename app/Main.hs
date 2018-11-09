@@ -21,6 +21,7 @@ import           Lib
 import           Options.Applicative
 import           Parse
 import           Prelude hiding (lookup, log, init)
+import           Render
 import           Search
 import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory, getModificationTime)
 import           System.Environment (getEnv)
@@ -307,6 +308,7 @@ dispatch (Parse it) = do
   s <- case it of
       File fp -> readFile fp
       StdIn s -> return s
+      -- TODO fix unintuitive/broken parse CLI behavior
       All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
@@ -338,7 +340,8 @@ runSearch input@(Input s e tp ap dfs qts) = do
     show qts ++
     "\nfancy search magick!" -- ++ "\nfiltered dates (to be searched):\n" ++ show filtered
   -- TODO map quote, def, projections as requested
-  sequence_ . concat . (fmap . fmap) pPrint $ filtered
+  sequence_ . join . concat . (fmap . fmap . fmap) (putStrLn . render) $ filtered
+
   return ()
 
 

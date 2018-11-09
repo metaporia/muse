@@ -47,6 +47,7 @@ library:
     - Parse
     - Helpers
     - Search
+    - Render
 
 executables:
   logParse-exe:

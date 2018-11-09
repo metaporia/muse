@@ -312,11 +312,13 @@ data MuseConf = MuseConf
   } deriving (Eq, Show)
 
 entryCache :: MuseConf -> T.Text
-entryCache (MuseConf _ cache _) = cache <> "parsedEntries"
+entryCache (MuseConf _ cache _) = cache <> "parsedEntries/"
 
 entrySource :: MuseConf -> T.Text
 entrySource = log
 
+config :: MuseConf -> T.Text
+config mc = home mc <> "/.muse/config.yaml"
 
 
 -- | Expects config at  $HOME/.muse/config.yaml
@@ -338,10 +340,10 @@ showMuseConf :: MuseConf -> String
 showMuseConf = show
 
 writeMuseConf :: MuseConf -> IO MuseConf
-writeMuseConf mc@(MuseConf log cache home) = do
-  let conf = "log-dir: " <> log <> "\n\ncache-dir: " <> cache
-  createDirectoryIfMissing True $ T.unpack  (home <> "/.muse")
-  T.writeFile (T.unpack $ home <> "/.muse/config.yaml") conf
+writeMuseConf mc = do
+  let conf = "log-dir: " <> (entrySource mc) <> "\n\ncache-dir: " <> entryCache mc
+  createDirectoryIfMissing True $ T.unpack  (home mc <> "/.muse")
+  T.writeFile (T.unpack $ config mc) conf
   return mc
 
 
@@ -417,7 +419,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
   -- read in log file names; parse 'em
  = do
   --putStrLn $ show mc
-  fps <- sort <$> listDirectory (T.unpack log)
+  fps <- sort <$> lsEntrySource mc
   -- 
   let selectModified :: [FilePath] -> IO [FilePath]
       -- | Check, if for a given log file a parsed file has been cached, 
@@ -444,7 +446,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
       parse fp =
         (,) <$> pure fp <*>
         (showErr . parseByteString logEntries mempty <$>
-         B.readFile (T.unpack log ++ "/" ++ fp))
+         B.readFile (T.unpack (entrySource mc) ++ "/" ++ fp))
 
       invert :: (fp, Maybe e) -> Maybe (fp, e)
       invert (fp, me) =

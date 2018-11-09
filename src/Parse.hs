@@ -6,40 +6,45 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Parse
-  ( DefQuery(..)
-  , day'
-  , Entry(..)
-  , entries
-  , entryOrDump
-  , LogEntry(..)
-  , logEntries
-  , parse
-  , timestamp
-  , TimeStamp(..)
-  , toMaybe
-  , relDur
-  , trim
-  , PageNum(..)
-  , PgNum
-  , Attr
-  , RelDur(..)
-  , Quote
-  , Author
-  , Body
-  , Title
-  , parseByteString
-  ) where
+  --( DefQuery(..)
+  --, day'
+  --, Entry(..)
+  --, entries
+  --, entryOrDump
+  --, LogEntry(..)
+  --, logEntries
+  --, parse
+  --, timestamp
+  --, TimeStamp(..)
+  --, toMaybe
+  --, relDur
+  --, trim
+  --, PageNum(..)
+  --, PgNum
+  --, Attr
+  --, RelDur(..)
+  --, Quote
+  --, Author
+  --, Body
+  --, Title
+  --, parseByteString
+  --) where
+  where
 
 import Control.Applicative
+import Control.Lens.TH (makeLenses, makePrisms)
+import Control.Lens (makeLenses, preview, review)
+import Control.Lens.Tuple
 import Control.Monad (void)
 import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.Maybe (fromJust)
 import Data.Time
-import GHC.Generics
+import GHC.Generics hiding (Prefix, Infix, Suffix)
 import Helpers
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
@@ -80,6 +85,8 @@ import Text.Trifecta hiding (Rendering, Span)
 --   <auth> attribution ditributes over the titles?
 --   - first pass will merely collect the string surrounded by ellipses
 -- ▣  from "q<pgNum> \"<quotation>\"
+-- □  add def/quot/auth/title prefix/infix/suffix search
+-- □  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 -- □  improve error messages
@@ -451,7 +458,7 @@ unused :: a
 unused = undefined
   where
     _ = hr >> min >> sec >> pPrint
-    _ = bookTs >> bookTs' >> testLog
+    _ = bookTs >> bookTs' >> testLog'
 
 isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _ _) = True
@@ -489,13 +496,14 @@ data Entry
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
 
+
 instance ToJSON Entry where
   toEncoding = genericToEncoding defaultOptions
 
 instance FromJSON Entry
 
-testLog :: String
-testLog =
+testLog' :: String
+testLog' =
   [r|
 08:23:30 λ. d quiescence, quiescent, quiesce
 08:24:43 λ. d vouchsafed, another-word
@@ -530,8 +538,8 @@ testLog =
             --- vs ---
             comport : to endure; carry together; to accord (with) |]
 
-testlog :: String
-testlog =
+testlog' :: String
+testlog' =
   [r|
 09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
     09:55:17 λ. dvs benignant : kind; gracious; favorable;
@@ -620,8 +628,26 @@ dmy = do
 relDur :: Parser RelDur
 relDur = dmy
 
-testDump :: String
-testDump = [r|
+
+data SearchType
+  = Prefix
+  | Infix
+  | Suffix
+  deriving (Eq, Show, Generic)
+
+
+searchType :: Parser SearchType
+searchType = do
+  skipOptional space
+  st <-
+    const Prefix <$> try (char 'p') <|> const Infix <$> try (char 'i') <|>
+    const Suffix <$> char 's'
+  space
+  return st
+
+
+testDump' :: String
+testDump' = [r|
 ...
 dump aeouoaeu
 second line
@@ -647,3 +673,9 @@ day' = do
   char '.'
   d <- twoDigits
   return $ fromGregorianValid (fromIntegral y) m d
+
+
+data Test = A | B
+makePrisms ''Entry
+makePrisms ''LogEntry
+makePrisms ''Test

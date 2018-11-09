@@ -49,6 +49,7 @@ extra-deps:
 - yaml-config-0.4.0
 - git: https://github.com/ndmitchell/ghcid.git
   commit: d6630801d3e65a62a5ff307616251785b0f5c414
+- word-wrap-0.4.1
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

@@ -36,6 +36,9 @@ dependencies:
 - directory
 - bytestring
 - text-metrics
+- word-wrap
+- lens
+- transformers
 
 library:
   source-dirs: src

@@ -3,9 +3,6 @@
 module Search where
 
 import           Control.Monad (void, (>=>))
-import           Control.Lens.TH (makeLenses, makePrisms)
-import           Control.Lens.Tuple
-import           Control.Lens (makeLenses, preview, review)
 import           Data.Aeson hiding (Null)
 import           Data.Bifunctor
 import qualified Data.ByteString as B
@@ -27,7 +24,6 @@ import           System.Directory (doesFileExist, createDirectoryIfMissing, list
 import           System.Environment (getEnv)
 import           Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta.Result as Tri
-import qualified Text.Trifecta as Tri
 
 -- | Represents filters and entry maps extracted from CLI invocation.
 data Input = Input
@@ -355,26 +351,33 @@ testLogWithDumpOutput =
 
 -- | `LogEntry` projections.
 getEntry :: LogEntry -> Maybe Entry
-getEntry = preview $ _TabTsEntry . _3
+getEntry (Dump _) = Nothing
+getEntry (TabTsEntry (_, _, entry)) = Just entry
 
 getDump :: LogEntry -> Maybe String
-getDump = preview _Dump
+getDump (Dump s) = Just s
+getDump _ = Nothing
 
 -- `Entry` projections
 getDefQuery :: Entry -> Maybe DefQuery
-getDefQuery = preview _Def
+getDefQuery (Def dq) = Just dq
+getDefQuery _ = Nothing
 
 getPageNum :: Entry -> Maybe PageNum
-getPageNum = preview _PN
+getPageNum (PN pg) = Just pg
+getPageNum _ = Nothing
 
 getRead :: Entry -> Maybe (Title, Author)
-getRead = preview _Read
+getRead (Read t a) = Just (t, a)
+getRead _ = Nothing
 
 getQuotation :: Entry -> Maybe (Quote, Attr, Maybe PgNum)
-getQuotation = preview _Quotation
+getQuotation (Quotation q a mpg) = Just (q, a, mpg)
+getQuotation _ = Nothing
 
 getCommentary :: Entry -> Maybe Body 
-getCommentary = preview _Commentary
+getCommentary (Commentary b) = Just b
+getCommentary _ = Nothing
 
 
 -- Composed `LogEntry` and `Entry` projections.

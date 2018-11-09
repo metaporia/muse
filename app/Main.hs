@@ -1,12 +1,13 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
    OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Main where
 
 import           Control.Monad (join, void, (>=>))
 import           Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.List (isInfixOf, sort, intercalate)
+import           Data.List (isPrefixOf, isInfixOf, isSuffixOf, sort, intercalate)
 import           Data.Maybe (catMaybes)
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -23,8 +24,9 @@ import           Prelude hiding (lookup, log, init)
 import           Search
 import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory, getModificationTime)
 import           System.Environment (getEnv)
-import qualified Text.Trifecta.Result as Tri
 import           Text.Show.Pretty (pPrint)
+import qualified Text.Trifecta.Result as Tri
+import qualified Text.Trifecta as Tri
 
 -- Questions:
 --
@@ -76,6 +78,17 @@ relDurReader =
   -- y m d
   -- m d y
 
+-- | attach after --author and --title flags before search string. the search 
+-- mode and the search string are separated by a space
+searchPredOpt :: String -> Either String (SearchType, String) -- search type, rest of string
+searchPredOpt s =
+  case parse ((,) <$> searchType <*> Tri.many Tri.anyChar) s of
+    Tri.Success rd -> Right rd
+    Tri.Failure err ->
+      Left $
+      "Cannot parse search predicate options: " ++
+      s ++ "\nErrInfo: " ++ show err
+
 -- | Contains filters, either entry predicates or projections, including:
 --
 -- * filter by author match
@@ -106,10 +119,24 @@ search :: Day -> Parser Input
 search today = Input <$> (subRelDur today 
                      <$> within) 
                      <*> pure today 
-                     <*> (fmap isInfixOf <$> author)
-                     <*> (fmap isInfixOf <$> title)
+                     <*> (fmap consumeSearchType <$> author)
+                     <*> (fmap consumeSearchType <$> title)
                      <*> defs
                      <*> quotes
+
+dispatchSearchType :: Eq a => SearchType -> [a] -> [a] ->  Bool
+dispatchSearchType Prefix = isPrefixOf
+dispatchSearchType Infix = isInfixOf
+dispatchSearchType Suffix = isSuffixOf
+
+-- | Defaults to infix search on whole search string, otherwise parses search
+-- mode, a single space, and the remainder is passed as the search string to
+-- author/title predicate
+consumeSearchType :: String -> (String -> Bool)
+consumeSearchType s = case eitherToMaybe (searchPredOpt s) of
+                        Just (fix, searchStr) -> dispatchSearchType fix searchStr
+                        Nothing -> isInfixOf s
+
 
 data InputType
   = File FilePath
@@ -223,6 +250,14 @@ author =
     <> metavar "SUBSTR"
     <> short 'a' <> value Nothing <> help "Substring/affix of author")
 
+eitherToMaybe :: Either a b -> Maybe b
+eitherToMaybe (Left _) = Nothing
+eitherToMaybe (Right b) = Just b
+
+maybeToEither :: Maybe a -> Either () a
+maybeToEither (Just a) = Right a
+maybeToEither Nothing = Left ()
+
 title :: Parser (Maybe String)
 title =
   option (fmap Just str)
@@ -281,7 +316,7 @@ runSearch input@(Input s e tp ap dfs qts) = do
   let dateFilter = do
         mc <- loadMuseConf
         fps <- listDirectory . T.unpack $ entryCache mc
-        dates <- filterBy s e <$> pathsToDays fps
+        dates <- sort . filterBy s e <$> pathsToDays fps
         let cachePath = (T.unpack (entryCache mc) ++)
             entries =
               loadFiles (cachePath . dayToPath <$> dates) >>=
@@ -471,7 +506,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
       parse :: String -> IO (String, Either String [LogEntry])
       parse fp =
         (,) <$> pure fp <*>
-        (showErr . parseByteString logEntries mempty <$>
+        (showErr . Tri.parseByteString logEntries mempty <$>
          B.readFile (T.unpack (entrySource mc) ++ "/" ++ fp))
 
       invert :: (fp, Maybe e) -> Maybe (fp, e)
@@ -503,7 +538,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
     fmap
       (\(fp, eg) ->
          BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
-      entryGroups
+    entryGroups
 
 
 -- TODO 

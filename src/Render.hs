@@ -14,6 +14,7 @@ import           Text.Wrap
 import           Helpers
 import           Parse
 import           Prelude hiding (lookup, log, min)
+import           System.Console.ANSI
 import           Text.Show.Pretty (pPrint)
 
 
@@ -33,6 +34,7 @@ surround c s = c : (s ++ [c])
 -- | For pretty user-end rendering of `LogEntry`s and such.
 class Render a where
   render :: a -> String
+
 
 instance Render LogEntry where
   render (Dump s) = "Dump:    " ++ render s
@@ -79,3 +81,86 @@ instance Render Integer where
 
 instance Render Int where
   render = show
+
+colorize :: Bool -> (IO () -> IO ()) -> IO () -> IO ()
+colorize True col = col
+colorize False col = id 
+
+-- Colorizes IO operation.
+mkColor :: Bool -> Color -> IO () -> IO ()
+mkColor vivid col io = do
+  if vivid then setSGR [SetColor Foreground Vivid col]
+           else setSGR [SetColor Foreground Dull col]
+  io
+  setSGR [Reset]
+
+blue    = mkColor True Blue
+red     = mkColor True Red
+green   = mkColor True Green
+magenta = mkColor True Magenta
+yellow  = mkColor True Yellow
+cyan    = mkColor True Cyan
+
+dullBlue    = mkColor False Blue
+dullRed     = mkColor False Red
+dullGreen   = mkColor False Green
+dullMagenta = mkColor False Magenta
+dullYellow  = mkColor False Yellow
+dullCyan    = mkColor False Cyan
+
+-- Colorizable alternative to `Render`.
+class Show a => ColcolRender a where
+  colRender :: Bool -- ^ Colorize?
+            -> a -- ^ Item to render
+            -> IO ()
+
+instance ColcolRender LogEntry where
+  colRender col (Dump s) = putStr "Dump:    " >> colRender col s
+  colRender col (TabTsEntry (_, _, entry)) = colRender col entry
+
+instance ColcolRender Entry where
+  colRender col (Def dq) = colRender col dq
+  colRender col (Quotation b attr pg) =
+    colorize col magenta (putStr "Quote:   ") >> colorize col cyan (colRender col $ surround '"' b) >>
+    putStr indent >>
+    colorize col yellow (colRender col attr) >>
+    putStr indent >>
+    colRender col (Page <$> pg) >>
+    putStr "\n"
+  colRender col (Read t a) = putStr $ "Read:    "  ++ (surround '"' t) ++ " by " ++ a
+  colRender col (Commentary s) = colRender col s
+  colRender col (PN pg) = colRender col pg
+  colRender _ Null = return ()
+
+instance ColcolRender DefQuery where
+  colRender col (Defn mpg hws) =
+    colorize col blue (putStr "Query:   ") >> colRender col mpg >>
+    putStrLn (" " ++ intercalate ", " hws)
+  colRender col (InlineDef hw m) =
+    colorize col green (putStr ("Define:  " ++ upper hw ++ ": ")) >> colRender col m
+  colRender col (DefVersus h m h' m') =
+    colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >> colRender col m >>
+    putStr (indent ++ "--- vs ---\n" ++ indent) >> colorize col red (putStr $ upper h' ++ ": ") >>
+    colRender col m' >> putStrLn ""
+
+instance ColcolRender a => ColcolRender (Maybe a) where
+  colRender col (Just x) = colRender col x
+  colRender _ Nothing = return ()
+
+
+instance ColcolRender [Char] where
+  colRender _ =
+    putStr .
+    T.unpack .
+    T.unlines .
+    applyToRest ((T.replicate indentation " ") <>) .
+    wrapTextToLines defaultWrapSettings 79 . T.pack
+
+instance ColcolRender PageNum where
+  colRender _ = putStr . show
+
+instance ColcolRender Integer where
+  colRender _ = putStr . show
+
+instance ColcolRender Int where
+  colRender _ = putStr . show

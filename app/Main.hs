@@ -178,7 +178,7 @@ fileInput =
     (long "file" <> metavar "FILE" <> help "Read in log from file" <> short 'f') <**>
   helper
 
-init :: Parser Invocation
+init :: Parser SubCommand
 init = Init <$> quiet <*> ignore
 
 quiet :: Parser Bool
@@ -192,8 +192,13 @@ ignore =
     (long "ignore-cache" <> short 'i' <>
      help "Reparse all entries, ignore cache (overwrites cache)")
 
-toplevel :: Day -> Parser Invocation
+color :: Parser Bool
+color =
+  switch (long "color" <> short 'c' <> help "Colorize output; off by default")
+
+toplevel :: Day -> Parser Opts
 toplevel today =
+  Opts <$> color <*>
   subparser
     (command
        "search"
@@ -220,17 +225,24 @@ toplevel today =
              "Initialize config file, cache directory, and entry log\
              \ directory; parse all entries in 'log-dir'")))
 
-data Invocation
+-- | Stores options applicable to all subcommands.
+data Opts = Opts
+  { colorize :: Bool
+  , subcommand :: SubCommand
+  }
+
+data SubCommand
   = Search Input
   | Parse InputType
   | Lint
   | Init Bool -- ^ Suppress log parse errors
          Bool -- ^ Reparse cached entries
-defs :: Parser Bool
-defs = switch $ long "definitions" 
-  <> short 'd' 
-  <> help "Collect definitions of left-over entries."
 
+defs :: Parser Bool
+defs =
+  switch $
+  long "definitions" <> short 'd' <>
+  help "Collect definitions of left-over entries."
 quotes :: Parser Bool
 quotes = switch $ long "quotations" 
   <> short 'q' 
@@ -286,23 +298,13 @@ main = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
-main'' :: IO ()
-main'' = do
-  today <- utctDay <$> getCurrentTime
-  let opts =
-        info
-          (helper <*> search today)
-          (fullDesc <> progDesc "Run logParse search filters." <>
-           header "muse - a reading log search interface")
-  execParser opts >>= runSearch 
-
-dispatch :: Invocation -> IO ()
-dispatch (Search inp) = putStrLn "searching...\n" >> runSearch inp
-dispatch (Lint) = putStrLn "linting"
-dispatch (Init quiet ignoreCache) = do
+dispatch :: Opts -> IO ()
+dispatch opts@(Opts color (Search inp)) = putStrLn "searching...\n" >> runSearch color inp
+dispatch (Opts color (Lint)) = putStrLn "linting"
+dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn  "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
-dispatch (Parse it) = do
+dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn  "parsing..."
   s <- case it of
@@ -313,8 +315,8 @@ dispatch (Parse it) = do
   putStrLn s
 
 -- | As yet, this searches only pre-parsed `LogEntry`s.
-runSearch :: Input -> IO () 
-runSearch input@(Input s e tp ap dfs qts) = do
+runSearch :: Bool -> Input -> IO ()
+runSearch colorize input@(Input s e tp ap dfs qts) = do
   let dateFilter = do
         mc <- loadMuseConf
         fps <- listDirectory . T.unpack $ entryCache mc
@@ -326,7 +328,6 @@ runSearch input@(Input s e tp ap dfs qts) = do
               -- TODO print date above each days `[LogEntry]`
             filtered = fmap (filterWith input) <$> entries
         return filtered
-
   filtered <- join dateFilter
   putStrLn $
     "start date: " ++
@@ -338,12 +339,11 @@ runSearch input@(Input s e tp ap dfs qts) = do
     show dfs ++
     "\ncollect quotations: " ++
     show qts ++
-    "\nfancy search magick!" -- ++ "\nfiltered dates (to be searched):\n" ++ show filtered
+    "\nfancy search magick!" ++
+    "colors?: " ++ show colorize
   -- TODO map quote, def, projections as requested
-  sequence_ . join . concat . (fmap . fmap . fmap) (putStrLn . render) $ filtered
-
+  sequence_ . join . concat . (fmap . fmap . fmap) (colRender colorize) $ filtered
   return ()
-
 
 -- config
 data MuseConf = MuseConf

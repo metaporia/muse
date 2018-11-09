@@ -39,6 +39,7 @@ dependencies:
 - word-wrap
 - lens
 - transformers
+- ansi-terminal
 
 library:
   source-dirs: src

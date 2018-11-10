@@ -298,8 +298,10 @@ main = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
+showDebug = False
+
 dispatch :: Opts -> IO ()
-dispatch opts@(Opts color (Search inp)) = putStrLn "searching...\n" >> runSearch color inp
+dispatch opts@(Opts color (Search inp)) = putStrLn "searching...\n" >> runSearch showDebug color inp
 dispatch (Opts color (Lint)) = putStrLn "linting"
 dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn  "initializing...\n" -- ++ showMuseConf mc
@@ -315,8 +317,8 @@ dispatch (Opts color (Parse it)) = do
   putStrLn s
 
 -- | As yet, this searches only pre-parsed `LogEntry`s.
-runSearch :: Bool -> Input -> IO ()
-runSearch colorize input@(Input s e tp ap dfs qts) = do
+runSearch :: Bool -> Bool -> Input -> IO ()
+runSearch debug colorize input@(Input s e tp ap dfs qts) = do
   let dateFilter = do
         mc <- loadMuseConf
         fps <- listDirectory . T.unpack $ entryCache mc
@@ -329,7 +331,7 @@ runSearch colorize input@(Input s e tp ap dfs qts) = do
             filtered = fmap (filterWith input) <$> entries
         return filtered
   filtered <- join dateFilter
-  putStrLn $
+  if debug then putStrLn $
     "start date: " ++
     show s ++
     "\n" ++
@@ -341,6 +343,7 @@ runSearch colorize input@(Input s e tp ap dfs qts) = do
     show qts ++
     "\nfancy search magick!" ++
     "colors?: " ++ show colorize
+    else return ()
   -- TODO map quote, def, projections as requested
   sequence_ . join . concat . (fmap . fmap . fmap) (colRender colorize) $ filtered
   return ()

@@ -11,7 +11,7 @@ import           Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.List (isInfixOf, sort, intercalate)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, isJust)
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -231,9 +231,24 @@ filterWith input (x:xs)
     case x of
       TabTsEntry (tabs, _, _) ->
         let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
-        in belong : filterWith input rest
+        in (x: filter (isRequested input) belong) : filterWith input rest
       Dump _ -> [] -- this case sholud NEVER occur
   | otherwise = filterWith input xs
+
+-- | Filters out entries not of the requested type (requests received via
+-- --definitions and --quotations flags). 
+-- TODO filter in filteWith
+isRequested :: Input -> LogEntry -> Bool
+isRequested (Input _ _ _ _ True True) = \l -> isDef l || isQuote l -- get defs and quotes
+isRequested (Input _ _ _ _ True False) = isDef -- get defs
+isRequested (Input _ _ _ _ False True) = isQuote -- get quotes
+isRequested (Input _ _ _ _ False False) =  const True -- get everything
+
+isDef :: LogEntry -> Bool
+isDef = isJust . projectDefQuery
+
+isQuote :: LogEntry -> Bool
+isQuote = isJust . projectQuotation
                                 
 takeWhileRest :: (a -> Bool) -> [a] -> ([a], [a])
 takeWhileRest pred [] = ([],[])

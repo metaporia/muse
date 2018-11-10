@@ -127,7 +127,7 @@ instance ColcolRender Entry where
     putStr indent >>
     colRender col (Page <$> pg) >>
     putStr "\n"
-  colRender col (Read t a) = putStr $ "Read:    "  ++ (surround '"' t) ++ " by " ++ a
+  colRender col (Read t a) = colorize col yellow . putStrLn $ "Read:    "  ++ (surround '"' t) ++ " by " ++ a
   colRender col (Commentary s) = colRender col s
   colRender col (PN pg) = colRender col pg
   colRender _ Null = return ()
@@ -157,7 +157,7 @@ instance ColcolRender [Char] where
     wrapTextToLines defaultWrapSettings 79 . T.pack
 
 instance ColcolRender PageNum where
-  colRender _ = putStr . show
+  colRender _ = putStrLn . show
 
 instance ColcolRender Integer where
   colRender _ = putStr . show

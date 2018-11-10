@@ -4,6 +4,7 @@
 module Test where
 
 
+import Helpers
 import Parse
 import Prelude hiding (min)
 import Test.Hspec

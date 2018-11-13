@@ -35,16 +35,16 @@ module Parse
   where
 
 import Control.Applicative
-import Control.Lens.TH (makeLenses, makePrisms)
-import Control.Lens (makeLenses, preview, review)
-import Control.Lens.Tuple
+import Control.Lens.TH (makePrisms)
+--import Control.Lens (makeLenses, preview, review)
+--import Control.Lens.Tuple
 import Control.Monad (void)
 import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
-import Data.Maybe (fromJust)
+--import Data.Maybe (fromJust)
 import Data.Time
-import GHC.Generics hiding (Prefix, Infix, Suffix)
+import GHC.Generics hiding (Prefix, Infix)
 import Helpers
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
@@ -139,7 +139,6 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
 --    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
 --    by day, or some other small unit
-toplevelNote = undefined
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp
@@ -227,6 +226,7 @@ trimDefQuery (Defn pg hws) = Defn pg (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
 trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) (trim' m) (trim h') (trim' m')
 
+trim' :: String -> [Char]
 trim' = intercalate " " . fmap trim . lines
 
 toDefn :: Parser DefQuery

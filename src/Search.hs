@@ -11,7 +11,7 @@ import           Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.List (isInfixOf, sort, intercalate)
-import           Data.Maybe (catMaybes, isJust)
+import           Data.Maybe (catMaybes, isJust, isNothing)
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -19,6 +19,7 @@ import           Data.Text.Metrics (levenshtein)
 import           Data.Time
 import           Data.Time.Calendar
 import           Data.Time.Clock (utctDay)
+import           Debug.Trace (trace)
 import           Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
 import           Helpers
 import           Parse
@@ -96,14 +97,8 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 
 type Tag = String
 type TagPred = String -> Bool -- Tag predicate.
--- TODO
--- Crawls a `[LogEntry]` and applies to indented/nested (depth>=1) entries a
--- tag generated from the first-level parent.
-tagIndented :: [LogEntry] -> [(LogEntry, [Tag])]
-tagIndented = undefined
--- TODO
+
 -- | Generate a tag for an entry; succeeds for `Read` variant.
---
 --   * extract one tag from title/author attr despite variance
 genTag :: Entry -> Maybe Tag
 genTag (Read title author) = undefined
@@ -224,25 +219,55 @@ tagNestedEntriesByAuthPred authPred (x:xs)
   | otherwise = tagNestedEntriesByAuthPred authPred xs
 
 
-filterWith :: Input -> [LogEntry] -> [[LogEntry]]
-filterWith input [] = []
-filterWith input (x:xs)
+-- | Where there is neither a title predicate nor an author predicate, applies
+-- only variant (a.t.m. def and quote) filters; otherwise, where there is at
+-- least one `Read` predicate, filters by nesting and applies variant filters.
+filterWith :: Input -> [LogEntry] -> [LogEntry]
+filterWith _ [] = []
+filterWith input l@(x:xs)
+  -- no search predicates
+  | isNothing (titlePred input) && isNothing (authorPred input) = isRequested input $ l
+  -- toplevel read entry, essentially tags nested entries with auth/title attr;
+  -- these are collected
   | doesReadSatisfy input x =
     case x of
       TabTsEntry (tabs, _, _) ->
         let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
-        in (x: filter (isRequested input) belong) : filterWith input rest
-      Dump _ -> [] -- this case sholud NEVER occur
+         in (x: isRequested input belong) ++ filterWith input rest
+  -- collect toplevel quotes that satisfy
+  | isTopLevel x && satisfies input x = x : filterWith input xs
   | otherwise = filterWith input xs
+
+isTopLevel :: LogEntry -> Bool
+isTopLevel (Dump _) = True
+isTopLevel (TabTsEntry (tabs, _, _))
+  | tabs == 0 = True
+  | otherwise = False
+
+-- | Determines whether an entry satisfies the search predicates specified by a
+-- given `Input`.
+satisfies :: Input -> LogEntry -> Bool
+satisfies (Input _ _ ap tp _ _) le =
+  let res =
+        projectQuotation le >>=
+        return .
+        (\(q, attr, _) ->
+           case (ap <*> pure attr, tp <*> pure attr) of
+             (Just t, Just a) -> t && a
+             (Just t, Nothing) -> t
+             (Nothing, Just a) -> a
+             (Nothing, Nothing) -> True)
+  in case res of
+       Just b -> b
+       Nothing -> False
 
 -- | Filters out entries not of the requested type (requests received via
 -- --definitions and --quotations flags). 
--- TODO filter in filteWith
-isRequested :: Input -> LogEntry -> Bool
-isRequested (Input _ _ _ _ True True) = \l -> isDef l || isQuote l -- get defs and quotes
-isRequested (Input _ _ _ _ True False) = isDef -- get defs
-isRequested (Input _ _ _ _ False True) = isQuote -- get quotes
-isRequested (Input _ _ _ _ False False) =  const True -- get everything
+isRequested :: Input -> [LogEntry] -> [LogEntry]
+isRequested (Input _ _ _ _ True True) = filter (\l -> isDef l || isQuote l) -- get defs and quotes
+isRequested (Input _ _ _ _ True False) = filter isDef -- get defs
+isRequested (Input _ _ _ _ False True) = filter isQuote -- get quotes
+isRequested (Input _ _ _ _ False False) = id -- get everything
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
@@ -268,13 +293,13 @@ doesTitleSatisfy _ _ = False
 -- | For each present read predicate (a.t.m. only on author and title strings)
 -- apply both to `LogEntry` if it's `Read` of `Entry`.
 doesReadSatisfy :: Input -> LogEntry -> Bool
-doesReadSatisfy (Input sd ed ap tp ds qs) le = 
+doesReadSatisfy (Input _ _ ap tp _ _) le = 
   case getEntry le >>= getRead of
     Just (t, a) -> case (tp <*> pure t, ap <*> pure a) of
                      (Just t, Just a) -> t && a
                      (Just t, Nothing) -> t
                      (Nothing, Just a) -> a
-                     (Nothing, Nothing) -> False
+                     (Nothing, Nothing) -> True -- w/o predicates validate all reads
     Nothing -> False
    --   x = fmap first tp <*> (fmap second ap <*> pair)
 

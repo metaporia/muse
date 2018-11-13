@@ -298,7 +298,7 @@ main = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
-showDebug = False
+showDebug = True
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) = putStrLn "searching...\n" >> runSearch showDebug color inp
@@ -328,7 +328,7 @@ runSearch debug colorize input@(Input s e tp ap dfs qts) = do
               loadFiles (cachePath . dayToPath <$> dates) >>=
               return . catMaybes . decodeEntries
               -- TODO print date above each days `[LogEntry]`
-            filtered = fmap (filterWith input) <$> entries
+            filtered = concat . fmap (filterWith input) <$> entries
         return filtered
   filtered <- join dateFilter
   if debug then putStrLn $
@@ -345,7 +345,7 @@ runSearch debug colorize input@(Input s e tp ap dfs qts) = do
     "colors?: " ++ show colorize
     else return ()
   -- TODO map quote, def, projections as requested
-  sequence_ . join . concat . (fmap . fmap . fmap) (colRender colorize) $ filtered
+  sequence_ . fmap (colRender colorize) $ filtered
   return ()
 
 -- config

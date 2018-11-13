@@ -418,3 +418,104 @@ testlog =
                 In "To the Lighthouse", by Virginia Woolf
 
 |]
+
+tDump = [r|
+...
+coffee
+shit
+fuck with ssh-keygen (error: "sign_and_send_pubkey: signing failed ...")
+solution: `ssh-add` (the local agent simply needed a heads-up!).
+...
+|]
+
+broken = [r|
+...
+coffee
+shit
+fuck with ssh-keygen (error: "sign_and_send_pubkey: signing failed ...")
+solution: `ssh-add` (the local agent simply needed a heads-up!).
+...
+09:33:52 λ. muse-pre(the above) 
+09:36:48 λ. read "Anna Kerenina", by Leo Tolstoy
+    09:45:21 λ. s312
+    09:53:29 λ. d316 winnowing
+    09:56:56 λ. e316: dict conf
+        10:04:53 λ. done: dict conf (see ~/dot/dictrc)
+        
+    10:05:13 λ. s316
+    10:09:54 λ. d318 tarantas (sic). its really 'tarantass'
+    10:27:58 λ. d329 interlocutor
+    10:28:23 λ. d locution
+    10:28:43 λ. e329
+10:28:50 λ. shower; /p liam r. impends
+11:32:11 λ. read "Anna Kerenina", by Leo Tolstoy
+    11:32:27 λ. s329
+    11:33:59 λ. d329 remunerative
+    11:42:27 λ. d332 aperient
+    11:43:12 λ. d332 catechism
+    11:44:13 λ. d332 fractious
+    11:50:28 λ. d334 commission
+    11:54:41 λ. d334 splenetic
+    12:01:27 λ. d339 turbid
+    12:02:11 λ. d339 denuded
+    12:05:03 λ. d340 unction
+    12:06:56 λ. e341
+12:07:01 λ. food
+    12:07:55 λ. undone
+12:08:10 λ. walk dogs
+    12:35:21 λ. done
+...
+dad asked about college apps. Shame overwhelmed my affect. We talked. He said
+he would not kill me, yet. What injustice. Mother needlessly involves herself.
+She, as I in this aspect, has never intimated anything beyond herself. Perhaps
+this is a human failing.
+
+In any case, I beat the navy-blue garage door well-dented. My knuckles have
+swollen accordingly. 
+
+Hopefully Liam R. has shrooms.
+
+drink gin 'n tonic (2 < shots)
+...
+14:12:35 λ. muse-interim
+    14:17:13 λ. done
+14:19:03 λ. read "Anna Kerenina", by Leo Tolstoy
+    14:19:33 λ. s341
+    14:24:16 λ. q343 
+    
+            "But neither of them dared speak of it, and not having
+            expressed the one thing that occupied their thoughts, whatever they said
+            rang false."
+
+    14:26:55 λ. q344 
+    
+            "I am working, I want to do something, and I had forgotten it
+            will all end in Death."
+
+    14:30:29 λ. d345 cavilled
+    14:32:01 λ. d carp
+    14:32:34 λ. d345 dissimulation: the act of dissembling
+    14:53:12 λ. d350 injunction
+    14:57:43 λ. d350 brougham
+    15:03:25 λ. d353 rejoined
+    15:04:19 λ. q354 
+    
+            "One can see that he has been educated only to have the
+            right to despise education, as they despise everything except animal
+            pleasures." 
+
+            Note: Is education not an animal pleasure, by our own bestiality and
+            its inveterate tendency to promote education? Is not consciousness a form
+            of self-referential edification, a perpetual apprehension of the latest
+            'self'?
+
+    15:19:20 λ. d361 jurisconsult
+    15:26:30 λ. d363 furtive
+    15:37:57 λ. d368 "piece de resistance"
+    15:38:12 λ. e368
+15:38:16 λ. walk dogs. /p liam r. impends +20 (arrival presumed @1600)
+
+|]
+
+p = parse logEntries
+pp = pPrint . parse logEntries

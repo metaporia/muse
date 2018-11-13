@@ -56,7 +56,7 @@ import Text.Trifecta hiding (Rendering, Span)
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 
 -- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
--- | TODO 
+-- | TODO: triage TODOs!!!!!
 --
 -- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
 -- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
@@ -85,7 +85,15 @@ import Text.Trifecta hiding (Rendering, Span)
 --   <auth> attribution ditributes over the titles?
 --   - first pass will merely collect the string surrounded by ellipses
 -- ▣  from "q<pgNum> \"<quotation>\"
--- □  add def/quot/auth/title prefix/infix/suffix search
+-- □  parse "dialogue"  of the form:
+--    > dialogue
+--    > 
+--    > <character>: <paragraph>
+--    >
+--    > <character>: <paragraph>
+--    (and so on; consume half of or arbitrarily many character-attributed lines)
+-- □  add def/quot/title prefix/infix/suffix search
+--    - search quote attributions w/ title & author search strings
 -- □  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
@@ -311,12 +319,14 @@ quotation :: Parser Entry
 quotation = do
   _ <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
   pg <- optional digits
+  skipOptional emptyLines
   q <- between quot quot (some $ noneOf "\"")
-  titleAuthEtc <- entryBody
+  titleAuthEtc <-
+    try
+      (lookAhead (skipOptional emptyLines <* lpad timestamp) >> return "") <|>
+    entryBody
   _ <- many newline
   return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc pg
-
-
 -- | Parse an commentary entry (body, without timestamp) of the form:
 --
 --  > "(commentary | synthesis)
@@ -401,6 +411,8 @@ page = do
       'e' -> PEnd pg
       'f' -> PFinish pg
 
+-- TODO add test case for ~/sputum/muse/17.10.17, parses only beginning of
+-- dump and discards rest of file
 dump :: Parser LogEntry
 dump =
   let el = symbol "..."
@@ -674,8 +686,36 @@ day' = do
   d <- twoDigits
   return $ fromGregorianValid (fromIntegral y) m d
 
+qo = [r|
+08:59:30 λ. quotation
 
-data Test = A | B
+            "There was no treachery too for the world to commit. She knew that.
+            No happiness lasted."
+
+            In "To the Lighthouse", by Virginia Woolf
+
+14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+|]
+
+austen = [r|
+
+10:54:04 λ. read "Northanger Abbey", by Jane Austen
+    10:54:22 λ. q101 
+
+    "To come with a well-informed mind, is to come with the inablity of
+    administering to the vanity of others..."
+
+    In "Northanger Abbey" by Jane Austen
+
+    10:55:26 λ. d raillery, coppice, disquisition, dissertation
+    13:33:55 λ. d scud, mizzle
+    13:36:33 λ. d casement
+    13:39:59 λ. q123 
+    
+    "I cannot speak well enough to be unintelligible."
+
+    In "Northanger Abbey" by Jane Austen
+|]
+
 makePrisms ''Entry
 makePrisms ''LogEntry
-makePrisms ''Test

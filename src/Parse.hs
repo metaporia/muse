@@ -289,7 +289,7 @@ entryBody :: Parser String
 entryBody = untilPNoTs $ void (symbol "...") <|> void timestamp <|> eof
 
 lpad :: Parser a -> Parser a
-lpad p = whiteSpace *> p
+lpad p = try whiteSpace *> p
 
 rpad :: Parser a -> Parser a
 rpad p = p <* whiteSpace
@@ -415,8 +415,12 @@ page = do
 -- dump and discards rest of file
 dump :: Parser LogEntry
 dump =
-  let el = symbol "..."
-  in Dump <$> (many space *> el *> manyTill anyChar el)
+  let el = string "..."
+  in Dump <$> (many space *> el *> manyTill anyChar (try $ newline <* el))
+
+
+nullE :: Parser Entry
+nullE = const Null <$> void (skipOptional (many space *> (newline <?> "newline here")))
 
 data LogEntry
   = Dump String
@@ -437,7 +441,7 @@ entryOrDump = do
         ts <- timestamp <?> "timestamp"
         e <-
           (try book <|> try quotation <|> try commentary <|> try def <|>
-           try page <|> (const Null <$> many space <?> "null entry"))
+           try page <|> (lpad nullE <?> "null entry"))
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof

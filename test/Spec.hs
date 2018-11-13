@@ -10,6 +10,7 @@ import Prelude hiding (min)
 import Test.Hspec
 import Text.RawString.QQ
 import qualified Text.Trifecta.Result as Tri
+import Text.Trifecta
 import Text.Show.Pretty (pPrint)
 
 --import Text.Trifecta.Result (Result(..))
@@ -64,6 +65,18 @@ main =
         example $ do
           (toMaybe $ parse logEntries testDump) `shouldBe`
             (Just testDumpOutput)
+
+    describe "parse dump containing ellipsis" $ do
+      it "parse logEntries tDump" $
+        example $ do
+          (toMaybe $ parse logEntries tDump) `shouldBe`
+            (Just tDumpOut)
+
+    describe "parse null timestamp" $ do
+      it "parse logEntries tNull" $
+        example $ do
+          (toMaybe $ parse logEntries tNull) `shouldBe`
+            (Just tNullOut)
 
 testLogWithDumpOutput :: [LogEntry]
 testLogWithDumpOutput =
@@ -133,7 +146,7 @@ second line
 ...
 
     12:10:01 λ. d sylvan
-...    
+...
 dump body
 multiple lines
 ... 
@@ -145,10 +158,10 @@ multiple lines
 
 testDumpOutput :: [LogEntry]
 testDumpOutput =
-  [ Dump "dump aeouoaeu\nsecond line\n"
+  [ Dump "\ndump aeouoaeu\nsecond line"
   , TabTsEntry
-      (0, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
-  , Dump "dump body\nmultiple lines\n"
+      (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+  , Dump "\ndump body\nmultiple lines"
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 14, min = 19, sec = 0}
@@ -419,6 +432,30 @@ testlog =
 
 |]
 
+tNull = [r|
+ 
+
+21:32:05 λ.  
+
+22:31:38 λ. quotation
+
+        "I am merely coping with the collosal shame of having found out that I
+        exist."
+
+        Keane Yahn-Krafft
+|]
+
+tNullOut =
+  [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 22, min = 31, sec = 38}
+      , Quotation
+          "I am merely coping with the collosal shame of having found out that I exist."
+          "Keane Yahn-Krafft"
+          Nothing)
+  ]
+
 tDump = [r|
 ...
 coffee
@@ -427,6 +464,11 @@ fuck with ssh-keygen (error: "sign_and_send_pubkey: signing failed ...")
 solution: `ssh-add` (the local agent simply needed a heads-up!).
 ...
 |]
+
+tDumpOut =
+  [ Dump
+      "\ncoffee\nshit\nfuck with ssh-keygen (error: \"sign_and_send_pubkey: signing failed ...\")\nsolution: `ssh-add` (the local agent simply needed a heads-up!)."
+  ]
 
 broken = [r|
 ...

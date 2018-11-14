@@ -246,11 +246,7 @@ filterWith input l@(x:xs)
         let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
         in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
-  | isTopLevel x && applyPreds' input x =
-    (if satisfies input x
-       then [x]
-       else []) ++
-    filterWith input xs
+  | isTopLevel x && (satisfies input x || applyPreds' input x) = x : filterWith input xs
   | otherwise = filterWith input xs
 
 isTopLevel :: LogEntry -> Bool
@@ -274,7 +270,7 @@ satisfies (Input _ _ ap tp _) le =
              (Nothing, Nothing) -> True)
   in case res of
        Just b -> b
-       Nothing -> False
+       Nothing -> True
 
 -- | Filters out entries not of the requested type (requests received via
 -- --definitions and --quotations flags). 
@@ -422,13 +418,32 @@ testLogWithDumpOutput =
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"]))
   , TabTsEntry
-      ( 1
+      ( 0
+      , TimeStamp {hr = 8, min = 34, sec = 34}
+      , Dialogue
+          "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
+  , TabTsEntry
+      ( 0
       , TimeStamp {hr = 10, min = 49, sec = 58}
       , Quotation
           "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
+
+dia =
+  TabTsEntry
+    ( 0
+    , TimeStamp {hr = 8, min = 34, sec = 34}
+    , Dialogue
+        "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
+
+input ap tp preds = do
+  d <- utctDay <$> getCurrentTime
+  return $ Input d d ap tp preds
+
+defInp = input Nothing Nothing []
+
 
 -- | `LogEntry` projections.
 getEntry :: LogEntry -> Maybe Entry

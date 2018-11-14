@@ -163,7 +163,7 @@ twoDigit = read <$> count 2 digit <* skipOptColon
 -- N.B. Collect tabs before invoking `timestapm` as it will greedily consume
 -- preceeding whitespace.
 timestamp :: Parser TimeStamp
-timestamp = do 
+timestamp = do
   h <- lpad twoDigit
   m <- twoDigit
   s <- twoDigit <* space <* char 'λ' <* char '.' <* space -- todo replace `char '.'` with `symbolic '.'`.
@@ -205,7 +205,8 @@ timestamp = do
 -- * "lèse majesté" -- [A-Za-z ]
 
 data DefQuery
-  = Defn (Maybe PgNum) [Headword]
+  = Defn (Maybe PgNum)
+         [Headword]
   | InlineDef Headword
               Meaning
   | DefVersus Headword
@@ -224,7 +225,8 @@ type PgNum = Integer
 trimDefQuery :: DefQuery -> DefQuery
 trimDefQuery (Defn pg hws) = Defn pg (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
-trimDefQuery (DefVersus hw m h' m') = DefVersus (trim hw) (trim' m) (trim h') (trim' m')
+trimDefQuery (DefVersus hw m h' m') =
+  DefVersus (trim hw) (trim' m) (trim h') (trim' m')
 
 trim' :: String -> [Char]
 trim' = intercalate " " . fmap trim . lines
@@ -358,7 +360,6 @@ data Entry
   | PN PageNum
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
-
 
 instance ToJSON Entry where
   toEncoding = genericToEncoding defaultOptions
@@ -507,7 +508,6 @@ searchType = do
     const Suffix <$> char 's'
   space
   return st
-
 
 testDump' :: String
 testDump' = [r|

@@ -42,8 +42,7 @@ quotation = do
   skipOptional emptyLines
   q <- between quot quot (some $ noneOf "\"")
   titleAuthEtc <-
-    try
-      (lookAhead (skipOptional emptyLines <* lpad timestamp) >> return "") <|>
+    try (lookAhead (skipOptional emptyLines <* lpad timestamp) >> return "") <|>
     entryBody
   _ <- many newline
   return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc pg
@@ -80,18 +79,18 @@ book = do
   _ <- entryBody
   _ <- many newline
   return $ Read title author
+
 -- TODO handle "\n    \n" w/o parser fantods
 def :: Parser Entry
 def = do
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
   -- _ <- many $ try (void (some space) <* void newline) <|> void newline <?> "lonely spaces"
   -- _ <- many (try space <* newline) <?> "consume solitary spaces on newline"
+  return . Def . trimDefQuery $ dq
+
 --  _ <- many (void newline <|> void (some space) <* void newline)
 --  _ <- many $ try (void (some space) <* newline) <|> void newline
 --  _ <- emptyLines
-  return . Def . trimDefQuery $ dq
-
-
 -- | Extracts page number as one of form: 
 --
 --  - "p<num>"  -- page number 
@@ -121,9 +120,10 @@ dump =
   let el = string "..."
   in Dump <$> (many space *> el *> manyTill anyChar (try $ newline <* el))
 
-
 nullE :: Parser Entry
-nullE = const Null <$> void (skipOptional (many space *> (newline <?> "newline here")))
+nullE =
+  const Null <$>
+  void (skipOptional (many space *> (newline <?> "newline here")))
 
 data LogEntry
   = Dump String
@@ -135,8 +135,6 @@ instance ToJSON LogEntry where
 
 instance FromJSON LogEntry
 
-
-
 entryOrDump :: Parser LogEntry
 entryOrDump = do
   _ <- skipOptional (try emptyLines)
@@ -145,7 +143,8 @@ entryOrDump = do
         ts <- timestamp <?> "timestamp"
         e <-
           (try book <|> try quotation <|> try commentary <|> try def <|>
-           try page <|> (lpad nullE <?> "null entry"))
+           try page <|>
+           (lpad nullE <?> "null entry"))
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
@@ -162,10 +161,8 @@ entry = do
   _ <- void (skipOptional emptyLines) <|> eof
   return $ (indent, ts, e)
 
-
 entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
-
 logEntries :: Parser [LogEntry]
 logEntries =
   const [] <$>

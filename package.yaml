@@ -45,6 +45,7 @@ library:
   source-dirs: src
   exposed-modules:
     - Lib
+    - Parse.Entry
     - Parse
     - Helpers
     - Search

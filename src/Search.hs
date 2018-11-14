@@ -23,6 +23,7 @@ import           Debug.Trace (trace)
 import           Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
 import           Helpers
 import           Parse
+import           Parse.Entry
 import           Prelude hiding (lookup, log, min)
 import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
 import           System.Environment (getEnv)

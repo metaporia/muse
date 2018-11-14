@@ -20,6 +20,7 @@ import           Helpers
 import           Lib
 import           Options.Applicative
 import           Parse
+import           Parse.Entry
 import           Prelude hiding (lookup, log, init)
 import           Render
 import           Search

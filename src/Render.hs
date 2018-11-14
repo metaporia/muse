@@ -13,6 +13,7 @@ import qualified Data.Text.IO as T
 import           Text.Wrap
 import           Helpers
 import           Parse
+import           Parse.Entry
 import           Prelude hiding (lookup, log, min)
 import           System.Console.ANSI
 import           Text.Show.Pretty (pPrint)

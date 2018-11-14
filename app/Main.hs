@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings #-}
+   OverloadedStrings, ApplicativeDo#-}
 {-# LANGUAGE DeriveGeneric #-}
 module Main where
 
@@ -118,13 +118,23 @@ subRelDur day (RelDur y m d) =
   day
 
 search :: Day -> Parser Input
-search today = Input <$> (subRelDur today 
-                     <$> within) 
-                     <*> pure today 
-                     <*> (fmap consumeSearchType <$> author)
-                     <*> (fmap consumeSearchType <$> title)
-                     <*> defs
-                     <*> quotes
+search today = do
+  w <- (subRelDur today <$> within) 
+  a <- (fmap consumeSearchType <$> author)
+  t <- (fmap consumeSearchType <$> title)
+  (ds, qs, ps, dias) <- (,,,) <$> defs <*> quotes <*> phrases' <*> dialogues'
+  return $ Input w today a t [ds, qs, ps, dias]
+
+search' today = do
+  w <- (subRelDur today <$> within)
+  a <- (fmap consumeSearchType <$> author)
+  t <- (fmap consumeSearchType <$> title)
+  (ds, qs, ps, dias) <-
+    (,,,) <$> (fmap . fmap) (const "Defs") defs <*>
+    (fmap . fmap) (const "qs") quotes <*>
+    (fmap . fmap) (const "ps") phrases' <*>
+    (fmap . fmap) (const "dias") dialogues'
+  return $ (,,,,) w today a t [ds, qs, ps, dias]
 
 dispatchSearchType :: Eq a => SearchType -> [a] -> [a] ->  Bool
 dispatchSearchType Prefix = isPrefixOf
@@ -138,7 +148,6 @@ consumeSearchType :: String -> (String -> Bool)
 consumeSearchType s = case eitherToMaybe (searchPredOpt s) of
                         Just (fix, searchStr) -> dispatchSearchType fix searchStr
                         Nothing -> isInfixOf s
-
 
 data InputType
   = File FilePath
@@ -295,15 +304,19 @@ within =
      short 'w' <>
      value (RelDur 0 6 0))
 
-main' :: IO ()
-main' =
-  loadMuseConf >>= parseAllEntries True False
-
 main :: IO ()
 main = do
   today <- utctDay <$> getCurrentTime
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
+
+main' :: IO ()
+main' = do
+  today <- utctDay <$> getCurrentTime
+  execParser (info (helper <*> search' today) (fullDesc <> header "preds test")) 
+    >>= \(_, _, _, _, preds)  -> putStrLn . show $ preds
+
+
 
 showDebug = True
 
@@ -325,7 +338,7 @@ dispatch (Opts color (Parse it)) = do
 
 -- | As yet, this searches only pre-parsed `LogEntry`s.
 runSearch :: Bool -> Bool -> Input -> IO ()
-runSearch debug colorize input@(Input s e tp ap dfs qts) = do
+runSearch debug colorize input@(Input s e tp ap preds) = do
   let dateFilter = do
         mc <- loadMuseConf
         fps <- listDirectory . T.unpack $ entryCache mc
@@ -342,15 +355,11 @@ runSearch debug colorize input@(Input s e tp ap dfs qts) = do
     "start date: " ++
     show s ++
     "\n" ++
-    "end date: " ++
-    show e ++
-    "\ncollect defs: " ++
-    show dfs ++
-    "\ncollect quotations: " ++
-    show qts ++
-    "\nfancy search magick!" ++
-    "colors?: " ++ show colorize
+    "end date: " ++ show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize
     else return ()
+  putStrLn "predicates:"
+  pPrint (filterWith input testLogWithDumpOutput)
+
   -- TODO map quote, def, projections as requested
   sequence_ . fmap (colRender colorize) $ filtered
   return ()

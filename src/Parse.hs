@@ -1,12 +1,6 @@
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
+  ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
+  TemplateHaskell #-}
 
 module Parse
   --( DefQuery(..)

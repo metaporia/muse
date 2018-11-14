@@ -37,8 +37,7 @@ data Input = Input
   , endDateTime :: Day
   , authorPred :: Maybe (Author -> Bool)
   , titlePred :: Maybe (Title -> Bool)
-  , definitions :: Bool
-  , quotations :: Bool
+  , predicates :: [Maybe (LogEntry -> Bool)]
   }
 
 -- TODO replace w/ newtype wrapper around `Entry`
@@ -227,16 +226,20 @@ filterWith :: Input -> [LogEntry] -> [LogEntry]
 filterWith _ [] = []
 filterWith input l@(x:xs)
   -- no search predicates
-  | isNothing (titlePred input) && isNothing (authorPred input) = isRequested input $ l
+  | null (catMaybes (predicates input)) = isRequested input l
   -- toplevel read entry, essentially tags nested entries with auth/title attr;
   -- these are collected
   | doesReadSatisfy input x =
     case x of
       TabTsEntry (tabs, _, _) ->
         let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
-         in (x: isRequested input belong) ++ filterWith input rest
+        in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
-  | isTopLevel x && satisfies input x = x : filterWith input xs
+  | isTopLevel x && applyPreds' input x =
+    (if satisfies input x
+       then [x]
+       else []) ++
+    filterWith input xs
   | otherwise = filterWith input xs
 
 isTopLevel :: LogEntry -> Bool
@@ -245,10 +248,10 @@ isTopLevel (TabTsEntry (tabs, _, _))
   | tabs == 0 = True
   | otherwise = False
 
--- | Determines whether an entry satisfies the search predicates specified by a
+-- | Determines whether a quote entry satisfies the search predicates specified by a
 -- given `Input`.
 satisfies :: Input -> LogEntry -> Bool
-satisfies (Input _ _ ap tp _ _) le =
+satisfies (Input _ _ ap tp _) le =
   let res =
         projectQuotation le >>=
         return .
@@ -265,16 +268,38 @@ satisfies (Input _ _ ap tp _ _) le =
 -- | Filters out entries not of the requested type (requests received via
 -- --definitions and --quotations flags). 
 isRequested :: Input -> [LogEntry] -> [LogEntry]
-isRequested (Input _ _ _ _ True True) = filter (\l -> isDef l || isQuote l) -- get defs and quotes
-isRequested (Input _ _ _ _ True False) = filter isDef -- get defs
-isRequested (Input _ _ _ _ False True) = filter isQuote -- get quotes
-isRequested (Input _ _ _ _ False False) = id -- get everything
+isRequested = applyPreds . predicates
+--isRequested (Input _ _ _ _ True True _ _) = filter (\l -> isDef l || isQuote l) -- get defs and quotes
+--isRequested (Input _ _ _ _ True False _ _) = filter isDef -- get defs
+--isRequested (Input _ _ _ _ False True _ _) = filter isQuote -- get quotes
+--isRequested (Input _ _ _ _ False False _ _) = id -- get everything
+
+applyPreds :: [Maybe (LogEntry -> Bool)] -> [LogEntry] -> [LogEntry]
+applyPreds ps = 
+  let preds = catMaybes ps 
+   in if null preds
+         then id
+         else filter (\e-> foldr (||) False $ preds <*> [e]) 
+
+applyPreds' :: Input -> LogEntry -> Bool
+applyPreds' input = 
+  let preds = catMaybes (predicates input)
+   in if null preds
+         then const False
+         else \e-> foldr (||) False $ preds <*> [e] 
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
 
 isQuote :: LogEntry -> Bool
 isQuote = isJust . projectQuotation
+
+isPhrase :: LogEntry -> Bool
+isPhrase = isJust . projectPhrase
+
+isDialogue :: LogEntry -> Bool
+isDialogue = isJust . projectDialogue
+                                
                                 
 takeWhileRest :: (a -> Bool) -> [a] -> ([a], [a])
 takeWhileRest pred [] = ([],[])
@@ -294,7 +319,7 @@ doesTitleSatisfy _ _ = False
 -- | For each present read predicate (a.t.m. only on author and title strings)
 -- apply both to `LogEntry` if it's `Read` of `Entry`.
 doesReadSatisfy :: Input -> LogEntry -> Bool
-doesReadSatisfy (Input _ _ ap tp _ _) le = 
+doesReadSatisfy (Input _ _ ap tp _) le = 
   case getEntry le >>= getRead of
     Just (t, a) -> case (tp <*> pure t, ap <*> pure a) of
                      (Just t, Just a) -> t && a

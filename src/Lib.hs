@@ -19,9 +19,11 @@ module Lib
   , module Search
   ) where
 
-import Parse
 import Helpers
+import Parse
+import Parse.Entry
 import Search
+import Render
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"

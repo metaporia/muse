@@ -208,7 +208,7 @@ phrase :: Parser Entry
 phrase = do
   whiteSpace 
   try (symbol "phrase") <|> symbol "phr"
-  p <- try pluralPhrase <|> definedPhrase
+  p <- try definedPhrase <|> pluralPhrase
   many newline
   return $ Phr p
 

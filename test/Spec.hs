@@ -112,16 +112,17 @@ tPhraseOut =
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non : an essential condition"]))
+      , Phr (Defined "sine qua non " "an essential condition"))
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non: an essential condition"]))
+      , Phr (Defined "sine qua non" "an essential condition"))
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
       , Def (Defn Nothing ["casement"]))
   ]
+
 testLogWithDumpOutput :: [LogEntry]
 testLogWithDumpOutput =
   [ TabTsEntry

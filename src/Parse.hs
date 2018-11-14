@@ -85,6 +85,13 @@ import Text.Trifecta hiding (Rendering, Span)
 --   <auth> attribution ditributes over the titles?
 --   - first pass will merely collect the string surrounded by ellipses
 -- ▣  from "q<pgNum> \"<quotation>\"
+-- ▣  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
+--    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
+--    by day, or some other small unit
+-- ▣  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
+-- □  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
+--    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
+--    "the exhaust of your rage"!)
 -- □  parse "dialogue"  of the form:
 --    > dialogue
 --    > 
@@ -94,13 +101,11 @@ import Text.Trifecta hiding (Rendering, Span)
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
 -- □  add def/quot/title prefix/infix/suffix search
 --    - search quote attributions w/ title & author search strings
--- □  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
--- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
---    and into `entry` (see `emptyLines`)
+-- □  ignore all meta log info, e.g., containing:
+--    - "muse"
+--    - "muse-pre"
+--    - "muse-interim"
 -- □  improve error messages
--- -- (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
---    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
---    "the exhaust of your rage"!)
 -- □  (!!!) parse n.b.s after all entry types
 --    from "(note | N.B.)", containing some specialization
 --    grouping of (log) entries by title.
@@ -116,8 +121,6 @@ import Text.Trifecta hiding (Rendering, Span)
 --  |]
 -- 
 -- □  finish multiple books at once?
--- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
---    distinguish between syntaxes, collect?
 -- □  parse "read (book | article | play ) <title>, by <author>" to specify media
 --    type; default to "book"?
 -- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
@@ -132,13 +135,12 @@ import Text.Trifecta hiding (Rendering, Span)
 --    □  custom keywords for frequent actions, e.g., "hap", "walk", "coffee",
 --       "eat (breakfast | lunch | dinner | snack) <food-desc>"
 --    □  closing timestamp with "done ..."?
--- □  ignore all meta log info, e.g., containing:
---    - "muse"
---    - "muse-pre"
---    - "muse-interim"
--- □  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
---    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
---    by day, or some other small unit
+-- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
+--    - distinguish between syntaxes, collect?
+--    - where are comments permitted? end of line, dedicated line, or both?
+-- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
+--    and into `entry` (see `emptyLines`)
+--    BLOCKED: `entryBody` can't be factored out a.t.m.
 
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp

@@ -252,25 +252,25 @@ defs :: Parser (Maybe (LogEntry -> Bool))
 defs =
   flag Nothing (Just isDef) $
   long "definitions" <> short 'd' <>
-  help "Collect definitions of left-over entries."
+  help "Collect only definitions"
 
 quotes :: Parser (Maybe (LogEntry -> Bool))
 quotes =
   flag Nothing (Just isQuote) $
   long "quotations" <> short 'q' <>
-  help "Collect quotations of remaining entries."
+  help "Collect only quotations"
 
 phrases' :: Parser (Maybe (LogEntry -> Bool))
 phrases' =
   flag Nothing (Just isPhrase) $
   long "phrases" <> short 'p' <>
-  help "Collect phrases"
+  help "Collect only phrases"
 
 dialogues' :: Parser (Maybe (LogEntry -> Bool))
 dialogues' =
   flag Nothing (Just isDialogue) $
   long "dialogues" <> short 'l' <>
-  help "Collect dialogue"
+  help "Collect only dialogue"
 
 author :: Parser (Maybe String)
 author =

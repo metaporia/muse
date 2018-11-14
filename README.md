@@ -1,6 +1,52 @@
 # logParse
 
-## General Rules
+## Search Syntax
+
+Note that this is merely (a potentially outdated) the CLI's help information.
+
+```
+Usage: logParse-exe search [-w|--within REL_DATE] [-a|--author SUBSTR]
+                           [-t|--title SUBSTR] [-d|--definitions]
+                           [-q|--quotations] [-p|--phrases] [-l|--dialogues]
+
+  Search log entries by date, author, or title; extract definitions or
+  quotations.
+
+Available options:
+  -w,--within REL_DATE     Lower bound of search filter range
+  -a,--author SUBSTR       Substring/affix of author
+  -t,--title SUBSTR        Affix of title
+  -d,--definitions         Collect only definitions
+  -q,--quotations          Collect only quotations
+  -p,--phrases             Collect only phrases
+  -l,--dialogues           Collect only dialogue
+  -h,--help                Show this help text
+```
+
+* A bare invocation of `search` will return all (successfully parsed) entries
+  within the last six months.
+
+* Author and title search strings filter quotes--they're applied to quote
+  attributions.
+
+* Author and title search strings can be prefixed by a space proceeding one of
+  the following search modes:
+   - 'p': prefix search
+   - 'i': infix search, the default
+   - 's': suffix search
+
+  For example, `--author 's Woolf'` searches for entries whose author
+  attribution ends with the string "Woolf"
+
+* A `REL_DATE` specifies day-month-year offset, e.g., "3d", "3d2m20y",
+  "2m5y", and "1d6y". Up to two of the three fields may be omited, but they
+  must remain in the correct order, namely, day-month-year. A relative date is
+  represented by a a number of days, months, and years, each of which is
+  subtracted from the date of invocation to generate the lower bound of the
+  date range of searched entries.
+
+
+## Syntax Guidelines
 
 * do not exceed one line in a plural def
 * newlines after entry bodies are acceptable

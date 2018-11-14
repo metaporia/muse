@@ -12,25 +12,33 @@
 * timestamps without a body are allowed but not encouraged
 
 N.B. '[<expr>]' in an entry example or grammar specification indicates that
-<expr> is optional
+<expr> is optional; and '(<variant0> | ... | <variantN>)' denotes one of the
+listed options must be selected, but that any one of which is accepted.
 
 ### Definition Comparison
 ```
-dvs headword1 : meaning
+dvs <headword>[ ]: <meaning>
      --- vs ---
-     headword2 : meaning" ## log grammar
+     <headword>[ ]: <meaning>" 
 ```
+
+Wherein the space preceding the colon is optional.
 
 ### List of Headwords
 ```
 d [<pg-num>] word1, ..., wordN
 ```
 
+N.B. may not exceed one line/contain newline (the parser consumes
+comma-separated headwords until a newline).
+
+
 ### Inline Definition
 ```
 d headword : meaning
 
 ```
+As in a definition comparison, the space before the colon is optional.
 
 ### Quotation
 ```
@@ -40,6 +48,8 @@ quotation [<page-num>]
 
 <attribution>
 ```
+
+A `<page-num>` consists of arbitrarily many digits.
 
 ### Read
 One of:
@@ -56,6 +66,13 @@ begin to read <title>[,] by <author>
 finsh [reading] <title>[,] by <author>
 ```
 
+The comma preceding the author attribution is optional, reflects whether you,
+as the logger, wish the attribution to be included in a restrictive or
+non-restrictive clause. Since there is a slight difference in meaning between
+the two--namely, that the former means, "of the (many) books read by
+`<author>`, the one by the name of `<title>` is read", whereas the latter
+means, "a book by the name of `<title>` is read, which happens to be by
+`<author>`"--, I leave the choice to the user.
 
 
 ### Commentary
@@ -70,8 +87,12 @@ Parses an commentary entry (body, without timestamp) of the form:
  <content>"
 ```
 
+N.B. `<content>` may span multiple lines, but cannot contain a `<timeStamp>`,
+as it is used as a closing delimiter.
+
 ### Dump
-As yet devoid of internal formatting, e.g.:
+As yet devoid of internal formatting, a `<dump>` comprises zero or more lines
+and may not contain an ellipsis followed by a newline, e.g.,
 
 ```
 ...
@@ -79,7 +100,37 @@ As yet devoid of internal formatting, e.g.:
 ...
 ```
 
-### Beware the incomplete grammar 
+### Phrase 
+
+Log memorable collocations with the following:
+
+```
+(phrase | phr) <phrase>[[ ]: <meaning>]
+```
+
+Wherein both the meaning and the space preceding the colon are optional.
+
+Both "phrase" and "phr" are valid prefixes.
+
+
+### Dialogue
+
+Although a `<dialogue>` entry body does not, at the moment, impose by parser
+any content restrictions, my intent is that dialogue conform to the following
+general form:
+```
+dialogue
+
+    <char>: <line>
+
+    {"\n\n" <char>: <line> }
+```
+In other words, dialogue consists of newline separated paragraphs headed by the
+speaking character's name followed by a colon and the contents of the line,
+which may occupy multiple lines of text.
+
+
+### Beware the incomplete grammar (seriously, read no farther)
 
 This lags behind the implementation; for up-to-date information on the grammar
 see ./src/Parse.hs (for the implementation) and ./test/Spec.hs (for tests).

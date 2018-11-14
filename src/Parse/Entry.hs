@@ -151,6 +151,21 @@ entryOrDump = do
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
   return $ e
 
+entry :: Parser (Int, TimeStamp, Entry)
+entry = do
+  indent <- skipOptional (try emptyLines) *> tabs
+  ts <- timestamp <?> "timestamp"
+  e <-
+    (try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
+     return Null -- <?> "found no valid prefix"
+     )
+  _ <- void (skipOptional emptyLines) <|> eof
+  return $ (indent, ts, e)
+
+
+entries :: Parser [(Int, TimeStamp, Entry)]
+entries = some entry <* skipOptional newline
+
 logEntries :: Parser [LogEntry]
 logEntries =
   const [] <$>

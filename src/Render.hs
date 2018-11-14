@@ -49,6 +49,7 @@ instance Render Entry where
   render (Commentary s) = show s
   render (PN pg) = render pg
   render Null = ""
+  -- todo add `Phr` variant handling
 
 instance Render DefQuery where
   render (Defn mpg hws) =
@@ -131,6 +132,7 @@ instance ColcolRender Entry where
   colRender col (Read t a) = colorize col yellow . putStrLn $ "Read:    "  ++ (surround '"' t) ++ " by " ++ a
   colRender col (Commentary s) = putStr "Comment: " >> colorize col cyan (colRender col s)
   colRender col (PN pg) = colRender col pg
+  colRender col (Phr p) = colorize col magenta (putStr "Phrase:  ") >> colRender col p
   colRender _ Null = return ()
 
 instance ColcolRender DefQuery where
@@ -143,6 +145,10 @@ instance ColcolRender DefQuery where
     colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >> colRender col m >>
     putStr (indent ++ "--- vs ---\n" ++ indent) >> colorize col red (putStr $ upper h' ++ ": ") >>
     colRender col m' >> putStrLn ""
+
+instance ColcolRender Phrase where
+  colRender col (Plural ps) = colorize col blue $ colRender col (intercalate ", " ps)
+  colRender col (Defined p m) = colorize col green  (putStr $ upper p ++ ": ") >> colRender col m
 
 instance ColcolRender a => ColcolRender (Maybe a) where
   colRender col (Just x) = colRender col x

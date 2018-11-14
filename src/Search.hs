@@ -1,5 +1,16 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
    OverloadedStrings, TupleSections, MultiWayIf #-}
+ -----------------------------------------------------------------------------
+-- |
+-- Module      :  Search
+-- Copyright   :  2018 Keane Yahn-Kraft
+-- License     :  GPL-3 (see the file LICENSE)
+-- Maintainer  :  kyahnkrafft@me.com
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- This module exposes search predicate application functions.
+-----------------------------------------------------------------------------
 module Search where
 
 import           Control.Monad (void, (>=>))

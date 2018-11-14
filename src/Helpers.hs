@@ -1,3 +1,14 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Helpers
+-- Copyright   :  2018 Keane Yahn-Kraft
+-- License     :  GPL-3 (see the file LICENSE)
+-- Maintainer  :  kyahnkrafft@me.com
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- This module contains miscellaneous helper functions.
+-----------------------------------------------------------------------------
 module Helpers where
 
 --import Prelude hiding (any, lookup, min, until)

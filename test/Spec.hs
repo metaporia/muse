@@ -1,8 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
-
+ -----------------------------------------------------------------------------
+-- |
+-- Module      :  Test (logParse-test)
+-- Copyright   :  2018 Keane Yahn-Kraft
+-- License     :  GPL-3 (see the file LICENSE)
+-- Maintainer  :  kyahnkrafft@me.com
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- This module exposes search predicate application functions.
+-----------------------------------------------------------------------------
 module Test where
-
 
 import Helpers
 import Parse

@@ -1,5 +1,16 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
    OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances, MultiWayIf #-}
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Render
+-- Copyright   :  2018 Keane Yahn-Kraft
+-- License     :  GPL-3 (see the file LICENSE)
+-- Maintainer  :  kyahnkrafft@me.com
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- This module provides colorized rendering for `LogEntry` and its constituents.
+-----------------------------------------------------------------------------
 module Render where
 
 import           Control.Monad (void, (>=>))

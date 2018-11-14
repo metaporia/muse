@@ -1,7 +1,17 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
   ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
   TemplateHaskell #-}
-
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Parse.Entry
+-- Copyright   :  2018 Keane Yahn-Kraft
+-- License     :  GPL-3 (see the file LICENSE)
+-- Maintainer  :  kyahnkrafft@me.com
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- This module provides parsers for `LogEntry` and its constituent types.
+-----------------------------------------------------------------------------
 module Parse.Entry where
 
 import Control.Applicative

@@ -12,6 +12,7 @@ import Control.Monad (void)
 import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
+import Data.List.Split (splitOn)
 --import Data.Maybe (fromJust)
 import Data.Time
 import GHC.Generics hiding (Prefix, Infix)
@@ -143,7 +144,9 @@ logEntry = do
         indent <- tabs
         ts <- timestamp <?> "timestamp"
         e <-
-          try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
+          try book <|> try quotation <|> try commentary <|> try dialogue <|>
+          try def <|>
+          try page <|>
           try phrase <|>
           lpad nullE
         return $ TabTsEntry (indent, ts, e)
@@ -183,6 +186,7 @@ data Entry
   | Commentary Body
   | PN PageNum
   | Phr  Phrase
+  | Dialogue String
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
 
@@ -223,7 +227,13 @@ definedPhrase = do
   meaning <- entryBody
   return $ Defined hw meaning
 
-
+dialogue :: Parser Entry
+dialogue = do
+  symbol "dialogue"
+  eb <-
+    intercalate "\n\n" . fmap (unlines . fmap trim . lines) . splitOn "\n\n" <$>
+    entryBody
+  return $ Dialogue eb
 
 makePrisms ''Entry
 makePrisms ''LogEntry

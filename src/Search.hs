@@ -420,6 +420,9 @@ getCommentary = preview _Commentary
 getPhrase :: Entry -> Maybe Phrase
 getPhrase = preview _Phr
 
+getDialogue :: Entry -> Maybe String
+getDialogue = preview _Dialogue
+
 -- Composed `LogEntry` and `Entry` projections.
 projectDefQuery :: LogEntry -> Maybe DefQuery
 projectDefQuery = getEntry >=> getDefQuery
@@ -433,6 +436,8 @@ projectRead = getEntry >=> getRead
 projectCommentary = getEntry >=> getCommentary
 
 projectPhrase = getEntry >=> getPhrase
+
+projectDialogue = getEntry >=> getDialogue
 
 project :: LogEntry -> Maybe DefQuery
 project (TabTsEntry (_, _, (Def dq))) = Just dq

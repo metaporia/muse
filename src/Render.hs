@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings, TupleSections, FlexibleInstances, MultiWayIf #-}
+   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances, MultiWayIf #-}
 module Render where
 
 import           Control.Monad (void, (>=>))
@@ -11,6 +11,7 @@ import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.Wrap
+import           Text.RawString.QQ
 import           Helpers
 import           Parse
 import           Parse.Entry
@@ -123,32 +124,45 @@ instance ColcolRender LogEntry where
 instance ColcolRender Entry where
   colRender col (Def dq) = colRender col dq
   colRender col (Quotation b attr pg) =
-    colorize col magenta (putStr "Quote:   ") >> colorize col cyan (colRender col $ surround '"' b) >>
+    colorize col magenta (putStr "Quote:   ") >>
+    colorize col cyan (colRender col $ surround '"' b) >>
     putStr indent >>
     colorize col yellow (colRender col attr) >>
     putStr indent >>
     colRender col (Page <$> pg) >>
     putStr "\n"
-  colRender col (Read t a) = colorize col yellow . putStrLn $ "Read:    "  ++ (surround '"' t) ++ " by " ++ a
-  colRender col (Commentary s) = putStr "Comment: " >> colorize col cyan (colRender col s)
+  colRender col (Read t a) =
+    colorize col yellow . putStrLn $
+    "Read:    " ++ (surround '"' t) ++ " by " ++ a
+  colRender col (Commentary s) =
+    putStr "Comment: " >> colorize col cyan (colRender col s)
   colRender col (PN pg) = colRender col pg
-  colRender col (Phr p) = colorize col magenta (putStr "Phrase:  ") >> colRender col p
+  colRender col (Phr p) =
+    colorize col magenta (putStr "Phrase:  ") >> colRender col p
+  colRender col (Dialogue s) =
+    putStr "Dialog.:  \n" >> colorize col cyan (putStrLn $ fmt s)
   colRender _ Null = return ()
 
 instance ColcolRender DefQuery where
   colRender col (Defn mpg hws) =
     colorize col blue (putStr "Query:   ") >> colRender col mpg >>
-    putStrLn (" " ++ intercalate ", " hws)
+    putStrLn (trim $ " " ++ intercalate ", " hws)
   colRender col (InlineDef hw m) =
-    colorize col green (putStr ("Define:  " ++ upper hw ++ ": ")) >> colRender col m
+    colorize col green (putStr ("Define:  " ++ upper hw ++ ": ")) >>
+    colRender col m
   colRender col (DefVersus h m h' m') =
-    colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >> colRender col m >>
-    putStr (indent ++ "--- vs ---\n" ++ indent) >> colorize col red (putStr $ upper h' ++ ": ") >>
-    colRender col m' >> putStrLn ""
+    colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >>
+    colRender col m >>
+    putStr (indent ++ "--- vs ---\n" ++ indent) >>
+    colorize col red (putStr $ upper h' ++ ": ") >>
+    colRender col m' >>
+    putStrLn ""
 
 instance ColcolRender Phrase where
-  colRender col (Plural ps) = colorize col blue $ colRender col (intercalate ", " ps)
-  colRender col (Defined p m) = colorize col green  (putStr $ upper p ++ ": ") >> colRender col m
+  colRender col (Plural ps) =
+    colorize col blue $ colRender col (intercalate ", " ps)
+  colRender col (Defined p m) =
+    colorize col green (putStr $ upper p ++ ": ") >> colRender col m
 
 instance ColcolRender a => ColcolRender (Maybe a) where
   colRender col (Just x) = colRender col x
@@ -162,6 +176,13 @@ instance ColcolRender [Char] where
     T.unlines .
     applyToRest ((T.replicate indentation " ") <>) .
     wrapTextToLines defaultWrapSettings 79 . T.pack
+
+
+fmt =
+  T.unpack .
+  T.unlines .
+  fmap ((T.replicate indentation " ") <>) .
+  wrapTextToLines defaultWrapSettings 79 . T.pack
 
 instance ColcolRender PageNum where
   colRender _ = putStrLn . show

@@ -89,9 +89,10 @@ import Text.Trifecta hiding (Rendering, Span)
 --    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
 --    by day, or some other small unit
 -- ▣  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
--- □  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
+-- ▣  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
 --    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
 --    "the exhaust of your rage"!)
+-- □  add CLI option to suppress `Read` entry output
 -- □  parse "dialogue"  of the form:
 --    > dialogue
 --    > 

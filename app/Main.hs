@@ -239,15 +239,29 @@ data SubCommand
   | Init Bool -- ^ Suppress log parse errors
          Bool -- ^ Reparse cached entries
 
-defs :: Parser Bool
+defs :: Parser (Maybe (LogEntry -> Bool))
 defs =
-  switch $
+  flag Nothing (Just isDef) $
   long "definitions" <> short 'd' <>
   help "Collect definitions of left-over entries."
-quotes :: Parser Bool
-quotes = switch $ long "quotations" 
-  <> short 'q' 
-  <> help "Collect quotations of remaining entries."
+
+quotes :: Parser (Maybe (LogEntry -> Bool))
+quotes =
+  flag Nothing (Just isQuote) $
+  long "quotations" <> short 'q' <>
+  help "Collect quotations of remaining entries."
+
+phrases' :: Parser (Maybe (LogEntry -> Bool))
+phrases' =
+  flag Nothing (Just isPhrase) $
+  long "phrases" <> short 'p' <>
+  help "Collect phrases"
+
+dialogues' :: Parser (Maybe (LogEntry -> Bool))
+dialogues' =
+  flag Nothing (Just isDialogue) $
+  long "dialogues" <> short 'l' <>
+  help "Collect dialogue"
 
 author :: Parser (Maybe String)
 author =

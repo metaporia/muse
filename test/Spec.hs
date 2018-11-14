@@ -85,6 +85,19 @@ main =
           (toMaybe $ parse logEntries tPhrase) `shouldBe`
             (Just tPhraseOut)
 
+tDialogue = [r|
+08:34:34 λ. dialogue
+
+    (After ~1hr of unbridled loquacity, having mercifully dammed the torrent)
+    MOM: Do you mind me telling all my favorite moments?
+
+    (Without looking up from his guitar playing)
+    DAD: No, just get it over with.
+
+08:35:27 λ. read "Great Expectations" by Charles Dickens
+ 
+|]
+
 tPhrase = [r|
 13:36:33 λ. phrase sine qua non
 10:55:26 λ. d raillery, coppice, disquisition, dissertation

@@ -62,7 +62,7 @@ main =
             (Just testNullOutput)
 
     describe "parse dump: \"...\n<multi-line-dump-body>\n...\"" $ do
-      it "parse (some entryOrDump testDump" $
+      it "parse logEntries testDump" $
         example $ do
           (toMaybe $ parse logEntries testDump) `shouldBe`
             (Just testDumpOutput)
@@ -79,6 +79,49 @@ main =
           (toMaybe $ parse logEntries tNull) `shouldBe`
             (Just tNullOut)
 
+    describe "phrase keyword" $ do
+      it "parse logEntries tPhrase" $
+        example $ do
+          (toMaybe $ parse logEntries tPhrase) `shouldBe`
+            (Just tPhraseOut)
+
+tPhrase = [r|
+13:36:33 λ. phrase sine qua non
+10:55:26 λ. d raillery, coppice, disquisition, dissertation
+13:36:33 λ. phr sine qua non
+13:36:33 λ. phrase sine qua non : an essential condition
+13:36:33 λ. phrase sine qua non: an essential condition
+
+13:36:33 λ. d casement
+|]
+
+tPhraseOut =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Phr (Plural ["sine qua non"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 10, min = 55, sec = 26}
+      , Def
+          (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Phr (Plural ["sine qua non"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Phr (Plural ["sine qua non : an essential condition"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Phr (Plural ["sine qua non: an essential condition"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Def (Defn Nothing ["casement"]))
+  ]
 testLogWithDumpOutput :: [LogEntry]
 testLogWithDumpOutput =
   [ TabTsEntry

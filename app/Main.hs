@@ -249,14 +249,6 @@ quotes = switch $ long "quotations"
   <> short 'q' 
   <> help "Collect quotations of remaining entries."
 
-entryToSearchResult :: Entry -> SearchResult
-entryToSearchResult (Def dq) = Def' (show dq)
-entryToSearchResult (Quotation b attr pg) = Quotation' b attr pg
-entryToSearchResult (Read t a) = Read' t a
-entryToSearchResult (Commentary s) = Commentary' s
-entryToSearchResult (PN pg) = PN' pg
-entryToSearchResult Null = Null'
-
 author :: Parser (Maybe String)
 author =
   option (fmap Just str)

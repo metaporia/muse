@@ -327,10 +327,6 @@ unused = undefined
     _ = hr >> min >> sec >> pPrint
     _ = bookTs >> bookTs' >> testLog'
 
-isQuotation :: Entry -> Bool
-isQuotation (Quotation _ _ _) = True
-isQuotation _ = False
-
 type Quote = String
 
 type Body = String
@@ -348,25 +344,6 @@ instance ToJSON PageNum where
   toEncoding = genericToEncoding defaultOptions
 
 instance FromJSON PageNum
-
--- TODO add N.B. field to as many variants as possible (poss. by adding (N.B |
--- n.b. | nota bene) parser to `untilP` in entryBody
-data Entry
-  = Def DefQuery
-  | Read Title
-         Author
-  | Quotation Quote
-              Attr
-              (Maybe PgNum)
-  | Commentary Body
-  | PN PageNum
-  | Null -- ^ represents entry of only a timestamp
-  deriving (Eq, Generic, Show)
-
-instance ToJSON Entry where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON Entry
 
 testLog' :: String
 testLog' =
@@ -569,3 +546,4 @@ austen = [r|
 
     In "Northanger Abbey" by Jane Austen
 |]
+

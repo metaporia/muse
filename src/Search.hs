@@ -417,6 +417,8 @@ getQuotation = preview _Quotation
 getCommentary :: Entry -> Maybe Body 
 getCommentary = preview _Commentary
 
+getPhrase :: Entry -> Maybe Phrase
+getPhrase = preview _Phr
 
 -- Composed `LogEntry` and `Entry` projections.
 projectDefQuery :: LogEntry -> Maybe DefQuery
@@ -429,6 +431,8 @@ projectPageNum = getEntry >=> getPageNum
 projectRead = getEntry >=> getRead
 
 projectCommentary = getEntry >=> getCommentary
+
+projectPhrase = getEntry >=> getPhrase
 
 project :: LogEntry -> Maybe DefQuery
 project (TabTsEntry (_, _, (Def dq))) = Just dq

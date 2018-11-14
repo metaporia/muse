@@ -22,6 +22,7 @@ import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
 import Parse
+import Helpers
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
@@ -135,16 +136,16 @@ instance ToJSON LogEntry where
 
 instance FromJSON LogEntry
 
-entryOrDump :: Parser LogEntry
-entryOrDump = do
+logEntry :: Parser LogEntry
+logEntry = do
   _ <- skipOptional (try emptyLines)
   let entry' = do
         indent <- tabs
         ts <- timestamp <?> "timestamp"
         e <-
-          (try book <|> try quotation <|> try commentary <|> try def <|>
-           try page <|>
-           (lpad nullE <?> "null entry"))
+          try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
+          try phrase <|>
+          lpad nullE
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
@@ -163,11 +164,66 @@ entry = do
 
 entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
+
 logEntries :: Parser [LogEntry]
 logEntries =
   const [] <$>
   (try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof") *>
-  some entryOrDump
+  some logEntry
+
+-- TODO add N.B. field to as many variants as possible (poss. by adding (N.B |
+-- n.b. | nota bene) parser to `untilP` in entryBody
+data Entry
+  = Def DefQuery
+  | Read Title
+         Author
+  | Quotation Quote
+              Attr
+              (Maybe PgNum)
+  | Commentary Body
+  | PN PageNum
+  | Phr  Phrase
+  | Null -- ^ represents entry of only a timestamp
+  deriving (Eq, Generic, Show)
+
+instance ToJSON Entry where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Entry
+
+isQuotation :: Entry -> Bool
+isQuotation (Quotation _ _ _) = True
+isQuotation _ = False
+
+data Phrase = Plural [Headword]
+            | Defined Headword Meaning
+  deriving (Eq, Show, Generic)
+
+instance ToJSON Phrase where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Phrase
+
+phrase :: Parser Entry
+phrase = do
+  whiteSpace 
+  try (symbol "phrase") <|> symbol "phr"
+  p <- try pluralPhrase <|> definedPhrase
+  many newline
+  return $ Phr p
+
+pluralPhrase :: Parser Phrase
+pluralPhrase = do
+  hws <- sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
+  return $ Plural hws
+
+definedPhrase :: Parser Phrase
+definedPhrase = do
+  hw <- many (noneOf ":") <* symbol ": "
+  meaning <- entryBody
+  return $ Defined hw meaning
+
+
 
 makePrisms ''Entry
 makePrisms ''LogEntry

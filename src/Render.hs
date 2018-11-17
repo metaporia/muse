@@ -31,6 +31,9 @@ import           System.Console.ANSI
 import           Text.Show.Pretty (pPrint)
 
 
+showAll :: [LogEntry] -> IO ()
+showAll = sequence_ . fmap (colRender True)
+
 indentation :: Int
 indentation = 9
 indent = take indentation (repeat ' ')
@@ -123,16 +126,16 @@ dullYellow  = mkColor False Yellow
 dullCyan    = mkColor False Cyan
 
 -- Colorizable alternative to `Render`.
-class Show a => ColcolRender a where
+class Show a => ColRender a where
   colRender :: Bool -- ^ Colorize?
             -> a -- ^ Item to render
             -> IO ()
 
-instance ColcolRender LogEntry where
+instance ColRender LogEntry where
   colRender col (Dump s) = putStr "Dump:    " >> colRender col s
   colRender col (TabTsEntry (_, _, entry)) = colRender col entry
 
-instance ColcolRender Entry where
+instance ColRender Entry where
   colRender col (Def dq) = colRender col dq
   colRender col (Quotation b attr pg) =
     colorize col magenta (putStr "Quote:   ") >>
@@ -154,7 +157,7 @@ instance ColcolRender Entry where
     putStr "Dialog.:  \n" >> colorize col cyan (putStrLn $ fmt s)
   colRender _ Null = return ()
 
-instance ColcolRender DefQuery where
+instance ColRender DefQuery where
   colRender col (Defn mpg hws) =
     colorize col blue (putStr "Query:   ") >> colRender col mpg >>
     putStrLn (trim $ " " ++ intercalate ", " hws)
@@ -169,18 +172,18 @@ instance ColcolRender DefQuery where
     colRender col m' >>
     putStrLn ""
 
-instance ColcolRender Phrase where
+instance ColRender Phrase where
   colRender col (Plural ps) =
     colorize col blue $ colRender col (intercalate ", " ps)
   colRender col (Defined p m) =
     colorize col green (putStr $ upper p ++ ": ") >> colRender col m
 
-instance ColcolRender a => ColcolRender (Maybe a) where
+instance ColRender a => ColRender (Maybe a) where
   colRender col (Just x) = colRender col x
   colRender _ Nothing = return ()
 
 
-instance ColcolRender [Char] where
+instance ColRender [Char] where
   colRender _ =
     putStr .
     T.unpack .
@@ -195,11 +198,12 @@ fmt =
   fmap ((T.replicate indentation " ") <>) .
   wrapTextToLines defaultWrapSettings 79 . T.pack
 
-instance ColcolRender PageNum where
+instance ColRender PageNum where
   colRender _ = putStrLn . show
 
-instance ColcolRender Integer where
+instance ColRender Integer where
   colRender _ = putStr . show
 
-instance ColcolRender Int where
+instance ColRender Int where
   colRender _ = putStr . show
+

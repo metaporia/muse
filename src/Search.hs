@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings, TupleSections, MultiWayIf #-}
+  OverloadedStrings, TupleSections, MultiWayIf #-}
  -----------------------------------------------------------------------------
+
 -- |
 -- Module      :  Search
 -- Copyright   :  2018 Keane Yahn-Kraft
@@ -13,34 +14,35 @@
 -----------------------------------------------------------------------------
 module Search where
 
-import           Control.Monad (void, (>=>))
-import           Control.Lens.TH (makeLenses, makePrisms)
-import           Control.Lens.Tuple
-import           Control.Lens (makeLenses, preview, review)
-import           Data.Aeson hiding (Null)
-import           Data.Bifunctor
+import Control.Lens (makeLenses, preview, review)
+import Control.Lens.TH (makeLenses, makePrisms)
+import Control.Lens.Tuple
+import Control.Monad ((>=>), void)
+import Data.Aeson hiding (Null)
+import Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.List (isInfixOf, sort, intercalate)
-import           Data.Maybe (catMaybes, isJust, isNothing)
-import           Data.Monoid ((<>))
+import Data.List (intercalate, isInfixOf, sort)
+import Data.Maybe (catMaybes, isJust, isNothing)
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import           Data.Text.Metrics (levenshtein)
-import           Data.Time
-import           Data.Time.Calendar
-import           Data.Time.Clock (utctDay)
-import           Debug.Trace (trace)
-import           Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
-import           Helpers
-import           Parse
-import           Parse.Entry
-import           Prelude hiding (lookup, log, min)
-import           System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
-import           System.Environment (getEnv)
-import           Text.Show.Pretty (pPrint)
-import qualified Text.Trifecta.Result as Tri
+import Data.Text.Metrics (levenshtein)
+import Data.Time
+import Data.Time.Calendar
+import Data.Time.Clock (utctDay)
+import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
+import Debug.Trace (trace)
+import Helpers
+import Parse
+import Parse.Entry
+import Prelude hiding (log, lookup, min)
+import System.Directory
+       (createDirectoryIfMissing, doesFileExist, listDirectory)
+import System.Environment (getEnv)
+import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
+import qualified Text.Trifecta.Result as Tri
 
 -- | Represents filters and entry maps extracted from CLI invocation.
 data Input = Input
@@ -61,9 +63,9 @@ data SearchResult
   | Read' Title
           Author
   | PN' PageNum
-  | Null' | Entry' String -- ?
+  | Null'
+  | Entry' String -- ?
   deriving (Eq, Show)
-
 
 x :: Input -> [LogEntry]
 x = undefined
@@ -94,19 +96,25 @@ pathsToDays :: [FilePath] -> IO [Day]
 pathsToDays = showInvalidNames . pathsToDays'
 
 dayToPath :: Day -> String
-dayToPath = replace '-' '.' . drop 2 . show 
+dayToPath = replace '-' '.' . drop 2 . show
 
 replace :: Eq b => b -> b -> [b] -> [b]
-replace a b = map (\x -> if (a == x) then b else x)
+replace a b =
+  map
+    (\x ->
+       if (a == x)
+         then b
+         else x)
 
-
-filterBy :: Day -- ^ start date (lower bound)
-         -> Day -- ^ end date (upper bound)
-         -> [Day] 
-         -> [Day]
-filterBy l u = filter (\d -> d >= l && d <= u) 
+filterBy ::
+     Day -- ^ start date (lower bound)
+  -> Day -- ^ end date (upper bound)
+  -> [Day]
+  -> [Day]
+filterBy l u = filter (\d -> d >= l && d <= u)
 
 type Tag = String
+
 type TagPred = String -> Bool -- Tag predicate.
 
 -- | Generate a tag for an entry; succeeds for `Read` variant.
@@ -141,7 +149,6 @@ textDiff a b =
           minimum . fmap (uncurry levenshtein) $
           zip (repeat short) $ [T.take ls $ T.drop i long | i <- [0 .. ll - ls]]
 
-
 cowards :: [T.Text]
 cowards = ["Noel Coward", "Noël Coward"]
 
@@ -166,14 +173,14 @@ dostoevskys =
   , "Fyodor Dostoevsky"
   , "Fyodor Dostoevski"
   , "Fyodor Dostoevskij"
-  , "Fyodor Dostoevskii" 
+  , "Fyodor Dostoevskii"
   , "Fyodor Dostoyevski"
   , "Fyodor Dostoyevskij"
   , "Fyodor Dostoevsky"
   , "Dostoyevsky"
   , "Dostoevski"
   , "Dostoevskij"
-  , "Dostoevskii" 
+  , "Dostoevskii"
   , "Dostoyevsky"
   , "Dostoyevski"
   , "Dostoyevskij"
@@ -216,8 +223,6 @@ rate canonical = fmap $ \w -> (textDiff canonical w, w)
 --
 --      tl;dr; try to identify attr under cursor, if successful display result,
 --      if not show top matches (above satisfaction threshold)
-
-
 tagNestedEntriesByAuthPred :: (Author -> Bool) -> [LogEntry] -> [[LogEntry]]
 tagNestedEntriesByAuthPred authPred [] = []
 tagNestedEntriesByAuthPred authPred (x:xs)
@@ -228,7 +233,6 @@ tagNestedEntriesByAuthPred authPred (x:xs)
         in belong : tagNestedEntriesByAuthPred authPred rest
       Dump _ -> [] -- this case sholud NEVER occur
   | otherwise = tagNestedEntriesByAuthPred authPred xs
-
 
 -- | Where there is neither a title predicate nor an author predicate, applies
 -- only variant (a.t.m. def and quote) filters; otherwise, where there is at
@@ -246,7 +250,8 @@ filterWith input l@(x:xs)
         let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
         in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
-  | isTopLevel x && (satisfies input x || applyPreds' input x) = x : filterWith input xs
+  | satisfies input x && applyPreds' input x =
+    x : filterWith input xs -- require `isToplevel`?
   | otherwise = filterWith input xs
 
 isTopLevel :: LogEntry -> Bool
@@ -276,24 +281,24 @@ satisfies (Input _ _ ap tp _) le =
 -- --definitions and --quotations flags). 
 isRequested :: Input -> [LogEntry] -> [LogEntry]
 isRequested = applyPreds . predicates
+
 --isRequested (Input _ _ _ _ True True _ _) = filter (\l -> isDef l || isQuote l) -- get defs and quotes
 --isRequested (Input _ _ _ _ True False _ _) = filter isDef -- get defs
 --isRequested (Input _ _ _ _ False True _ _) = filter isQuote -- get quotes
 --isRequested (Input _ _ _ _ False False _ _) = id -- get everything
-
 applyPreds :: [Maybe (LogEntry -> Bool)] -> [LogEntry] -> [LogEntry]
-applyPreds ps = 
-  let preds = catMaybes ps 
-   in if null preds
-         then id
-         else filter (\e-> foldr (||) False $ preds <*> [e]) 
+applyPreds ps =
+  let preds = catMaybes ps
+  in if null preds
+       then id
+       else filter (\e -> foldr (||) False $ preds <*> [e])
 
 applyPreds' :: Input -> LogEntry -> Bool
-applyPreds' input = 
+applyPreds' input =
   let preds = catMaybes (predicates input)
-   in if null preds
-         then const False
-         else \e-> foldr (||) False $ preds <*> [e] 
+  in if null preds
+       then const False
+       else \e -> foldr (||) False $ preds <*> [e]
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
@@ -306,17 +311,18 @@ isPhrase = isJust . projectPhrase
 
 isDialogue :: LogEntry -> Bool
 isDialogue = isJust . projectDialogue
-                                
-                                
+
 takeWhileRest :: (a -> Bool) -> [a] -> ([a], [a])
-takeWhileRest pred [] = ([],[])
-takeWhileRest pred (x:xs) 
+takeWhileRest pred [] = ([], [])
+takeWhileRest pred (x:xs)
   | pred x = go x $ takeWhileRest pred xs
-  | otherwise = ([], x:xs)
-  where go x (as, bs) = (x:as, bs)
+  | otherwise = ([], x : xs)
+  where
+    go x (as, bs) = (x : as, bs)
 
 doesAuthorSatisfy :: (Author -> Bool) -> LogEntry -> Bool
-doesAuthorSatisfy authPred (TabTsEntry (_, _, (Read _ author))) = authPred author
+doesAuthorSatisfy authPred (TabTsEntry (_, _, (Read _ author))) =
+  authPred author
 doesAuthorSatisfy _ _ = False
 
 doesTitleSatisfy :: (Title -> Bool) -> LogEntry -> Bool
@@ -326,16 +332,16 @@ doesTitleSatisfy _ _ = False
 -- | For each present read predicate (a.t.m. only on author and title strings)
 -- apply both to `LogEntry` if it's `Read` of `Entry`.
 doesReadSatisfy :: Input -> LogEntry -> Bool
-doesReadSatisfy (Input _ _ ap tp _) le = 
+doesReadSatisfy (Input _ _ ap tp _) le =
   case getEntry le >>= getRead of
-    Just (t, a) -> case (tp <*> pure t, ap <*> pure a) of
-                     (Just t, Just a) -> t && a
-                     (Just t, Nothing) -> t
-                     (Nothing, Just a) -> a
-                     (Nothing, Nothing) -> True -- w/o predicates validate all reads
+    Just (t, a) ->
+      case (tp <*> pure t, ap <*> pure a) of
+        (Just t, Just a) -> t && a
+        (Just t, Nothing) -> t
+        (Nothing, Just a) -> a
+        (Nothing, Nothing) -> True -- w/o predicates validate all reads
     Nothing -> False
    --   x = fmap first tp <*> (fmap second ap <*> pair)
-
 
 -- | Takes parent (read entry's) indentation level, a log entry
 doesEntryBelongToParent :: Int -> LogEntry -> Bool
@@ -444,7 +450,6 @@ input ap tp preds = do
 
 defInp = input Nothing Nothing []
 
-
 -- | `LogEntry` projections.
 getEntry :: LogEntry -> Maybe Entry
 getEntry = preview $ _TabTsEntry . _3
@@ -465,7 +470,7 @@ getRead = preview _Read
 getQuotation :: Entry -> Maybe (Quote, Attr, Maybe PgNum)
 getQuotation = preview _Quotation
 
-getCommentary :: Entry -> Maybe Body 
+getCommentary :: Entry -> Maybe Body
 getCommentary = preview _Commentary
 
 getPhrase :: Entry -> Maybe Phrase
@@ -493,8 +498,6 @@ projectDialogue = getEntry >=> getDialogue
 project :: LogEntry -> Maybe DefQuery
 project (TabTsEntry (_, _, (Def dq))) = Just dq
 project _ = Nothing
-
-
 
 projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
 projectDef (TabTsEntry (_, _, (Def dq))) =

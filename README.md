@@ -65,7 +65,7 @@ listed options must be selected, but that any one of which is accepted.
 ```
 dvs <headword>[ ]: <meaning>
      --- vs ---
-     <headword>[ ]: <meaning>" 
+    <headword>[ ]: <meaning>" 
 ```
 
 Wherein the space preceding the colon is optional.

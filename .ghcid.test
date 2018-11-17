@@ -1,1 +1,1 @@
---command "stack ghci --test test/Spec.hs"
+--command "stack ghci test/Spec.hs test/ParseSpec.hs test/SearchSpec.hs --ghci-options=-fobject-code"

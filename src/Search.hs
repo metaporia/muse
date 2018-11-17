@@ -113,96 +113,6 @@ filterBy ::
   -> [Day]
 filterBy l u = filter (\d -> d >= l && d <= u)
 
-type Tag = String
-
-type TagPred = String -> Bool -- Tag predicate.
-
--- | Generate a tag for an entry; succeeds for `Read` variant.
---   * extract one tag from title/author attr despite variance
-genTag :: Entry -> Maybe Tag
-genTag (Read title author) = undefined
-  where
-    initials = (++ ".") . intercalate "." . fmap (take 1 . trim) . words . trim
-genTag _ = Nothing
-
--- | Trims whitespace, slides shorter string over longer, gets each pair's
--- levenshtein distance, returns shortest.
--- TODO make case-insensitive
-textDiff :: T.Text -> T.Text -> Int
-textDiff a b =
-  let trim = T.unwords . T.words
-      a' = trim a
-      b' = trim b
-      la' = T.length a'
-      lb' = T.length b'
-  in if | la' == lb' -> levenshtein a' b'
-        | la' > lb' -> go lb' b' la' a'
-        | otherwise -> go la' a' lb' b'
-    -- n.b. breaks if short is longer than long. do not tamper w the above
-    -- guard
-  where
-    go :: Int -> T.Text -> Int -> T.Text -> Int
-    go ls short ll long =
-      sum $ (\w -> go' (T.length w) w ll long) <$> T.words short
-      where
-        go' ls short ll long =
-          minimum . fmap (uncurry levenshtein) $
-          zip (repeat short) $ [T.take ls $ T.drop i long | i <- [0 .. ll - ls]]
-
-cowards :: [T.Text]
-cowards = ["Noel Coward", "Noël Coward"]
-
-coward :: [T.Text]
-coward = ["Noël Coward"]
-
-eliots :: [T.Text]
-eliots =
-  [ "George Eliot"
-  , "George Elliot"
-  , "George Elliot (Mary Ann Evans)"
-  , "George Eliot (Mary Ann Evans)"
-  ]
-
-eliot :: [T.Text]
-eliot = ["George Eliot", "Mary Ann Evans"]
-
-dostoevskys :: [T.Text]
-dostoevskys =
-  [ "Fyodor Dostoyevsky"
-  , "Fyodor Dostoevsky"
-  , "Fyodor Dostoevsky"
-  , "Fyodor Dostoevski"
-  , "Fyodor Dostoevskij"
-  , "Fyodor Dostoevskii"
-  , "Fyodor Dostoyevski"
-  , "Fyodor Dostoyevskij"
-  , "Fyodor Dostoevsky"
-  , "Dostoyevsky"
-  , "Dostoevski"
-  , "Dostoevskij"
-  , "Dostoevskii"
-  , "Dostoyevsky"
-  , "Dostoyevski"
-  , "Dostoyevskij"
-  , "Dostoyevskii"
-  , "Dostoyevskii"
-  ]
-
-dostoevsky :: [T.Text]
-dostoevsky = ["Fyodor Dostoevsky"]
-
-tolstoys :: [T.Text]
-tolstoys = ["Leo Tolstoy", "Count Leo Tolstoy", "Tolstoy", "Tlostoy"]
-
-tolstoy :: [T.Text]
-tolstoy = ["Leo Tolstoy"]
-
-all' :: [T.Text]
-all' = dostoevskys ++ tolstoys ++ eliots ++ cowards
-
-rate :: T.Text -> [T.Text] -> [(Int, T.Text)]
-rate canonical = fmap $ \w -> (textDiff canonical w, w)
-
 -- auto-complete
 -- Qs: 
 --
@@ -223,16 +133,6 @@ rate canonical = fmap $ \w -> (textDiff canonical w, w)
 --
 --      tl;dr; try to identify attr under cursor, if successful display result,
 --      if not show top matches (above satisfaction threshold)
-tagNestedEntriesByAuthPred :: (Author -> Bool) -> [LogEntry] -> [[LogEntry]]
-tagNestedEntriesByAuthPred authPred [] = []
-tagNestedEntriesByAuthPred authPred (x:xs)
-  | doesAuthorSatisfy authPred x =
-    case x of
-      TabTsEntry (tabs, _, _) ->
-        let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
-        in belong : tagNestedEntriesByAuthPred authPred rest
-      Dump _ -> [] -- this case sholud NEVER occur
-  | otherwise = tagNestedEntriesByAuthPred authPred xs
 
 -- | Where there is neither a title predicate nor an author predicate, applies
 -- only variant (a.t.m. def and quote) filters; otherwise, where there is at
@@ -255,7 +155,7 @@ filterWith input l@(x:xs)
                 (doesEntryBelongToParent tabs)
                 (variantSatisfies input)
                 xs
-        -- TODO move `isRequested` filter into `doesEntryBelongToParent`
+        -- TODO move `isRequested` filter io `doesEntryBelongToParent`
         in (x : belong) ++ filterWith input rest
         --in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
@@ -275,16 +175,6 @@ takeWhileRestWithFilter continue take (x:xs)
   where go x (as, bs) 
           | take x = (x : as, bs)
           | otherwise = (as, bs)
-
-isTopLevel (Dump _) = True
-isTopLevel (TabTsEntry (tabs, _, _))
-  | tabs == 0 = True
-  | otherwise = False
-
--- | Filters out entries not of the requested type (requests received via
--- --definitions and --quotations flags). 
-isRequested :: Input -> [LogEntry] -> [LogEntry]
-isRequested = filter . satisfies
 
 -- | Applies both string search and variant predicates.
 satisfies :: Input -> LogEntry -> Bool
@@ -323,14 +213,6 @@ isPhrase = isJust . projectPhrase
 isDialogue :: LogEntry -> Bool
 isDialogue = isJust . projectDialogue
 
-takeWhileRest :: (a -> Bool) -> [a] -> ([a], [a])
-takeWhileRest pred [] = ([], [])
-takeWhileRest pred (x:xs)
-  | pred x = go x $ takeWhileRest pred xs
-  | otherwise = ([], x : xs)
-  where
-    go x (as, bs) = (x : as, bs)
-
 doesAuthorSatisfy :: (Author -> Bool) -> LogEntry -> Bool
 doesAuthorSatisfy authPred (TabTsEntry (_, _, (Read _ author))) =
   authPred author
@@ -347,15 +229,6 @@ doesReadSatisfy input le
   | isRead le = searchSatisfies input le
   | otherwise = False
 
-doesEntryMatchSearches :: Input -> LogEntry -> Bool
-doesEntryMatchSearches (Input _ _ ap tp _) le =
-      case (tp <*> pure le, ap <*> pure le) of
-        (Just t, Just a) -> t && a
-        (Just t, Nothing) -> t
-        (Nothing, Just a) -> a
-        (Nothing, Nothing) -> False -- w/o aut/title predicates, 
-
-
 -- | Takes parent (read entry's) indentation level, a log entry
 doesEntryBelongToParent :: Int -> LogEntry -> Bool
 doesEntryBelongToParent tabs (Dump _) = False -- breaks on dumps
@@ -363,20 +236,116 @@ doesEntryBelongToParent tabs (TabTsEntry (tabs', _, _))
   | tabs' > tabs = True
   | otherwise = False
 
--- | Takes between first two successes of element predicate. The first element
--- to satisfy is included, the second is not. The rest of the list is the
--- second element of the returned tuple. Elements before the the first element
--- to satisfy are discarded. E.g.,
+-- | Consumes title or author serach string and type predicates (e.g., `isDef`,
+-- `isQuote`, etc.) and creates a composite predicate that will only apply the
+-- former where the latter have succeeded.
+guardStrSearch ::
+     (LogEntry -> Bool) -- converted auth/title string search
+  -> [Maybe (LogEntry -> Bool)] -- `LogEntry` variant preds
+  -> (LogEntry -> Bool)
+guardStrSearch strSearch typePreds
+  | null typePreds = strSearch
+  | otherwise =
+    \e -> strSearch e && (foldr (||) False $ (catMaybes typePreds) <*> pure e)
+
+-- | Generates `LogEntry` predicate from string predicate.
 --
--- >>> takeUntil (> 2) [0, 1, 3, 0, 2, -1, 4, 6, 7]
--- ([3, 0, 2, -1], [4, 6, 7])
-takeFromUntil :: (a -> Bool) -> [a] -> ([a], [a], [a])
-takeFromUntil pred = breakAgain . break pred
-  where
-    breakAgain (ys, []) = (ys, [], [])
-    breakAgain (ys, (x:xs)) =
-      let (span, rest) = (x :) <$> break pred xs
-      in (ys, span, rest)
+-- This only applies string searches to `Quotation`s and `Read`s.
+convertAuthSearch :: (Author -> Bool) -> LogEntry -> Bool
+convertAuthSearch authPred le 
+-- how safe is this?
+  | isJust read = 
+    let (_, a) = fromJust read 
+     in authPred a
+  | isJust quote = 
+    let (_, attr, _) = fromJust quote
+     in authPred attr
+  | otherwise = False
+  where read = projectRead le
+        quote = projectQuotation le
+
+-- | Generates `LogEntry` predicate from string predicate.
+--
+-- This only applies string searches to `Quotation`s and `Read`s.
+convertTitleSearch :: (Title -> Bool) -> LogEntry -> Bool
+convertTitleSearch titlePred le 
+-- how safe is this?
+  | isJust read = 
+    let (t, _) = fromJust read 
+     in titlePred t
+  | isJust quote = 
+    let (_, attr, _) = fromJust quote
+     in titlePred attr
+  | otherwise = False
+  where read = projectRead le
+        quote = projectQuotation le
+
+defInp = input Nothing Nothing []
+
+-- | `LogEntry` projections.
+getEntry :: LogEntry -> Maybe Entry
+getEntry = preview $ _TabTsEntry . _3
+
+getDump :: LogEntry -> Maybe String
+getDump = preview _Dump
+
+-- `Entry` projections
+getDefQuery :: Entry -> Maybe DefQuery
+getDefQuery = preview _Def
+
+getPageNum :: Entry -> Maybe PageNum
+getPageNum = preview _PN
+
+getRead :: Entry -> Maybe (Title, Author)
+getRead = preview _Read
+
+getQuotation :: Entry -> Maybe (Quote, Attr, Maybe PgNum)
+getQuotation = preview _Quotation
+
+getCommentary :: Entry -> Maybe Body
+getCommentary = preview _Commentary
+
+getPhrase :: Entry -> Maybe Phrase
+getPhrase = preview _Phr
+
+getDialogue :: Entry -> Maybe String
+getDialogue = preview _Dialogue
+
+-- Composed `LogEntry` and `Entry` projections.
+projectDefQuery :: LogEntry -> Maybe DefQuery
+projectDefQuery = getEntry >=> getDefQuery
+
+projectQuotation = getEntry >=> getQuotation
+
+projectPageNum = getEntry >=> getPageNum
+
+projectRead = getEntry >=> getRead
+
+projectCommentary = getEntry >=> getCommentary
+
+projectPhrase = getEntry >=> getPhrase
+
+projectDialogue = getEntry >=> getDialogue
+
+project :: LogEntry -> Maybe DefQuery
+project (TabTsEntry (_, _, (Def dq))) = Just dq
+project _ = Nothing
+
+projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
+projectDef (TabTsEntry (_, _, (Def dq))) =
+  case dq of
+    Defn mPg headwords -> flip (,) Nothing <$> headwords
+    InlineDef hw meaning -> [(hw, Just meaning)]
+    DefVersus hw m hw' m' -> [(hw, Just m), (hw', Just m')]
+projectDef _ = []
+
+
+input ap tp preds = do
+  d <- utctDay <$> getCurrentTime
+  return $ Input d d (convertAuth preds <$> ap) (convertTitle preds <$> tp) preds
+
+convertAuth preds = flip guardStrSearch preds . convertAuthSearch
+convertTitle preds = flip guardStrSearch preds . convertTitleSearch 
 
 testLogWithDumpOutput :: [LogEntry]
 testLogWithDumpOutput =
@@ -449,139 +418,3 @@ testLogWithDumpOutput =
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
-
-dia =
-  TabTsEntry
-    ( 0
-    , TimeStamp {hr = 8, min = 34, sec = 34}
-    , Dialogue
-        "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
-
-input ap tp preds = do
-  d <- utctDay <$> getCurrentTime
-  return $ Input d d (convertAuth preds <$> ap) (convertTitle preds <$> tp) preds
-
-convertAuth preds = flip guardStrSearch preds . convertAuthSearch
-convertTitle preds = flip guardStrSearch preds . convertTitleSearch 
-
-
--- | Consumes title or author serach string and type predicates (e.g., `isDef`,
--- `isQuote`, etc.) and creates a composite predicate that will only apply the
--- former where the latter have succeeded.
-guardStrSearch ::
-     (LogEntry -> Bool) -- converted auth/title string search
-  -> [Maybe (LogEntry -> Bool)] -- `LogEntry` variant preds
-  -> (LogEntry -> Bool)
-guardStrSearch strSearch typePreds
-  | null typePreds = strSearch
-  | otherwise =
-    \e -> strSearch e && (foldr (||) False $ (catMaybes typePreds) <*> pure e)
-
--- | Generates `LogEntry` predicate from string predicate.
---
--- This only applies string searches to `Quotation`s and `Read`s.
-convertAuthSearch :: (Author -> Bool) -> LogEntry -> Bool
-convertAuthSearch authPred le 
--- how safe is this?
-  | isJust read = 
-    let (_, a) = fromJust read 
-     in authPred a
-  | isJust quote = 
-    let (_, attr, _) = fromJust quote
-     in authPred attr
-  | otherwise = False
-  where read = projectRead le
-        quote = projectQuotation le
-
--- | Generates `LogEntry` predicate from string predicate.
---
--- This only applies string searches to `Quotation`s and `Read`s.
-convertTitleSearch :: (Title -> Bool) -> LogEntry -> Bool
-convertTitleSearch titlePred le 
--- how safe is this?
-  | isJust read = 
-    let (t, _) = fromJust read 
-     in titlePred t
-  | isJust quote = 
-    let (_, attr, _) = fromJust quote
-     in titlePred attr
-  | otherwise = False
-  where read = projectRead le
-        quote = projectQuotation le
-
-
-
-
-
-defInp = input Nothing Nothing []
-
--- | `LogEntry` projections.
-getEntry :: LogEntry -> Maybe Entry
-getEntry = preview $ _TabTsEntry . _3
-
-getDump :: LogEntry -> Maybe String
-getDump = preview _Dump
-
--- `Entry` projections
-getDefQuery :: Entry -> Maybe DefQuery
-getDefQuery = preview _Def
-
-getPageNum :: Entry -> Maybe PageNum
-getPageNum = preview _PN
-
-getRead :: Entry -> Maybe (Title, Author)
-getRead = preview _Read
-
-getQuotation :: Entry -> Maybe (Quote, Attr, Maybe PgNum)
-getQuotation = preview _Quotation
-
-getCommentary :: Entry -> Maybe Body
-getCommentary = preview _Commentary
-
-getPhrase :: Entry -> Maybe Phrase
-getPhrase = preview _Phr
-
-getDialogue :: Entry -> Maybe String
-getDialogue = preview _Dialogue
-
--- Composed `LogEntry` and `Entry` projections.
-projectDefQuery :: LogEntry -> Maybe DefQuery
-projectDefQuery = getEntry >=> getDefQuery
-
-projectQuotation = getEntry >=> getQuotation
-
-projectPageNum = getEntry >=> getPageNum
-
-projectRead = getEntry >=> getRead
-
-projectCommentary = getEntry >=> getCommentary
-
-projectPhrase = getEntry >=> getPhrase
-
-projectDialogue = getEntry >=> getDialogue
-
-project :: LogEntry -> Maybe DefQuery
-project (TabTsEntry (_, _, (Def dq))) = Just dq
-project _ = Nothing
-
-projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
-projectDef (TabTsEntry (_, _, (Def dq))) =
-  case dq of
-    Defn mPg headwords -> flip (,) Nothing <$> headwords
-    InlineDef hw meaning -> [(hw, Just meaning)]
-    DefVersus hw m hw' m' -> [(hw, Just m), (hw', Just m')]
-projectDef _ = []
-
---search :: Day -> Parser Input
---search today = do
---  w <- (subRelDur today <$> within) 
---  ds <- defs
---  qs <- quotes
---  ps <- phrases' 
---  dias <- dialogues'
---  let typePreds = [ds, qs, ps, dias]
---  a <- (fmap (flip guardStrSearch typePreds . convertAuthSearch . consumeSearchType) <$> author)
---  t <- (fmap (flip guardStrSearch typePreds . convertTitleSearch . consumeSearchType) <$> title)
---  pure (Input w today a t typePreds)
-
-

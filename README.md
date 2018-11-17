@@ -1,5 +1,69 @@
 # logParse
 
+## What is this?
+
+tl;dr: a reading log parser and search interface
+
+A nascent attempt to solve the what problems arise from defining lots of words,
+forgetting them but not their context, and then becoming rather miffed at
+knowing that one knows a word, when one knew the word, the first letter of the
+word, and, possibly, the author or title of the book which contained the word,
+and being *still* unable to find said word. logParse attempts to solve this by
+(a) making more profitable the keeping of a reading log and (b) providing a
+still buggy but otherwise helpful--and extremely colorful--search interface to
+relieve a vocabulary's growing pains.
+
+## Installation 
+Depends on [stack](https://docs.haskellstack.org/en/stable/README/). (Built with version
+1.71.)
+
+Clone, build and initialize config, cache, and log directory.
+```bash
+git clone https://gitlab.com/metaporia/logParse.git
+cd logParse
+git checkout <release-tag> # e.g., v0.1.0
+stack build --copy-bins # or omit `--copy-bins` and link/copy yourself 
+logParse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, 
+```
+
+## Log
+
+I use the following command to log (with nvim):
+```bash
+#!/usr/bin/env bash
+nvim +:last -- ~/.muse/entries/{*,`today`}
+```
+
+Additionally, I have the following bindings in my .vimrc/init.vim:
+```vim
+" create filetype trigger for bindings
+au BufEnter ~/.muse/entries/* setfiletype muse
+
+" generates a timestamp, e.g., '15:25:52 λ. '
+au FileType muse nnoremap <buffer> <leader>t Go<C-r>=strftime("%H:%M:%S λ. ")<CR>
+
+" inserts separator; see definition comparison. 
+au FileType muse nnoremap <buffer> <leader>v o<Esc>16i <Esc>a--- vs ---<Esc>o
+
+" sets errorformat (WIP) so logParse errors can be viewed in vim's quickfix
+" window
+au FileType muse setlocal efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#,%+C>\ %.%#
+```
+
+## Parse
+
+After writing logs to ~/.muse/entries, parse them:
+```bash
+logParse parse --all --ignore-cache
+```
+
+And behold how spectacularly you flubbed things w.r.t. grammar compliance.
+More seriously, there are several parser combinators that silently fail--please
+report as bugs any such seemingly misguided decisions by the parser. Inclusion
+of both the input log and the JSON output and/or any error messages is
+appreciated.
+
+
 ## Search Syntax
 
 Note that this is merely (a potentially outdated) the CLI's help information.

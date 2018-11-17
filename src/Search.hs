@@ -23,7 +23,7 @@ import Data.Bifunctor
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.List (intercalate, isInfixOf, sort)
-import Data.Maybe (catMaybes, isJust, isNothing)
+import Data.Maybe (catMaybes, fromJust, isJust, isNothing)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -48,8 +48,8 @@ import qualified Text.Trifecta.Result as Tri
 data Input = Input
   { startDateTime :: Day
   , endDateTime :: Day
-  , authorPred :: Maybe (Author -> Bool)
-  , titlePred :: Maybe (Title -> Bool)
+  , authorPred :: Maybe (LogEntry -> Bool)
+  , titlePred :: Maybe (LogEntry -> Bool)
   , predicates :: [Maybe (LogEntry -> Bool)]
   }
 
@@ -241,67 +241,78 @@ filterWith :: Input -> [LogEntry] -> [LogEntry]
 filterWith _ [] = []
 filterWith input l@(x:xs)
   -- no search predicates
-  | null (catMaybes (predicates input)) = isRequested input l
+  -- | null (catMaybes (predicates input)) = isRequested input l
   -- toplevel read entry, essentially tags nested entries with auth/title attr;
   -- these are collected
   | doesReadSatisfy input x =
     case x of
-      TabTsEntry (tabs, _, _) ->
-        let (belong, rest) = takeWhileRest (doesEntryBelongToParent tabs) xs
-        in (x : isRequested input belong) ++ filterWith input rest
+      TabTsEntry (tabs, _, _)
+        -- TODO take entries which belong AND satisfy `preds` (not title/auth since
+        -- those qualified the `Read` entry).
+       ->
+        let (belong, rest) =
+              takeWhileRestWithFilter
+                (doesEntryBelongToParent tabs)
+                (variantSatisfies input)
+                xs
+        -- TODO move `isRequested` filter into `doesEntryBelongToParent`
+        in (x : belong) ++ filterWith input rest
+        --in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
-  | satisfies input x && applyPreds' input x =
-    x : filterWith input xs -- require `isToplevel`?
+  | satisfies input x = x : filterWith input xs -- require `isToplevel`?
   | otherwise = filterWith input xs
 
-isTopLevel :: LogEntry -> Bool
+-- TODO 
+takeWhileRestWithFilter ::
+     (a -> Bool) -- take until this fails
+  -> (a -> Bool) -- skip those that fail this
+  -> [a]
+  -> ([a], [a])
+takeWhileRestWithFilter _ _ [] = ([], [])
+takeWhileRestWithFilter continue take (x:xs)
+  | continue x = go x $ takeWhileRestWithFilter continue take xs
+  | otherwise = ([], (x:xs))
+  where go x (as, bs) 
+          | take x = (x : as, bs)
+          | otherwise = (as, bs)
+
 isTopLevel (Dump _) = True
 isTopLevel (TabTsEntry (tabs, _, _))
   | tabs == 0 = True
   | otherwise = False
 
--- | Determines whether a quote entry satisfies the search predicates specified by a
--- given `Input`.
-satisfies :: Input -> LogEntry -> Bool
-satisfies (Input _ _ ap tp _) le =
-  let res =
-        projectQuotation le >>=
-        return .
-        (\(q, attr, _) ->
-           case (ap <*> pure attr, tp <*> pure attr) of
-             (Just t, Just a) -> t && a
-             (Just t, Nothing) -> t
-             (Nothing, Just a) -> a
-             (Nothing, Nothing) -> True)
-  in case res of
-       Just b -> b
-       Nothing -> True
-
 -- | Filters out entries not of the requested type (requests received via
 -- --definitions and --quotations flags). 
 isRequested :: Input -> [LogEntry] -> [LogEntry]
-isRequested = applyPreds . predicates
+isRequested = filter . satisfies
 
---isRequested (Input _ _ _ _ True True _ _) = filter (\l -> isDef l || isQuote l) -- get defs and quotes
---isRequested (Input _ _ _ _ True False _ _) = filter isDef -- get defs
---isRequested (Input _ _ _ _ False True _ _) = filter isQuote -- get quotes
---isRequested (Input _ _ _ _ False False _ _) = id -- get everything
-applyPreds :: [Maybe (LogEntry -> Bool)] -> [LogEntry] -> [LogEntry]
-applyPreds ps =
-  let preds = catMaybes ps
+-- | Applies both string search and variant predicates.
+satisfies :: Input -> LogEntry -> Bool
+satisfies input@(Input _ _ ap tp preds') =
+  let preds = catMaybes (predicates input ++ [ap, tp]) 
   in if null preds
-       then id
-       else filter (\e -> foldr (||) False $ preds <*> [e])
+       then const True -- TODO search bug ??
+       else \e -> foldr (||) False $ preds <*> [e]
 
-applyPreds' :: Input -> LogEntry -> Bool
-applyPreds' input =
+-- | Applies variant predicates (to collect nested entries)
+variantSatisfies :: Input -> LogEntry -> Bool
+variantSatisfies input =
   let preds = catMaybes (predicates input)
   in if null preds
-       then const False
+       then const True -- TODO search bug ??
        else \e -> foldr (||) False $ preds <*> [e]
+
+-- | Applies only string search predicates.
+searchSatisfies :: Input -> LogEntry -> Bool
+searchSatisfies (Input _ _ ap tp _) le
+  | null res = True
+  | otherwise = foldr (&&) True $ catMaybes res
+  where res = [ap <*> pure le, tp <*> pure le]
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
+
+isRead = isJust . projectRead
 
 isQuote :: LogEntry -> Bool
 isQuote = isJust . projectQuotation
@@ -332,16 +343,18 @@ doesTitleSatisfy _ _ = False
 -- | For each present read predicate (a.t.m. only on author and title strings)
 -- apply both to `LogEntry` if it's `Read` of `Entry`.
 doesReadSatisfy :: Input -> LogEntry -> Bool
-doesReadSatisfy (Input _ _ ap tp _) le =
-  case getEntry le >>= getRead of
-    Just (t, a) ->
-      case (tp <*> pure t, ap <*> pure a) of
+doesReadSatisfy input le
+  | isRead le = searchSatisfies input le
+  | otherwise = False
+
+doesEntryMatchSearches :: Input -> LogEntry -> Bool
+doesEntryMatchSearches (Input _ _ ap tp _) le =
+      case (tp <*> pure le, ap <*> pure le) of
         (Just t, Just a) -> t && a
         (Just t, Nothing) -> t
         (Nothing, Just a) -> a
-        (Nothing, Nothing) -> True -- w/o predicates validate all reads
-    Nothing -> False
-   --   x = fmap first tp <*> (fmap second ap <*> pair)
+        (Nothing, Nothing) -> False -- w/o aut/title predicates, 
+
 
 -- | Takes parent (read entry's) indentation level, a log entry
 doesEntryBelongToParent :: Int -> LogEntry -> Bool
@@ -446,7 +459,59 @@ dia =
 
 input ap tp preds = do
   d <- utctDay <$> getCurrentTime
-  return $ Input d d ap tp preds
+  return $ Input d d (convertAuth preds <$> ap) (convertTitle preds <$> tp) preds
+
+convertAuth preds = flip guardStrSearch preds . convertAuthSearch
+convertTitle preds = flip guardStrSearch preds . convertTitleSearch 
+
+
+-- | Consumes title or author serach string and type predicates (e.g., `isDef`,
+-- `isQuote`, etc.) and creates a composite predicate that will only apply the
+-- former where the latter have succeeded.
+guardStrSearch ::
+     (LogEntry -> Bool) -- converted auth/title string search
+  -> [Maybe (LogEntry -> Bool)] -- `LogEntry` variant preds
+  -> (LogEntry -> Bool)
+guardStrSearch strSearch typePreds
+  | null typePreds = strSearch
+  | otherwise =
+    \e -> strSearch e && (foldr (||) False $ (catMaybes typePreds) <*> pure e)
+
+-- | Generates `LogEntry` predicate from string predicate.
+--
+-- This only applies string searches to `Quotation`s and `Read`s.
+convertAuthSearch :: (Author -> Bool) -> LogEntry -> Bool
+convertAuthSearch authPred le 
+-- how safe is this?
+  | isJust read = 
+    let (_, a) = fromJust read 
+     in authPred a
+  | isJust quote = 
+    let (_, attr, _) = fromJust quote
+     in authPred attr
+  | otherwise = False
+  where read = projectRead le
+        quote = projectQuotation le
+
+-- | Generates `LogEntry` predicate from string predicate.
+--
+-- This only applies string searches to `Quotation`s and `Read`s.
+convertTitleSearch :: (Title -> Bool) -> LogEntry -> Bool
+convertTitleSearch titlePred le 
+-- how safe is this?
+  | isJust read = 
+    let (t, _) = fromJust read 
+     in titlePred t
+  | isJust quote = 
+    let (_, attr, _) = fromJust quote
+     in titlePred attr
+  | otherwise = False
+  where read = projectRead le
+        quote = projectQuotation le
+
+
+
+
 
 defInp = input Nothing Nothing []
 
@@ -506,3 +571,17 @@ projectDef (TabTsEntry (_, _, (Def dq))) =
     InlineDef hw meaning -> [(hw, Just meaning)]
     DefVersus hw m hw' m' -> [(hw, Just m), (hw', Just m')]
 projectDef _ = []
+
+--search :: Day -> Parser Input
+--search today = do
+--  w <- (subRelDur today <$> within) 
+--  ds <- defs
+--  qs <- quotes
+--  ps <- phrases' 
+--  dias <- dialogues'
+--  let typePreds = [ds, qs, ps, dias]
+--  a <- (fmap (flip guardStrSearch typePreds . convertAuthSearch . consumeSearchType) <$> author)
+--  t <- (fmap (flip guardStrSearch typePreds . convertTitleSearch . consumeSearchType) <$> title)
+--  pure (Input w today a t typePreds)
+
+

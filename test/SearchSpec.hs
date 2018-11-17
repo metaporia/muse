@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
- -----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
 -- |
 -- Module      :  SearchSpec
 -- Copyright   :  2018 Keane Yahn-Kraft
@@ -23,45 +24,127 @@ import Render
 import Search
 import Test.Hspec
 import Text.RawString.QQ
-import qualified Text.Trifecta.Result as Tri
-import Text.Trifecta
 import Text.Show.Pretty (pPrint)
+import Text.Trifecta
+import qualified Text.Trifecta.Result as Tri
 
--- `--definitions` collects all toplevel entries
+-- ▣  `--definitions` collects all toplevel entries
+-- □  `--author` and `--title` predicates disable all filtration
+--
+showTest ap tp preds = test ap tp preds >>= showAll
 
-showTest = showAll . flip filterWith tDialogueFilter
-
-test ap tp preds = flip filterWith tDialogueFilter  <$> input ap tp preds 
+test ap tp preds = flip filterWith tDialogueFilter <$> input ap tp preds
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
 spec :: Spec
 spec = do
 
-    describe "dialogue quote filtration" $ do
-      it "tGetDialogueOrQuote" $
-        example $ do
-          tGetDialogueOrQuote >>= (`shouldBe` tGetDialogueOrQuoteOut)
+  -- entry variant preds
+  describe "satisfies tests" $ do
+    it "satisfies isDef" $
+      example $ do
+        (flip satisfies tDef <$> input Nothing Nothing [Just isDef]) >>=
+          (`shouldBe` True)
 
-    describe "dialogue filtration" $ do
-      it "tGetDialogue" $
-        example $ do
-          tGetDialogue >>= (`shouldBe` tGetDialogueOut)
+  describe "satisfies tests" $ do
+    it "satisfies isQuote" $
+      example $ do
+        (flip satisfies tQuote <$> input Nothing Nothing [Just isQuote]) >>=
+          (`shouldBe` True)
 
-    describe "definition filtration" $ do
-      it "tDefs" $
-        example $ do
-          test Nothing Nothing [Just isDef] >>= (`shouldBe` tDefs)
+  describe "satisfies tests" $ do
+    it "satisfies isDialogue" $
+      example $ do
+        (flip satisfies tDialogue' <$> input Nothing Nothing [Just isDialogue]) >>=
+          (`shouldBe` True)
 
-    describe "quote filtration" $ do
-      it "tQuotes" $
-        example $ do
-          test Nothing Nothing [Just isQuote] >>= (`shouldBe` tQuotes)
+  describe "satisfies tests" $ do
+    it "satisfies isPhrase" $
+      example $ do
+        (flip satisfies tPhrase <$> input Nothing Nothing [Just isPhrase]) >>=
+          (`shouldBe` True)
 
-    describe "phrases filtration" $ do
-      it "tPhrases" $
-        example $ do
-          test Nothing Nothing [Just isPhrase] >>= (`shouldBe` tPhrases)
+  describe "satisfies tests" $ do
+    it "satisfies isDef or isQuote" $
+      example $ do
+        (flip satisfies tDef <$> input Nothing Nothing [Just isDef, Just isQuote]) >>=
+          (`shouldBe` True)
+
+  describe "satisfies tests" $ do
+    it "satisfies isQuote or isDialogue or isPhrase" $
+      example $ do
+        (flip satisfies tQuote <$>
+         input Nothing Nothing [Just isQuote, Just isDialogue, Just isPhrase]) >>=
+          (`shouldBe` True)
+
+  describe "satisfies tests" $ do
+    it "satisfies isDialogue or isDef" $
+      example $ do
+        (flip satisfies tDialogue' <$> input Nothing Nothing [Just isDialogue, Just isDef]) >>=
+          (`shouldBe` True)
+
+  -- string search 
+  describe "satisfies auth \"Woolf\"" $ do
+    it "satisfies w auth search" $
+      example $ do
+        (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+          (`shouldBe` True)
+
+  -- string search 
+  describe "satisfies auth \"Woolf\" but only return defs" $ do
+    it "satisfies w auth search" $
+      example $ do
+        (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [Just isDef]) >>=
+          (`shouldBe` False)
+
+  describe "doesEntryMatchSearches \"Woolf\"" $ do
+    it "satisfies w auth search" $
+      example $ do
+        (flip doesEntryMatchSearches tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+          (`shouldBe` True)
+
+  -- string search 
+  describe "satisfies auth \"Woolf\" but only return quotes" $ do
+    it "satisfies w auth search" $
+      example $ do
+        (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [Just isQuote]) >>=
+          (`shouldBe` True)
+
+
+  describe "all type filters applied" $ do
+    it "all" $
+      example $ do
+        test
+          Nothing
+          Nothing
+          [Just isPhrase, Just isQuote, Just isDef, Just isDialogue] >>=
+          (`shouldBe` tDialogueFilter)
+
+  describe "dialogue quote filtration" $ do
+    it "tGetDialogueOrQuote" $
+      example $ do
+        test Nothing Nothing [Just isQuote, Just isDialogue] >>=
+          (`shouldBe` tGetDialogueOrQuoteOut)
+
+  describe "dialogue filtration" $ do
+    it "tGetDialogue" $
+      example $ do
+        test Nothing Nothing [Just isDialogue] >>= (`shouldBe` tGetDialogueOut)
+  describe "definition filtration" $ do
+    it "tDefs" $
+      example $ do test Nothing Nothing [Just isDef] >>= (`shouldBe` tDefs)
+  describe "quote filtration" $ do
+    it "tQuotes" $
+      example $ do test Nothing Nothing [Just isQuote] >>= (`shouldBe` tQuotes)
+  describe "phrases filtration" $ do
+    it "tPhrases" $
+      example $ do
+        test Nothing Nothing [Just isPhrase] >>= (`shouldBe` tPhrases)
+  describe "author match (for this test data should return all)" $ do
+    it "tAuthor" $
+      example $ do
+        test (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
 
 tGetDialogueOrQuote :: IO [LogEntry]
 tGetDialogueOrQuote = do
@@ -69,7 +152,7 @@ tGetDialogueOrQuote = do
   return $ filterWith i tDialogueFilter
 
 tGetDialogue :: IO [LogEntry]
-tGetDialogue= do
+tGetDialogue = do
   i <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
   i' <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
   return $ filterWith i tDialogueFilter
@@ -116,19 +199,16 @@ tGetDialogueOut =
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf")
-  
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf")
- , TabTsEntry
+  , TabTsEntry
       ( 0
       , TimeStamp {hr = 8, min = 34, sec = 34}
       , Dialogue
           "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
- ]
-
-
+  ]
 
 tDialogueFilter :: [LogEntry]
 tDialogueFilter =
@@ -259,7 +339,7 @@ tDefs =
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"]))
   ]
-  
+
 tQuotes :: [LogEntry]
 tQuotes =
   [ TabTsEntry
@@ -307,3 +387,97 @@ tPhrases =
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf")
   ]
+
+tAuthor :: [LogEntry]
+tAuthor =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 55, sec = 17}
+      , Def
+          (DefVersus
+             "benignant"
+             "kind; gracious; favorable;"
+             "benign"
+             "gentle, mild, or, medically, non-threatening"))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 11, sec = 45}
+      , Def
+          (DefVersus
+             "malignant"
+             "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+             "malign"
+             "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 18, sec = 12}
+      , Def (Defn (Just 38) ["sublime", "lintel"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
+          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "Her simplicity fathomed what clever people falsified."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 28, sec = 49}
+      , Def (Defn Nothing ["plover"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 10, min = 49, sec = 58}
+      , Quotation
+          "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          (Just 38))
+  ]
+
+tDef =
+  TabTsEntry
+    (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
+
+tQuote =
+  TabTsEntry
+    ( 0
+    , TimeStamp {hr = 10, min = 49, sec = 58}
+    , Quotation
+        "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        (Just 38))
+
+tDialogue' =
+  TabTsEntry
+    ( 0
+    , TimeStamp {hr = 8, min = 34, sec = 34}
+    , Dialogue
+        "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
+tPhrase =
+  TabTsEntry
+    ( 1
+    , TimeStamp {hr = 10, min = 17, sec = 40}
+    , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
+
+

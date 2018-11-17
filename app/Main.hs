@@ -20,7 +20,7 @@ import           Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import           Data.List (isPrefixOf, isInfixOf, isSuffixOf, sort, intercalate)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, isJust, fromJust)
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -129,24 +129,38 @@ subRelDur day (RelDur y m d) =
   addGregorianMonthsRollOver (negate m) . addDays (negate d) $
   day
 
-search :: Day -> Parser Input
-search today = do
-  w <- (subRelDur today <$> within) 
-  a <- (fmap consumeSearchType <$> author)
-  t <- (fmap consumeSearchType <$> title)
-  (ds, qs, ps, dias) <- (,,,) <$> defs <*> quotes <*> phrases' <*> dialogues'
-  return $ Input w today a t [ds, qs, ps, dias]
+-- | Represents filters and entry maps extracted from CLI invocation.
+-- Ugly applicative-do parse error workaround--it couldn't handle the input
+-- conversion inside a do block.
+data TmpInput = TmpInput
+  { startDateTime :: Day
+  , endDateTime :: Day
+  , authorPred :: Maybe (Author -> Bool)
+  , titlePred :: Maybe (Title -> Bool)
+  , predicates :: [Maybe (LogEntry -> Bool)]
+  }
 
-search' today = do
-  w <- (subRelDur today <$> within)
-  a <- (fmap consumeSearchType <$> author)
-  t <- (fmap consumeSearchType <$> title)
-  (ds, qs, ps, dias) <-
-    (,,,) <$> (fmap . fmap) (const "Defs") defs <*>
-    (fmap . fmap) (const "qs") quotes <*>
-    (fmap . fmap) (const "ps") phrases' <*>
-    (fmap . fmap) (const "dias") dialogues'
-  return $ (,,,,) w today a t [ds, qs, ps, dias]
+searchTmp :: Day -> Parser TmpInput
+searchTmp today = do
+ w <- (subRelDur today <$> within) 
+ ds <- defs
+ qs <- quotes
+ ps <- phrases' 
+ dias <- dialogues'
+ a <- fmap consumeSearchType <$> author
+ t <- fmap consumeSearchType <$> title
+ pure (TmpInput w today a t [ds, qs, ps, dias])
+    
+
+toInput :: TmpInput -> Input
+toInput (TmpInput s e ap tp preds) = 
+  let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
+      tp' = flip guardStrSearch preds . convertTitleSearch <$> ap
+  in Input s e ap' tp' preds
+
+search :: Day -> Parser Input
+search d = toInput <$> searchTmp d
+    
 
 dispatchSearchType :: Eq a => SearchType -> [a] -> [a] ->  Bool
 dispatchSearchType Prefix = isPrefixOf
@@ -321,14 +335,6 @@ main = do
   today <- utctDay <$> getCurrentTime
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
-
-main' :: IO ()
-main' = do
-  today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> search' today) (fullDesc <> header "preds test")) 
-    >>= \(_, _, _, _, preds)  -> putStrLn . show $ preds
-
-
 
 showDebug = True
 

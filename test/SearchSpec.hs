@@ -49,9 +49,19 @@ spec = do
           tGetDialogue >>= (`shouldBe` tGetDialogueOut)
 
     describe "definition filtration" $ do
-      it "tGetDialogue" $
+      it "tDefs" $
         example $ do
           test Nothing Nothing [Just isDef] >>= (`shouldBe` tDefs)
+
+    describe "quote filtration" $ do
+      it "tQuotes" $
+        example $ do
+          test Nothing Nothing [Just isQuote] >>= (`shouldBe` tQuotes)
+
+    describe "phrases filtration" $ do
+      it "tPhrases" $
+        example $ do
+          test Nothing Nothing [Just isPhrase] >>= (`shouldBe` tPhrases)
 
 tGetDialogueOrQuote :: IO [LogEntry]
 tGetDialogueOrQuote = do
@@ -150,6 +160,10 @@ tDialogueFilter =
       , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
   , TabTsEntry
       ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
+  , TabTsEntry
+      ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
       , Def (Defn (Just 38) ["sublime", "lintel"]))
   , TabTsEntry
@@ -195,6 +209,7 @@ tDialogueFilter =
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
+
 tDefs :: [LogEntry]
 tDefs =
   [ TabTsEntry
@@ -243,4 +258,52 @@ tDefs =
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"]))
+  ]
+  
+tQuotes :: [LogEntry]
+tQuotes =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
+          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "Her simplicity fathomed what clever people falsified."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 10, min = 49, sec = 58}
+      , Quotation
+          "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          (Just 38))
+  ]
+
+tPhrases =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
   ]

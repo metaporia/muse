@@ -28,12 +28,12 @@ import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import qualified Text.Trifecta.Result as Tri
 
--- ▣  `--definitions` collects all toplevel entries
--- □  `--author` and `--title` predicates disable all filtration
---
-showTest ap tp preds = test ap tp preds >>= showAll
+-- `--author` and `--quotations` flags disable (some) filtration
 
-test ap tp preds = flip filterWith tDialogueFilter <$> input ap tp preds
+showTest ap tp preds = test' ap tp preds >>= showAll
+
+test' ap tp preds = flip filterWith' sample <$> input ap tp preds
+test ap tp preds = flip filterWith' tDialogueFilter <$> input ap tp preds
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
@@ -101,7 +101,7 @@ spec = do
   describe "doesEntryMatchSearches \"Woolf\"" $ do
     it "satisfies w auth search" $
       example $ do
-        (flip doesEntryMatchSearches tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+        (flip searchSatisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
           (`shouldBe` True)
 
   -- string search 
@@ -110,7 +110,12 @@ spec = do
       example $ do
         (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [Just isQuote]) >>=
           (`shouldBe` True)
-
+  -- string search 
+  describe "doesReadSatisfy `Read`" $ do
+    it "doesReadSatisfy" $
+      example $ do
+        (flip doesReadSatisfy tRead <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+          (`shouldBe` True)
 
   describe "all type filters applied" $ do
     it "all" $
@@ -145,6 +150,14 @@ spec = do
     it "tAuthor" $
       example $ do
         test (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
+
+  -- combined type and search preds
+
+  describe "-a Woolf -q" $ do
+    it "tQuote" $
+      example $ do
+        test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote] >>= (`shouldBe` authAndQuote)
+
 
 tGetDialogueOrQuote :: IO [LogEntry]
 tGetDialogueOrQuote = do
@@ -481,3 +494,120 @@ tPhrase =
     , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
 
 
+sample :: [LogEntry]
+sample =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 55, sec = 17}
+      , Def
+          (DefVersus
+             "benignant"
+             "kind; gracious; favorable;"
+             "benign"
+             "gentle, mild, or, medically, non-threatening"))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 11, sec = 45}
+      , Def
+          (DefVersus
+             "malignant"
+             "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+             "malign"
+             "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 18, sec = 12}
+      , Def (Defn (Just 38) ["sublime", "lintel"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
+          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "Her simplicity fathomed what clever people falsified."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 28, sec = 49}
+      , Def (Defn Nothing ["plover"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 10, min = 28, sec = 49}
+      , Def (Defn Nothing ["ploverToplevel"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 47, sec = 59}
+      , Def (Defn Nothing ["cosmogony"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 8, min = 34, sec = 34}
+      , Dialogue
+          "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 10, min = 49, sec = 58}
+      , Quotation
+          "I am merely coping with the collosal shame of having found out that I exist."
+          "Keane Yahn-Krafft"
+          (Just 38))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "I'm alive and it's not my fault, which means I must go on living the best I can,without bothering anybody, until I die."
+          "In \"War and Peace\" by Leo Tolstoy"
+          Nothing)
+  ]
+
+authAndQuote =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
+          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation
+          "Her simplicity fathomed what clever people falsified."
+          "In \"To the Lighthouse\", by Virginia Woolf"
+          Nothing)
+    ]
+
+tRead =
+  TabTsEntry
+    ( 0
+    , TimeStamp {hr = 9, min = 55, sec = 6}
+    , Read "To the Lighthouse" "Virginia Woolf")

@@ -366,7 +366,7 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
               loadFiles (cachePath . dayToPath <$> dates) >>=
               return . catMaybes . decodeEntries
               -- TODO print date above each days `[LogEntry]`
-            filtered = concat . fmap (filterWith input) <$> entries
+            filtered = concat . fmap (filterWith' input) <$> entries
         return filtered
   filtered <- join dateFilter
   if debug then putStrLn $

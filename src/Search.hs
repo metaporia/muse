@@ -140,8 +140,11 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 filterWith :: Input -> [LogEntry] -> [LogEntry]
 filterWith _ [] = []
 filterWith input l@(x:xs)
-  -- no search predicates
-  -- | null (catMaybes (predicates input)) = isRequested input l
+  -- no type predicates
+  | null (catMaybes (predicates input)) =
+    if satisfies' input x
+      then x : filterWith input xs
+      else filterWith input xs
   -- toplevel read entry, essentially tags nested entries with auth/title attr;
   -- these are collected
   | doesReadSatisfy input x =
@@ -153,14 +156,42 @@ filterWith input l@(x:xs)
         let (belong, rest) =
               takeWhileRestWithFilter
                 (doesEntryBelongToParent tabs)
-                (variantSatisfies input)
+                (satisfies' input)
                 xs
         -- TODO move `isRequested` filter io `doesEntryBelongToParent`
         in (x : belong) ++ filterWith input rest
         --in (x : isRequested input belong) ++ filterWith input rest
   -- collect toplevel quotes that satisfy
-  | satisfies input x = x : filterWith input xs -- require `isToplevel`?
+  | satisfies' input x = x : filterWith input xs -- require `isToplevel`?
   | otherwise = filterWith input xs
+
+filterWith' :: Input -> [LogEntry] -> [LogEntry]
+filterWith' _ [] = []
+filterWith' input (x:xs)
+  -- no string search predicates; does no recurse
+  | isNothing (titlePred input) && isNothing (authorPred input) =
+    filter (\e -> isRead e || variantSatisfies input e) (x : xs)
+  -- string search preds present; type preds poss.
+  -- that is, collect entries which are nested w `variantSatisfies`; outside of
+  -- nested collect nothing but quotations or read entries that satisfy
+  -- (`searchSatisfy`)
+  | otherwise = go (x : xs)
+  where
+    go [] = []
+    go ((Dump _):xs) = go xs
+    go (x@(TabTsEntry (tabs, _, _)):xs)
+      -- collect nested
+      | doesReadSatisfy input x =
+        let (belong, rest) =
+              takeWhileRestWithFilter
+                (doesEntryBelongToParent tabs)
+                (variantSatisfies input)
+                xs
+        -- inside filter; include read entries 
+        -- do not recurse to `filterWith`; lack of search preds holds.
+        in (x : belong) ++ go rest
+      | searchSatisfies' input x = x : go xs
+      | otherwise = go xs
 
 -- TODO 
 takeWhileRestWithFilter ::
@@ -184,6 +215,13 @@ satisfies input@(Input _ _ ap tp preds') =
        then const True -- TODO search bug ??
        else \e -> foldr (||) False $ preds <*> [e]
 
+-- | Applies both string search and variant predicates.
+satisfies' :: Input -> LogEntry -> Bool
+satisfies' input le
+  | isQuote le || isRead le =
+    searchSatisfies input le && variantSatisfies input le
+  | otherwise = variantSatisfies input le
+
 -- | Applies variant predicates (to collect nested entries)
 variantSatisfies :: Input -> LogEntry -> Bool
 variantSatisfies input =
@@ -196,6 +234,13 @@ variantSatisfies input =
 searchSatisfies :: Input -> LogEntry -> Bool
 searchSatisfies (Input _ _ ap tp _) le
   | null res = True
+  | otherwise = foldr (&&) True $ catMaybes res
+  where res = [ap <*> pure le, tp <*> pure le]
+
+-- | Applies only string search predicates.
+searchSatisfies' :: Input -> LogEntry -> Bool
+searchSatisfies' (Input _ _ ap tp _) le
+  | null res = False
   | otherwise = foldr (&&) True $ catMaybes res
   where res = [ap <*> pure le, tp <*> pure le]
 
@@ -226,7 +271,8 @@ doesTitleSatisfy _ _ = False
 -- apply both to `LogEntry` if it's `Read` of `Entry`.
 doesReadSatisfy :: Input -> LogEntry -> Bool
 doesReadSatisfy input le
-  | isRead le = searchSatisfies input le
+  | isRead le =
+    foldr (||) False $ (catMaybes . fmap (Just input >>=) $ [authorPred, titlePred]) <*> pure le
   | otherwise = False
 
 -- | Takes parent (read entry's) indentation level, a log entry
@@ -238,7 +284,8 @@ doesEntryBelongToParent tabs (TabTsEntry (tabs', _, _))
 
 -- | Consumes title or author serach string and type predicates (e.g., `isDef`,
 -- `isQuote`, etc.) and creates a composite predicate that will only apply the
--- former where the latter have succeeded.
+-- former where the latter have succeeded. Includes "Read" entries by default,
+-- for labelling.
 guardStrSearch ::
      (LogEntry -> Bool) -- converted auth/title string search
   -> [Maybe (LogEntry -> Bool)] -- `LogEntry` variant preds
@@ -246,7 +293,7 @@ guardStrSearch ::
 guardStrSearch strSearch typePreds
   | null typePreds = strSearch
   | otherwise =
-    \e -> strSearch e && (foldr (||) False $ (catMaybes typePreds) <*> pure e)
+    \e -> strSearch e && (foldr (||) False $ (isRead : catMaybes typePreds) <*> pure e)
 
 -- | Generates `LogEntry` predicate from string predicate.
 --

@@ -66,7 +66,7 @@ appreciated.
 
 ## Search Syntax
 
-Note that this is merely (a potentially outdated) the CLI's help information.
+Note that this is merely (a potentially outdated version of) the CLI's help information.
 
 ```
 Usage: muse search [-w|--within REL_DATE] [-a|--author SUBSTR]

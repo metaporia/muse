@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, TupleSections, MultiWayIf #-}
+  OverloadedStrings, TupleSections, MultiWayIf, QuasiQuotes #-}
  -----------------------------------------------------------------------------
 
 -- |
@@ -40,10 +40,10 @@ import Prelude hiding (log, lookup, min)
 import System.Directory
        (createDirectoryIfMissing, doesFileExist, listDirectory)
 import System.Environment (getEnv)
+import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
-
 -- | Represents filters and entry maps extracted from CLI invocation.
 data Input = Input
   { startDateTime :: Day
@@ -137,34 +137,6 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 -- | Where there is neither a title predicate nor an author predicate, applies
 -- only variant (a.t.m. def and quote) filters; otherwise, where there is at
 -- least one `Read` predicate, filters by nesting and applies variant filters.
-filterWith :: Input -> [LogEntry] -> [LogEntry]
-filterWith _ [] = []
-filterWith input l@(x:xs)
-  -- no type predicates
-  | null (catMaybes (predicates input)) =
-    if satisfies' input x
-      then x : filterWith input xs
-      else filterWith input xs
-  -- toplevel read entry, essentially tags nested entries with auth/title attr;
-  -- these are collected
-  | doesReadSatisfy input x =
-    case x of
-      TabTsEntry (tabs, _, _)
-        -- TODO take entries which belong AND satisfy `preds` (not title/auth since
-        -- those qualified the `Read` entry).
-       ->
-        let (belong, rest) =
-              takeWhileRestWithFilter
-                (doesEntryBelongToParent tabs)
-                (satisfies' input)
-                xs
-        -- TODO move `isRequested` filter io `doesEntryBelongToParent`
-        in (x : belong) ++ filterWith input rest
-        --in (x : isRequested input belong) ++ filterWith input rest
-  -- collect toplevel quotes that satisfy
-  | satisfies' input x = x : filterWith input xs -- require `isToplevel`?
-  | otherwise = filterWith input xs
-
 filterWith' :: Input -> [LogEntry] -> [LogEntry]
 filterWith' _ [] = []
 filterWith' input (x:xs)
@@ -465,3 +437,4 @@ testLogWithDumpOutput =
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
+

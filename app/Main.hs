@@ -155,7 +155,7 @@ searchTmp today = do
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) = 
   let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
-      tp' = flip guardStrSearch preds . convertTitleSearch <$> ap
+      tp' = flip guardStrSearch preds . convertTitleSearch <$> tp
   in Input s e ap' tp' preds
 
 search :: Day -> Parser Input
@@ -376,7 +376,7 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
     "end date: " ++ show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize
     else return ()
   putStrLn "predicates:"
-  pPrint (filterWith input testLogWithDumpOutput)
+  pPrint (filterWith' input testLogWithDumpOutput)
 
   -- TODO map quote, def, projections as requested
   sequence_ . fmap (colRender colorize) $ filtered

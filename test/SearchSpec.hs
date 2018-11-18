@@ -1,5 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -21,6 +20,7 @@ import Parse
 import Parse.Entry
 import Prelude hiding (min)
 import Render
+import Text.RawString.QQ
 import Search
 import Test.Hspec
 import Text.RawString.QQ
@@ -31,6 +31,7 @@ import qualified Text.Trifecta.Result as Tri
 -- `--author` and `--quotations` flags disable (some) filtration
 
 showTest ap tp preds = test' ap tp preds >>= showAll
+showTest' s ap tp preds = flip filterWith' s <$> input ap tp preds >>= showAll
 
 test' ap tp preds = flip filterWith' sample <$> input ap tp preds
 test ap tp preds = flip filterWith' tDialogueFilter <$> input ap tp preds
@@ -151,24 +152,30 @@ spec = do
       example $ do
         test (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
 
-  -- combined type and search preds
-
+  -- auth & type 
   describe "-a Woolf -q" $ do
     it "tQuote" $
       example $ do
         test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote] >>= (`shouldBe` authAndQuote)
 
+  -- title 
+  --describe "-t Lighthouse Woolf" $ do
+  --  it "tQuote" $
+  --    example $ do
+  --      test' Nothing (Just $ isInfixOf "Lighthouse") [] >>= (`shouldBe` tTitle)
+
+
 
 tGetDialogueOrQuote :: IO [LogEntry]
 tGetDialogueOrQuote = do
   i <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue, Just isQuote]
-  return $ filterWith i tDialogueFilter
+  return $ filterWith' i tDialogueFilter
 
 tGetDialogue :: IO [LogEntry]
 tGetDialogue = do
   i <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
   i' <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
-  return $ filterWith i tDialogueFilter
+  return $ filterWith' i tDialogueFilter
 
 tGetDialogueOrQuoteOut =
   [ TabTsEntry
@@ -499,7 +506,7 @@ sample =
   [ TabTsEntry
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
-      , Read "To the Lighthouse" "Virginia Woolf")
+      , Read "To the Windmill" "Virginia Woolf")
   , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 55, sec = 17}
@@ -585,7 +592,7 @@ authAndQuote =
   [ TabTsEntry
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
-      , Read "To the Lighthouse" "Virginia Woolf")
+      , Read "To the Windmill" "Virginia Woolf")
   , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}
@@ -611,3 +618,74 @@ tRead =
     ( 0
     , TimeStamp {hr = 9, min = 55, sec = 6}
     , Read "To the Lighthouse" "Virginia Woolf")
+
+
+tTitleStr = [r|
+10:37:15 λ. read "Adam Bede", by George Eliot (Mary Ann Evans)
+    10:37:30 λ. d recusant, recuse
+    10:37:35 λ. d scuttle
+    11:03:53 λ. d provender
+    14:15:58 λ. quotation 
+            
+            "If you trust a man, let him be a bachelor."
+
+            "Adam Bede" by George Eliot (Mary Ann Evans)
+ 
+13:37:15 λ. read "Thank You, Jeeves", by P.G. Wodehouse
+    20:33:48 λ. d barmy
+    20:33:56 λ. quotation
+
+          "Thank you, Jeeves."
+
+          In "Thank You, Jeeves" by P.G. Wodehouse  
+|]
+
+tTitle =  [ TabTsEntry
+      ( 0
+      , TimeStamp { hr = 10 , min = 37 , sec = 15 }
+      , Read "Adam Bede" "George Eliot (Mary Ann Evans)"
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 37 , sec = 30 }
+      , Def (Defn Nothing [ "recusant" , "recuse" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 37 , sec = 35 }
+      , Def (Defn Nothing [ "scuttle" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 11 , min = 3 , sec = 53 }
+      , Def (Defn Nothing [ "provender" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 14 , min = 15 , sec = 58 }
+      , Quotation
+          "If you trust a man, let him be a bachelor."
+          "\"Adam Bede\" by George Eliot (Mary Ann Evans)"
+          Nothing
+      )
+  , TabTsEntry
+      ( 0
+      , TimeStamp { hr = 13 , min = 37 , sec = 15 }
+      , Read "Thank You, Jeeves" "P.G. Wodehouse"
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 33 , sec = 48 }
+      , Def (Defn Nothing [ "barmy" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 33 , sec = 56 }
+      , Quotation
+          "Thank you, Jeeves."
+          "In \"Thank You, Jeeves\" by P.G. Wodehouse  "
+          Nothing
+      )
+  ]
+
+

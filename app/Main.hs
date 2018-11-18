@@ -4,14 +4,14 @@
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Main (logParse-exe)
+-- Module      :  Main (muse)
 -- Copyright   :  2018 Keane Yahn-Kraft
 -- License     :  GPL-3 (see the file LICENSE)
 -- Maintainer  :  kyahnkrafft@me.com
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- This module provides the necessaries for the "logParse" CLI.
+-- This module provides the necessaries for the "muse" CLI.
 -----------------------------------------------------------------------------
 module Main where
 

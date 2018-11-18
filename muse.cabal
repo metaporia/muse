@@ -1,0 +1,125 @@
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: c0ff90ada4776ec252c3b9303f5971f17aa82d2330ffe9cb7666070bb7071fac
+
+name:           muse
+version:        0.1.2
+description:    Please see the README on GitHub at <https://gitlab.com/metaporia/muse#README.md>
+author:         Keane Yahn-Krafft
+maintainer:     kyahnkrafft@me.com
+copyright:      2018 Keane Yahn-Krafft
+license:        GPL-3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+extra-source-files:
+    ChangeLog.md
+    README.md
+
+source-repository head
+  type: git
+  location: https://gitlab.com/metaporia/muse
+
+library
+  exposed-modules:
+      Diff
+      Lib
+      Parse.Entry
+      Parse
+      Helpers
+      Search
+      Render
+  other-modules:
+      Paths_muse
+  hs-source-dirs:
+      src
+  build-depends:
+      QuickCheck
+    , aeson
+    , ansi-terminal
+    , base >=4.7 && <5
+    , bytestring
+    , directory
+    , hspec
+    , lens
+    , mtl >=2.2.2
+    , parsers
+    , pretty-show
+    , raw-strings-qq
+    , split
+    , text
+    , text-metrics
+    , time
+    , transformers
+    , trifecta
+    , word-wrap
+    , yaml-config
+  default-language: Haskell2010
+
+executable muse
+  main-is: Main.hs
+  other-modules:
+      Paths_muse
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , ansi-terminal
+    , base >=4.7 && <5
+    , bytestring
+    , directory
+    , hspec
+    , lens
+    , mtl >=2.2.2
+    , muse
+    , optparse-applicative
+    , parsers
+    , pretty-show
+    , raw-strings-qq
+    , split
+    , text
+    , text-metrics
+    , time
+    , transformers
+    , trifecta
+    , word-wrap
+    , yaml-config
+  default-language: Haskell2010
+
+test-suite muse-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      ParseSpec
+      SearchSpec
+      Paths_muse
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , ansi-terminal
+    , base >=4.7 && <5
+    , bytestring
+    , directory
+    , hspec
+    , lens
+    , mtl >=2.2.2
+    , muse
+    , parsers
+    , pretty-show
+    , raw-strings-qq
+    , split
+    , text
+    , text-metrics
+    , time
+    , transformers
+    , trifecta
+    , word-wrap
+    , yaml-config
+  default-language: Haskell2010

@@ -1,7 +1,7 @@
-name:                logParse
+name:                muse
 version:             0.1.2
 license:             GPL-3
-git:                 https://gitlab.com/metaporia/logParse
+git:                 https://gitlab.com/metaporia/muse
 author:              "Keane Yahn-Krafft"
 maintainer:          "kyahnkrafft@me.com"
 copyright:           "2018 Keane Yahn-Krafft"
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description: Please see the README on GitHub at <https://gitlab.com/metaporia/logParse#README.md>
+description: Please see the README on GitHub at <https://gitlab.com/metaporia/muse#README.md>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -53,7 +53,7 @@ library:
     - Render
 
 executables:
-  logParse-exe:
+  muse:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -61,12 +61,12 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - logParse
+    - muse
     - optparse-applicative
     - time
 
 tests:
-  logParse-test:
+  muse-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -74,7 +74,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - logParse
+    - muse
     - hspec
     - QuickCheck
     - trifecta

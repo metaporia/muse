@@ -1,4 +1,4 @@
-# logParse
+# muse
 
 ## What is this?
 
@@ -8,7 +8,7 @@ A nascent attempt to solve the what problems arise from defining lots of words,
 forgetting them but not their context, and then becoming rather miffed at
 knowing that one knows a word, when one knew the word, the first letter of the
 word, and, possibly, the author or title of the book which contained the word,
-and being *still* unable to find said word. logParse attempts to solve this by
+and being *still* unable to find said word. muse attempts to solve this by
 (a) making more profitable the keeping of a reading log and (b) providing a
 still buggy but otherwise helpful--and extremely colorful--search interface to
 relieve a vocabulary's growing pains.
@@ -19,11 +19,11 @@ Depends on [stack](https://docs.haskellstack.org/en/stable/README/). (Built with
 
 Clone, build and initialize config, cache, and log directory.
 ```bash
-git clone https://gitlab.com/metaporia/logParse.git
-cd logParse
+git clone https://gitlab.com/metaporia/muse.git
+cd muse
 git checkout <release-tag> # e.g., v0.1.0
 stack build --copy-bins # or omit `--copy-bins` and link/copy yourself 
-logParse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, 
+muse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, 
 ```
 
 ## Log
@@ -45,7 +45,7 @@ au FileType muse nnoremap <buffer> <leader>t Go<C-r>=strftime("%H:%M:%S λ. ")<C
 " inserts separator; see definition comparison. 
 au FileType muse nnoremap <buffer> <leader>v o<Esc>16i <Esc>a--- vs ---<Esc>o
 
-" sets errorformat (WIP) so logParse errors can be viewed in vim's quickfix
+" sets errorformat (WIP) so muse errors can be viewed in vim's quickfix
 " window
 au FileType muse setlocal efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#,%+C>\ %.%#
 ```
@@ -54,7 +54,7 @@ au FileType muse setlocal efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#
 
 After writing logs to ~/.muse/entries, parse them:
 ```bash
-logParse parse --all --ignore-cache
+muse parse --all --ignore-cache
 ```
 
 And behold how spectacularly you flubbed things w.r.t. grammar compliance.
@@ -69,7 +69,7 @@ appreciated.
 Note that this is merely (a potentially outdated) the CLI's help information.
 
 ```
-Usage: logParse-exe search [-w|--within REL_DATE] [-a|--author SUBSTR]
+Usage: muse search [-w|--within REL_DATE] [-a|--author SUBSTR]
                            [-t|--title SUBSTR] [-d|--definitions]
                            [-q|--quotations] [-p|--phrases] [-l|--dialogues]
 

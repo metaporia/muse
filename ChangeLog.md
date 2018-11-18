@@ -1,3 +1,3 @@
-# Changelog for logParse
+# Changelog for muse
 
 ## Unreleased changes

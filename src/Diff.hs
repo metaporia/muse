@@ -16,12 +16,12 @@
 -----------------------------------------------------------------------------
 module Diff where
 
+import Data.List (intercalate)
 import Data.Text (Text)
-import Data.Text.Metrics (levenshtein)
 import qualified Data.Text as T
+import Data.Text.Metrics (levenshtein)
 import Parse
 import Parse.Entry
-import Data.List (intercalate)
 
 type Tag = String
 
@@ -112,5 +112,3 @@ all' = dostoevskys ++ tolstoys ++ eliots ++ cowards
 
 rate :: T.Text -> [T.Text] -> [(Int, T.Text)]
 rate canonical = fmap $ \w -> (textDiff canonical w, w)
-
-

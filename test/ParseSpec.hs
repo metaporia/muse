@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
  -----------------------------------------------------------------------------
+
 -- |
 -- Module      :  ParseSpec
 -- Copyright   :  2018 Keane Yahn-Kraft
@@ -20,87 +21,74 @@ import Parse.Entry
 import Prelude hiding (min)
 import Test.Hspec
 import Text.RawString.QQ
-import qualified Text.Trifecta.Result as Tri
-import Text.Trifecta
 import Text.Show.Pretty (pPrint)
+import Text.Trifecta
+import qualified Text.Trifecta.Result as Tri
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
 spec :: Spec
 spec = do
-    describe "Timestamp parser" $ do
-      it "parse timestamp \"00:11:22 λ. \" is [00, 11, 22]" $ do
-        toMaybe (parse timestamp "00:11:22 λ. ") `shouldBe`
-          (Just $ TimeStamp 00 11 22)
+  describe "Timestamp parser" $ do
+    it "parse timestamp \"00:11:22 λ. \" is [00, 11, 22]" $ do
+      toMaybe (parse timestamp "00:11:22 λ. ") `shouldBe`
+        (Just $ TimeStamp 00 11 22)
     -- testlog
-    describe "Parse testlog" $ do
-      it "parse entries testlog" $
-        example $ do (toMaybe $ parse entries testlog) `shouldBe` (Just output)
+  describe "Parse testlog" $ do
+    it "parse entries testlog" $
+      example $ do (toMaybe $ parse entries testlog) `shouldBe` (Just output)
     -- testlog with dump
-    describe "Parse testlog including dumps" $ do
-      it "parse logEntries testlog" $
-        example $ do (toMaybe $ parse logEntries testlog) `shouldBe` (Just testLogWithDumpOutput')
+  describe "Parse testlog including dumps" $ do
+    it "parse logEntries testlog" $
+      example $ do
+        (toMaybe $ parse logEntries testlog) `shouldBe`
+          (Just testLogWithDumpOutput')
     -- commentary
-    describe "Parse commentary entry variant 1" $ do
-      it "parse entries commentTs" $
-        example $ do
-          (toMaybe $ parse entries commentTs) `shouldBe` (Just commentTsOutput)
+  describe "Parse commentary entry variant 1" $ do
+    it "parse entries commentTs" $
+      example $ do
+        (toMaybe $ parse entries commentTs) `shouldBe` (Just commentTsOutput)
     -- commentary
-    describe "Parse commentary entry variant 2" $ do
-      it "parse entries commentTs'" $
-        example $ do
-          (toMaybe $ parse entries commentTs') `shouldBe`
-            (Just commentTsOutput')
+  describe "Parse commentary entry variant 2" $ do
+    it "parse entries commentTs'" $
+      example $ do
+        (toMaybe $ parse entries commentTs') `shouldBe` (Just commentTsOutput')
     -- pgNum
-    describe "test pgNum: \"(s | e | p | f)<num>\"" $ do
-      it "parse entries testPgNum" $
-        example $ do
-          (toMaybe $ parse entries testPgNum) `shouldBe`
-            (Just testPgNumOutput) 
+  describe "test pgNum: \"(s | e | p | f)<num>\"" $ do
+    it "parse entries testPgNum" $
+      example $ do
+        (toMaybe $ parse entries testPgNum) `shouldBe` (Just testPgNumOutput)
     -- skip lonely spaces
-    describe "skip lines containing only spaces" $ do
-      it "parse entries testLonelySpaces" $
-        example $ do
-          (toMaybe $ parse entries testLonelySpaces) `shouldBe`
-            (Just testLonelySpacesOutput)
+  describe "skip lines containing only spaces" $ do
+    it "parse entries testLonelySpaces" $
+      example $ do
+        (toMaybe $ parse entries testLonelySpaces) `shouldBe`
+          (Just testLonelySpacesOutput)
+  describe "parse null entries (those w only timestamps)" $ do
+    it "parse entries testLonelySpaces" $
+      example $ do
+        (toMaybe $ parse entries testNull) `shouldBe` (Just testNullOutput)
+  describe "parse dump: \"...\n<multi-line-dump-body>\n...\"" $ do
+    it "parse logEntries testDump" $
+      example $ do
+        (toMaybe $ parse logEntries testDump) `shouldBe` (Just testDumpOutput)
+  describe "parse dump containing ellipsis" $ do
+    it "parse logEntries tDump" $
+      example $ do (toMaybe $ parse logEntries tDump) `shouldBe` (Just tDumpOut)
+  describe "parse null timestamp" $ do
+    it "parse logEntries tNull" $
+      example $ do (toMaybe $ parse logEntries tNull) `shouldBe` (Just tNullOut)
+  describe "keyword \"phrase\"" $ do
+    it "parse logEntries tPhrase" $
+      example $ do
+        (toMaybe $ parse logEntries tPhrase) `shouldBe` (Just tPhraseOut)
+  describe "keyword \"dialogue\"" $ do
+    it "parse logEntries tDialogue" $
+      example $ do
+        (toMaybe $ parse logEntries tDialogue) `shouldBe` (Just tDialogueOut)
 
-    describe "parse null entries (those w only timestamps)" $ do
-      it "parse entries testLonelySpaces" $
-        example $ do
-          (toMaybe $ parse entries testNull) `shouldBe`
-            (Just testNullOutput)
-
-    describe "parse dump: \"...\n<multi-line-dump-body>\n...\"" $ do
-      it "parse logEntries testDump" $
-        example $ do
-          (toMaybe $ parse logEntries testDump) `shouldBe`
-            (Just testDumpOutput)
-
-    describe "parse dump containing ellipsis" $ do
-      it "parse logEntries tDump" $
-        example $ do
-          (toMaybe $ parse logEntries tDump) `shouldBe`
-            (Just tDumpOut)
-
-    describe "parse null timestamp" $ do
-      it "parse logEntries tNull" $
-        example $ do
-          (toMaybe $ parse logEntries tNull) `shouldBe`
-            (Just tNullOut)
-
-    describe "keyword \"phrase\"" $ do
-      it "parse logEntries tPhrase" $
-        example $ do
-          (toMaybe $ parse logEntries tPhrase) `shouldBe`
-            (Just tPhraseOut)
-
-    describe "keyword \"dialogue\"" $ do
-      it "parse logEntries tDialogue" $
-        example $ do
-          (toMaybe $ parse logEntries tDialogue) `shouldBe`
-            (Just tDialogueOut)
-
-tDialogue = [r|
+tDialogue =
+  [r|
 13:36:33 λ. phrase sine qua non
     13:36:33 λ. phrase sine qua non
 08:34:34 λ. dialogue
@@ -135,7 +123,8 @@ tDialogueOut =
       , Read "Great Expectations" "Charles Dickens")
   ]
 
-tPhrase = [r|
+tPhrase =
+  [r|
 13:36:33 λ. phrase sine qua non
 10:55:26 λ. d raillery, coppice, disquisition, dissertation
 13:36:33 λ. phr sine qua non
@@ -224,7 +213,9 @@ testLogWithDumpOutput' =
       , TimeStamp {hr = 10, min = 28, sec = 49}
       , Def (Defn Nothing ["plover"]))
   , TabTsEntry
-      (1, TimeStamp {hr = 10, min = 47, sec = 59}, Def (Defn Nothing ["cosmogony"]))
+      ( 1
+      , TimeStamp {hr = 10, min = 47, sec = 59}
+      , Def (Defn Nothing ["cosmogony"]))
   , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 49, sec = 58}
@@ -234,11 +225,9 @@ testLogWithDumpOutput' =
           (Just 38))
   ]
 
-
-
-
 testDump :: String
-testDump = [r|
+testDump =
+  [r|
 ...
 dump aeouoaeu
 second line
@@ -267,7 +256,6 @@ testDumpOutput =
       , Read "Witches Abroad" "Terry Pratchett")
   ]
 
-
 testNull :: String
 testNull =
   [r|
@@ -278,7 +266,8 @@ testNullOutput :: [(Int, TimeStamp, Entry)]
 testNullOutput = [(1, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
 
 testLonelySpaces :: String
-testLonelySpaces = [r|
+testLonelySpaces =
+  [r|
     12:10:01 λ. d sylvan
     
 
@@ -328,19 +317,24 @@ output =
     , TimeStamp {hr = 10, min = 24, sec = 2}
     , Quotation
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
-        "In \"To the Lighthouse\", by Virginia Woolf" Nothing)
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        Nothing)
   , ( 1
     , TimeStamp {hr = 10, min = 25, sec = 27}
     , Quotation
         "Her simplicity fathomed what clever people falsified."
-        "In \"To the Lighthouse\", by Virginia Woolf" Nothing)
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        Nothing)
   , (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
-  , (1, TimeStamp {hr = 10, min = 47, sec = 59}, Def (Defn Nothing ["cosmogony"]))
+  , ( 1
+    , TimeStamp {hr = 10, min = 47, sec = 59}
+    , Def (Defn Nothing ["cosmogony"]))
   , ( 1
     , TimeStamp {hr = 10, min = 49, sec = 58}
     , Quotation
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
-        "In \"To the Lighthouse\", by Virginia Woolf" (Just 38))
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        (Just 38))
   ]
 
 commentTs :: String
@@ -403,7 +397,8 @@ d word1 : meaning1; meaning2; meaning3;
 |]
 
 testPgNum :: String
-testPgNum = [r|
+testPgNum =
+  [r|
 08:38:20 λ. p38 
 08:38:20 λ. s 38 
 08:38:20 λ. e38
@@ -412,18 +407,12 @@ testPgNum = [r|
 |]
 
 testPgNumOutput :: [(Int, TimeStamp, Entry)]
-testPgNumOutput = 
-  [ ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (Page 38) )
-  , ( 0
-    , TimeStamp { hr = 8 , min = 38 , sec = 20 }
-    , PN (PStart 38)
-    )
-  , ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (PEnd 38) )
-  , ( 0
-    , TimeStamp { hr = 8 , min = 38 , sec = 20 }
-    , PN (PFinish 38)
-    )
-  , ( 0 , TimeStamp { hr = 8 , min = 38 , sec = 20 } , PN (Page 38) )
+testPgNumOutput =
+  [ (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
+  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PStart 38))
+  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PEnd 38))
+  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PFinish 38))
+  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
   ]
 
 testLog :: String
@@ -531,7 +520,8 @@ testlog =
 
 |]
 
-tNull = [r|
+tNull =
+  [r|
  
 
 21:32:05 λ.  
@@ -555,7 +545,8 @@ tNullOut =
           Nothing)
   ]
 
-tDump = [r|
+tDump =
+  [r|
 ...
 coffee
 shit
@@ -569,7 +560,8 @@ tDumpOut =
       "\ncoffee\nshit\nfuck with ssh-keygen (error: \"sign_and_send_pubkey: signing failed ...\")\nsolution: `ssh-add` (the local agent simply needed a heads-up!)."
   ]
 
-broken = [r|
+broken =
+  [r|
 ...
 coffee
 shit
@@ -659,4 +651,5 @@ drink gin 'n tonic (2 < shots)
 |]
 
 p = parse logEntries
+
 pp = pPrint . parse logEntries

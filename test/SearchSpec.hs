@@ -20,104 +20,104 @@ import Parse
 import Parse.Entry
 import Prelude hiding (min)
 import Render
-import Text.RawString.QQ
 import Search
 import Test.Hspec
+import Text.RawString.QQ
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import qualified Text.Trifecta.Result as Tri
 
--- `--author` and `--quotations` flags disable (some) filtration
-
+-- □  test `--title` filters: 
+--    □  by themselves,
+--    □  with type preds,
+--    □  with `--author` filters,
+--    □  and with both `--author` and type preds.
 showTest ap tp preds = test' ap tp preds >>= showAll
+
 showTest' s ap tp preds = flip filterWith' s <$> input ap tp preds >>= showAll
 
 test' ap tp preds = flip filterWith' sample <$> input ap tp preds
+
 test ap tp preds = flip filterWith' tDialogueFilter <$> input ap tp preds
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
 spec :: Spec
-spec = do
-
+spec
   -- entry variant preds
+ = do
   describe "satisfies tests" $ do
     it "satisfies isDef" $
       example $ do
         (flip satisfies tDef <$> input Nothing Nothing [Just isDef]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isQuote" $
       example $ do
         (flip satisfies tQuote <$> input Nothing Nothing [Just isQuote]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isDialogue" $
       example $ do
         (flip satisfies tDialogue' <$> input Nothing Nothing [Just isDialogue]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isPhrase" $
       example $ do
         (flip satisfies tPhrase <$> input Nothing Nothing [Just isPhrase]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isDef or isQuote" $
       example $ do
-        (flip satisfies tDef <$> input Nothing Nothing [Just isDef, Just isQuote]) >>=
+        (flip satisfies tDef <$>
+         input Nothing Nothing [Just isDef, Just isQuote]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isQuote or isDialogue or isPhrase" $
       example $ do
         (flip satisfies tQuote <$>
          input Nothing Nothing [Just isQuote, Just isDialogue, Just isPhrase]) >>=
           (`shouldBe` True)
-
   describe "satisfies tests" $ do
     it "satisfies isDialogue or isDef" $
       example $ do
-        (flip satisfies tDialogue' <$> input Nothing Nothing [Just isDialogue, Just isDef]) >>=
+        (flip satisfies tDialogue' <$>
+         input Nothing Nothing [Just isDialogue, Just isDef]) >>=
           (`shouldBe` True)
-
   -- string search 
   describe "satisfies auth \"Woolf\"" $ do
     it "satisfies w auth search" $
       example $ do
         (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
           (`shouldBe` True)
-
   -- string search 
   describe "satisfies auth \"Woolf\" but only return defs" $ do
     it "satisfies w auth search" $
       example $ do
-        (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [Just isDef]) >>=
+        (flip satisfies tQuote <$>
+         input (Just $ isInfixOf "Woolf") Nothing [Just isDef]) >>=
           (`shouldBe` False)
-
   describe "doesEntryMatchSearches \"Woolf\"" $ do
     it "satisfies w auth search" $
       example $ do
-        (flip searchSatisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+        (flip searchSatisfies tQuote <$>
+         input (Just $ isInfixOf "Woolf") Nothing []) >>=
           (`shouldBe` True)
-
   -- string search 
   describe "satisfies auth \"Woolf\" but only return quotes" $ do
     it "satisfies w auth search" $
       example $ do
-        (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [Just isQuote]) >>=
+        (flip satisfies tQuote <$>
+         input (Just $ isInfixOf "Woolf") Nothing [Just isQuote]) >>=
           (`shouldBe` True)
   -- string search 
   describe "doesReadSatisfy `Read`" $ do
     it "doesReadSatisfy" $
       example $ do
-        (flip doesReadSatisfy tRead <$> input (Just $ isInfixOf "Woolf") Nothing []) >>=
+        (flip doesReadSatisfy tRead <$>
+         input (Just $ isInfixOf "Woolf") Nothing []) >>=
           (`shouldBe` True)
-
   describe "all type filters applied" $ do
     it "all" $
       example $ do
@@ -126,13 +126,11 @@ spec = do
           Nothing
           [Just isPhrase, Just isQuote, Just isDef, Just isDialogue] >>=
           (`shouldBe` tDialogueFilter)
-
   describe "dialogue quote filtration" $ do
     it "tGetDialogueOrQuote" $
       example $ do
         test Nothing Nothing [Just isQuote, Just isDialogue] >>=
           (`shouldBe` tGetDialogueOrQuoteOut)
-
   describe "dialogue filtration" $ do
     it "tGetDialogue" $
       example $ do
@@ -151,20 +149,17 @@ spec = do
     it "tAuthor" $
       example $ do
         test (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
-
   -- auth & type 
   describe "-a Woolf -q" $ do
     it "tQuote" $
       example $ do
-        test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote] >>= (`shouldBe` authAndQuote)
-
+        test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote] >>=
+          (`shouldBe` authAndQuote)
   -- title 
   --describe "-t Lighthouse Woolf" $ do
   --  it "tQuote" $
   --    example $ do
   --      test' Nothing (Just $ isInfixOf "Lighthouse") [] >>= (`shouldBe` tTitle)
-
-
 
 tGetDialogueOrQuote :: IO [LogEntry]
 tGetDialogueOrQuote = do
@@ -494,12 +489,12 @@ tDialogue' =
     , TimeStamp {hr = 8, min = 34, sec = 34}
     , Dialogue
         "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
+
 tPhrase =
   TabTsEntry
     ( 1
     , TimeStamp {hr = 10, min = 17, sec = 40}
     , Phr (Defined "some dashed barmy collocation" "aptly rummy sign"))
-
 
 sample :: [LogEntry]
 sample =
@@ -611,7 +606,7 @@ authAndQuote =
           "Her simplicity fathomed what clever people falsified."
           "In \"To the Lighthouse\", by Virginia Woolf"
           Nothing)
-    ]
+  ]
 
 tRead =
   TabTsEntry
@@ -619,8 +614,8 @@ tRead =
     , TimeStamp {hr = 9, min = 55, sec = 6}
     , Read "To the Lighthouse" "Virginia Woolf")
 
-
-tTitleStr = [r|
+tTitleStr =
+  [r|
 10:37:15 λ. read "Adam Bede", by George Eliot (Mary Ann Evans)
     10:37:30 λ. d recusant, recuse
     10:37:35 λ. d scuttle
@@ -640,52 +635,41 @@ tTitleStr = [r|
           In "Thank You, Jeeves" by P.G. Wodehouse  
 |]
 
-tTitle =  [ TabTsEntry
+tTitle =
+  [ TabTsEntry
       ( 0
-      , TimeStamp { hr = 10 , min = 37 , sec = 15 }
-      , Read "Adam Bede" "George Eliot (Mary Ann Evans)"
-      )
+      , TimeStamp {hr = 10, min = 37, sec = 15}
+      , Read "Adam Bede" "George Eliot (Mary Ann Evans)")
   , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 37 , sec = 30 }
-      , Def (Defn Nothing [ "recusant" , "recuse" ])
-      )
+      , TimeStamp {hr = 10, min = 37, sec = 30}
+      , Def (Defn Nothing ["recusant", "recuse"]))
   , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 37 , sec = 35 }
-      , Def (Defn Nothing [ "scuttle" ])
-      )
+      , TimeStamp {hr = 10, min = 37, sec = 35}
+      , Def (Defn Nothing ["scuttle"]))
   , TabTsEntry
       ( 1
-      , TimeStamp { hr = 11 , min = 3 , sec = 53 }
-      , Def (Defn Nothing [ "provender" ])
-      )
+      , TimeStamp {hr = 11, min = 3, sec = 53}
+      , Def (Defn Nothing ["provender"]))
   , TabTsEntry
       ( 1
-      , TimeStamp { hr = 14 , min = 15 , sec = 58 }
+      , TimeStamp {hr = 14, min = 15, sec = 58}
       , Quotation
           "If you trust a man, let him be a bachelor."
           "\"Adam Bede\" by George Eliot (Mary Ann Evans)"
-          Nothing
-      )
+          Nothing)
   , TabTsEntry
       ( 0
-      , TimeStamp { hr = 13 , min = 37 , sec = 15 }
-      , Read "Thank You, Jeeves" "P.G. Wodehouse"
-      )
+      , TimeStamp {hr = 13, min = 37, sec = 15}
+      , Read "Thank You, Jeeves" "P.G. Wodehouse")
+  , TabTsEntry
+      (1, TimeStamp {hr = 20, min = 33, sec = 48}, Def (Defn Nothing ["barmy"]))
   , TabTsEntry
       ( 1
-      , TimeStamp { hr = 20 , min = 33 , sec = 48 }
-      , Def (Defn Nothing [ "barmy" ])
-      )
-  , TabTsEntry
-      ( 1
-      , TimeStamp { hr = 20 , min = 33 , sec = 56 }
+      , TimeStamp {hr = 20, min = 33, sec = 56}
       , Quotation
           "Thank you, Jeeves."
           "In \"Thank You, Jeeves\" by P.G. Wodehouse  "
-          Nothing
-      )
+          Nothing)
   ]
-
-

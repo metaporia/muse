@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
   ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
   TemplateHaskell #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Parse
@@ -36,29 +37,31 @@ module Parse
   --, Title
   --, parseByteString
   --) where
-  where
+ where
 
 import Control.Applicative
 import Control.Lens.TH (makePrisms)
+
 --import Control.Lens (makeLenses, preview, review)
 --import Control.Lens.Tuple
 import Control.Monad (void)
 import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
+
 --import Data.Maybe (fromJust)
 import Data.Time
-import GHC.Generics hiding (Prefix, Infix)
+import GHC.Generics hiding (Infix, Prefix)
 import Helpers
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
+
 --instance {-# OVERLAPPING #-} Show String where
 --  show x = ['"'] ++ x ++ ['"']
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
-
 -- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
 -- | TODO: triage TODOs!!!!!
 --
@@ -96,15 +99,16 @@ import Text.Trifecta hiding (Rendering, Span)
 -- ▣  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
 --    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
 --    "the exhaust of your rage"!)
--- □  add CLI option to suppress `Read` entry output
--- □  parse "dialogue"  of the form:
+-- ▣  parse "dialogue"  of the form:
 --    > dialogue
 --    > 
 --    > <character>: <paragraph>
 --    >
 --    > <character>: <paragraph>
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
--- □  add def/quot/title prefix/infix/suffix search
+-- □  add CLI option to suppress `Read` entry output (see `guardStrSearch` for
+--    control point
+-- -- □  add def/quot/title prefix/infix/suffix search
 --    - search quote attributions w/ title & author search strings
 -- □  ignore all meta log info, e.g., containing:
 --    - "muse"
@@ -146,7 +150,6 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 --    BLOCKED: `entryBody` can't be factored out a.t.m.
-
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp
   { hr :: Int
@@ -158,7 +161,6 @@ instance ToJSON TimeStamp where
   toEncoding = genericToEncoding defaultOptions
 
 instance FromJSON TimeStamp
-
 
 skipOptColon :: Parser ()
 skipOptColon = skipOptional (char ':')
@@ -210,7 +212,6 @@ timestamp = do
 --
 -- * "venal" -- [A-Za-z]*
 -- * "lèse majesté" -- [A-Za-z ]
-
 data DefQuery
   = Defn (Maybe PgNum)
          [Headword]
@@ -311,7 +312,6 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 
 quot :: Parser ()
 quot = void $ pad (char '"')
-
 
 type Title = String
 
@@ -422,14 +422,15 @@ testlog' =
                 In "To the Lighthouse", by Virginia Woolf
   
 |]
-q = [r|10:49:58 λ. quotation
+
+q =
+  [r|10:49:58 λ. quotation
 
             "But nevertheless, the fact remained, that is was nearly
             impossbile to dislike anyone if one looked at them."
 
             In "To the Lighthouse", by Virginia Woolf
 |]
-
 
 -- | Relative duration, conversion from which expects rollover, not clipping,
 -- as this is meant as a container for user-entered years, months, and days.
@@ -476,13 +477,11 @@ dmy = do
 relDur :: Parser RelDur
 relDur = dmy
 
-
 data SearchType
   = Prefix
   | Infix
   | Suffix
   deriving (Eq, Show, Generic)
-
 
 searchType :: Parser SearchType
 searchType = do
@@ -494,7 +493,8 @@ searchType = do
   return st
 
 testDump' :: String
-testDump' = [r|
+testDump' =
+  [r|
 ...
 dump aeouoaeu
 second line
@@ -521,7 +521,8 @@ day' = do
   d <- twoDigits
   return $ fromGregorianValid (fromIntegral y) m d
 
-qo = [r|
+qo =
+  [r|
 08:59:30 λ. quotation
 
             "There was no treachery too for the world to commit. She knew that.
@@ -532,7 +533,8 @@ qo = [r|
 14:19:00 λ. read "Witches Abroad", by Terry Pratchett
 |]
 
-austen = [r|
+austen =
+  [r|
 
 10:54:04 λ. read "Northanger Abbey", by Jane Austen
     10:54:22 λ. q101 
@@ -551,4 +553,3 @@ austen = [r|
 
     In "Northanger Abbey" by Jane Austen
 |]
-

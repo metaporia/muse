@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings #-}
  -----------------------------------------------------------------------------
+
 -- |
 -- Module      :  Lib
 -- Copyright   :  2018 Keane Yahn-Kraft
@@ -22,12 +23,11 @@ module Lib
 import Helpers
 import Parse
 import Parse.Entry
-import Search
 import Render
+import Search
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
-
 -- Returns the first successful result.
 --choice :: (a -> Maybe b) -> [a] -> Maybe b
 --choice f xs = foldr go Nothing xs
@@ -49,5 +49,3 @@ someFunc = putStrLn "someFunc"
 --    let x = m
 --     in --undefined 
 --       P $ \ int bool -> m (int.f) (bool.f)
-
-

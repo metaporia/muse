@@ -44,6 +44,7 @@ import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
+
 -- | Represents filters and entry maps extracted from CLI invocation.
 data Input = Input
   { startDateTime :: Day
@@ -133,7 +134,6 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 --
 --      tl;dr; try to identify attr under cursor, if successful display result,
 --      if not show top matches (above satisfaction threshold)
-
 -- | Where there is neither a title predicate nor an author predicate, applies
 -- only variant (a.t.m. def and quote) filters; otherwise, where there is at
 -- least one `Read` predicate, filters by nesting and applies variant filters.
@@ -174,15 +174,16 @@ takeWhileRestWithFilter ::
 takeWhileRestWithFilter _ _ [] = ([], [])
 takeWhileRestWithFilter continue take (x:xs)
   | continue x = go x $ takeWhileRestWithFilter continue take xs
-  | otherwise = ([], (x:xs))
-  where go x (as, bs) 
-          | take x = (x : as, bs)
-          | otherwise = (as, bs)
+  | otherwise = ([], (x : xs))
+  where
+    go x (as, bs)
+      | take x = (x : as, bs)
+      | otherwise = (as, bs)
 
 -- | Applies both string search and variant predicates.
 satisfies :: Input -> LogEntry -> Bool
 satisfies input@(Input _ _ ap tp preds') =
-  let preds = catMaybes (predicates input ++ [ap, tp]) 
+  let preds = catMaybes (predicates input ++ [ap, tp])
   in if null preds
        then const True -- TODO search bug ??
        else \e -> foldr (||) False $ preds <*> [e]
@@ -207,14 +208,16 @@ searchSatisfies :: Input -> LogEntry -> Bool
 searchSatisfies (Input _ _ ap tp _) le
   | null res = True
   | otherwise = foldr (&&) True $ catMaybes res
-  where res = [ap <*> pure le, tp <*> pure le]
+  where
+    res = [ap <*> pure le, tp <*> pure le]
 
 -- | Applies only string search predicates.
 searchSatisfies' :: Input -> LogEntry -> Bool
 searchSatisfies' (Input _ _ ap tp _) le
   | null res = False
   | otherwise = foldr (&&) True $ catMaybes res
-  where res = [ap <*> pure le, tp <*> pure le]
+  where
+    res = [ap <*> pure le, tp <*> pure le]
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
@@ -244,7 +247,8 @@ doesTitleSatisfy _ _ = False
 doesReadSatisfy :: Input -> LogEntry -> Bool
 doesReadSatisfy input le
   | isRead le =
-    foldr (||) False $ (catMaybes . fmap (Just input >>=) $ [authorPred, titlePred]) <*> pure le
+    foldr (||) False $
+    (catMaybes . fmap (Just input >>=) $ [authorPred, titlePred]) <*> pure le
   | otherwise = False
 
 -- | Takes parent (read entry's) indentation level, a log entry
@@ -265,40 +269,44 @@ guardStrSearch ::
 guardStrSearch strSearch typePreds
   | null typePreds = strSearch
   | otherwise =
-    \e -> strSearch e && (foldr (||) False $ (isRead : catMaybes typePreds) <*> pure e)
+    \e ->
+      strSearch e &&
+      (foldr (||) False $ (isRead : catMaybes typePreds) <*> pure e)
 
 -- | Generates `LogEntry` predicate from string predicate.
 --
 -- This only applies string searches to `Quotation`s and `Read`s.
 convertAuthSearch :: (Author -> Bool) -> LogEntry -> Bool
-convertAuthSearch authPred le 
--- how safe is this?
-  | isJust read = 
-    let (_, a) = fromJust read 
-     in authPred a
-  | isJust quote = 
+convertAuthSearch authPred le
+  | isJust read =
+    let (_, a) = fromJust read
+    in authPred a
+  | isJust quote =
     let (_, attr, _) = fromJust quote
-     in authPred attr
+    in authPred attr
   | otherwise = False
-  where read = projectRead le
-        quote = projectQuotation le
+  where
+    read = projectRead le
+    quote = projectQuotation le
 
+-- how safe is this?
 -- | Generates `LogEntry` predicate from string predicate.
 --
 -- This only applies string searches to `Quotation`s and `Read`s.
 convertTitleSearch :: (Title -> Bool) -> LogEntry -> Bool
-convertTitleSearch titlePred le 
--- how safe is this?
-  | isJust read = 
-    let (t, _) = fromJust read 
-     in titlePred t
-  | isJust quote = 
+convertTitleSearch titlePred le
+  | isJust read =
+    let (t, _) = fromJust read
+    in titlePred t
+  | isJust quote =
     let (_, attr, _) = fromJust quote
-     in titlePred attr
+    in titlePred attr
   | otherwise = False
-  where read = projectRead le
-        quote = projectQuotation le
+  where
+    read = projectRead le
+    quote = projectQuotation le
 
+-- how safe is this?
 defInp = input Nothing Nothing []
 
 -- | `LogEntry` projections.
@@ -358,13 +366,14 @@ projectDef (TabTsEntry (_, _, (Def dq))) =
     DefVersus hw m hw' m' -> [(hw, Just m), (hw', Just m')]
 projectDef _ = []
 
-
 input ap tp preds = do
   d <- utctDay <$> getCurrentTime
-  return $ Input d d (convertAuth preds <$> ap) (convertTitle preds <$> tp) preds
+  return $
+    Input d d (convertAuth preds <$> ap) (convertTitle preds <$> tp) preds
 
 convertAuth preds = flip guardStrSearch preds . convertAuthSearch
-convertTitle preds = flip guardStrSearch preds . convertTitleSearch 
+
+convertTitle preds = flip guardStrSearch preds . convertTitleSearch
 
 testLogWithDumpOutput :: [LogEntry]
 testLogWithDumpOutput =
@@ -437,4 +446,3 @@ testLogWithDumpOutput =
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
-

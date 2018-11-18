@@ -1,5 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances, MultiWayIf #-}
+  OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
+  MultiWayIf #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Render
@@ -13,36 +15,36 @@
 -----------------------------------------------------------------------------
 module Render where
 
-import           Control.Monad (void, (>=>))
+import Control.Monad ((>=>), void)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.Char (toUpper)
-import           Data.List (intercalate)
-import           Data.Monoid ((<>))
+import Data.Char (toUpper)
+import Data.List (intercalate)
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import           Text.Wrap
-import           Text.RawString.QQ
-import           Helpers
-import           Parse
-import           Parse.Entry
-import           Prelude hiding (lookup, log, min)
-import           System.Console.ANSI
-import           Text.Show.Pretty (pPrint)
-
+import Helpers
+import Parse
+import Parse.Entry
+import Prelude hiding (log, lookup, min)
+import System.Console.ANSI
+import Text.RawString.QQ
+import Text.Show.Pretty (pPrint)
+import Text.Wrap
 
 showAll :: [LogEntry] -> IO ()
 showAll = sequence_ . fmap (colRender True)
 
 indentation :: Int
 indentation = 9
+
 indent = take indentation (repeat ' ')
 
 upper = fmap toUpper
 
 applyToRest :: (a -> a) -> [a] -> [a]
 applyToRest _ [] = []
-applyToRest f (x:xs) = x: fmap f xs
+applyToRest f (x:xs) = x : fmap f xs
 
 surround :: Char -> String -> String
 surround c s = c : (s ++ [c])
@@ -51,7 +53,6 @@ surround c s = c : (s ++ [c])
 class Render a where
   render :: a -> String
 
-
 instance Render LogEntry where
   render (Dump s) = "Dump:    " ++ render s
   render (TabTsEntry (_, _, entry)) = render entry
@@ -59,7 +60,9 @@ instance Render LogEntry where
 instance Render Entry where
   render (Def dq) = render dq
   render (Quotation b attr pg) =
-    "Quote:   " ++ surround '"' (render b) ++ "\n" ++ indent ++ render attr ++ indent ++ render (Page <$> pg) ++ "\n"
+    "Quote:   " ++
+    surround '"' (render b) ++
+    "\n" ++ indent ++ render attr ++ indent ++ render (Page <$> pg) ++ "\n"
   render (Read t a) = "Read:    " ++ surround '"' t ++ " by " ++ a
   render (Commentary s) = show s
   render (PN pg) = render pg
@@ -80,9 +83,8 @@ instance Render DefQuery where
 instance Render a => Render (Maybe a) where
   render (Just x) = render x
   render Nothing = ""
-
-
   -- assumse text width of 79
+
 instance Render [Char] where
   render =
     T.unpack .
@@ -101,35 +103,48 @@ instance Render Int where
 
 colorize :: Bool -> (IO () -> IO ()) -> IO () -> IO ()
 colorize True col = col
-colorize False col = id 
+colorize False col = id
 
 -- Colorizes IO operation.
 mkColor :: Bool -> Color -> IO () -> IO ()
 mkColor vivid col io = do
-  if vivid then setSGR [SetColor Foreground Vivid col]
-           else setSGR [SetColor Foreground Dull col]
+  if vivid
+    then setSGR [SetColor Foreground Vivid col]
+    else setSGR [SetColor Foreground Dull col]
   io
   setSGR [Reset]
 
-blue    = mkColor True Blue
-red     = mkColor True Red
-green   = mkColor True Green
-magenta = mkColor True Magenta
-yellow  = mkColor True Yellow
-cyan    = mkColor True Cyan
+blue = mkColor True Blue
 
-dullBlue    = mkColor False Blue
-dullRed     = mkColor False Red
-dullGreen   = mkColor False Green
+red = mkColor True Red
+
+green = mkColor True Green
+
+magenta = mkColor True Magenta
+
+yellow = mkColor True Yellow
+
+cyan = mkColor True Cyan
+
+dullBlue = mkColor False Blue
+
+dullRed = mkColor False Red
+
+dullGreen = mkColor False Green
+
 dullMagenta = mkColor False Magenta
-dullYellow  = mkColor False Yellow
-dullCyan    = mkColor False Cyan
+
+dullYellow = mkColor False Yellow
+
+dullCyan = mkColor False Cyan
 
 -- Colorizable alternative to `Render`.
-class Show a => ColRender a where
-  colRender :: Bool -- ^ Colorize?
-            -> a -- ^ Item to render
-            -> IO ()
+class Show a =>
+      ColRender a where
+  colRender ::
+       Bool -- ^ Colorize?
+    -> a -- ^ Item to render
+    -> IO ()
 
 instance ColRender LogEntry where
   colRender col (Dump s) = putStr "Dump:    " >> colRender col s
@@ -182,7 +197,6 @@ instance ColRender a => ColRender (Maybe a) where
   colRender col (Just x) = colRender col x
   colRender _ Nothing = return ()
 
-
 instance ColRender [Char] where
   colRender _ =
     putStr .
@@ -190,7 +204,6 @@ instance ColRender [Char] where
     T.unlines .
     applyToRest ((T.replicate indentation " ") <>) .
     wrapTextToLines defaultWrapSettings 79 . T.pack
-
 
 fmt =
   T.unpack .
@@ -206,4 +219,3 @@ instance ColRender Integer where
 
 instance ColRender Int where
   colRender _ = putStr . show
-

@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
   ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
   TemplateHaskell #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Parse.Entry
@@ -16,6 +17,7 @@ module Parse.Entry where
 
 import Control.Applicative
 import Control.Lens.TH (makePrisms)
+
 --import Control.Lens (makeLenses, preview, review)
 --import Control.Lens.Tuple
 import Control.Monad (void)
@@ -23,17 +25,18 @@ import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.List.Split (splitOn)
+
 --import Data.Maybe (fromJust)
 import Data.Time
-import GHC.Generics hiding (Prefix, Infix)
+import GHC.Generics hiding (Infix, Prefix)
 import Helpers
+import Helpers
+import Parse
 import Prelude hiding (min, quot)
 import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
-import Parse
-import Helpers
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
@@ -195,7 +198,7 @@ data Entry
               (Maybe PgNum)
   | Commentary Body
   | PN PageNum
-  | Phr  Phrase
+  | Phr Phrase
   | Dialogue String
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
@@ -209,8 +212,10 @@ isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _ _) = True
 isQuotation _ = False
 
-data Phrase = Plural [Headword]
-            | Defined Headword Meaning
+data Phrase
+  = Plural [Headword]
+  | Defined Headword
+            Meaning
   deriving (Eq, Show, Generic)
 
 instance ToJSON Phrase where
@@ -220,7 +225,7 @@ instance FromJSON Phrase
 
 phrase :: Parser Entry
 phrase = do
-  whiteSpace 
+  whiteSpace
   try (symbol "phrase") <|> symbol "phr"
   p <- try definedPhrase <|> pluralPhrase
   many newline
@@ -246,4 +251,5 @@ dialogue = do
   return $ Dialogue eb
 
 makePrisms ''Entry
+
 makePrisms ''LogEntry

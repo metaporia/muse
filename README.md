@@ -17,7 +17,7 @@ relieve a vocabulary's growing pains.
 Depends on [stack](https://docs.haskellstack.org/en/stable/README/). (Built with version
 1.71.)
 
-Clone, build and initialize config, cache, and log directory.
+Clone; build; and initialize config, cache, and log directory.
 ```bash
 git clone https://gitlab.com/metaporia/muse.git
 cd muse
@@ -105,7 +105,7 @@ Available options:
 * A `REL_DATE` specifies day-month-year offset, e.g., "3d", "3d2m20y",
   "2m5y", and "1d6y". Up to two of the three fields may be omited, but they
   must remain in the correct order, namely, day-month-year. A relative date is
-  represented by a a number of days, months, and years, each of which is
+  represented by a number of days, months, and years, each of which is
   subtracted from the date of invocation to generate the lower bound of the
   date range of searched entries.
 
@@ -118,11 +118,11 @@ Available options:
 * add newlines before and after quotation body
 * indentation is parsed by tabs made up of four spaces (as of yet
   unconfigurably so)
-* avoid comma before a <read>'s author attribution--it is, however, permitted
+* avoid comma before a `<read>`'s author attribution--it is, however, permitted
 * timestamps without a body are allowed but not encouraged
 
-N.B. '[<expr>]' in an entry example or grammar specification indicates that
-<expr> is optional; and '(<variant0> | ... | <variantN>)' denotes one of the
+N.B. `[<expr>]` in an entry example or grammar specification indicates that
+`<expr>` is optional; and `(<variant0> | ... | <variantN>)` denotes one of the
 listed options must be selected, but that any one of which is accepted.
 
 ### Definition Comparison

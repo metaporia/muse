@@ -59,29 +59,38 @@ import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
 
---instance {-# OVERLAPPING #-} Show String where
---  show x = ['"'] ++ x ++ ['"']
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 -- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
 -- | TODO: triage TODOs!!!!!
 --
 -- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
+--
 -- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
 --    where a <def> is "<word> [: <meaning>]" (the brackets '[' and ']'
 --    indicate that the meaning, mapping is optional. The headword, <word>, is
 --    not.
+--
 -- ▣  from
+--
 -- [r| dvs <def1>
 --         --- vs ---
 --         <def2> |] to  [DefVs]
+--
 -- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
+--
 -- ▣  quotations
+--
 -- ▣  strip newlines from quotation bodies
+--
 -- ▣  from "(commentary | synthesis of <title>, by <author>"
 --    N.B.: optionally consume attribution info, but prefer to depend upon
+--
 -- ▣  deprecate comma before <auth> attribution
+--
 -- ▣  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
+--
 -- ▣  ignore indentation preserving/setting timestamps (see `Entry::Null`)
+--
 -- ▣  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
 --    or ban elipsis for untimestamped entries
 --  [r|...
@@ -92,13 +101,17 @@ import Text.Trifecta hiding (Rendering, Span)
 --   <auth> attribution ditributes over the titles?
 --   - first pass will merely collect the string surrounded by ellipses
 -- ▣  from "q<pgNum> \"<quotation>\"
+--
 -- ▣  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
 --    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
 --    by day, or some other small unit
+--
 -- ▣  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
+--
 -- ▣  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
 --    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
 --    "the exhaust of your rage"!)
+--
 -- ▣  parse "dialogue"  of the form:
 --    > dialogue
 --    > 
@@ -106,15 +119,20 @@ import Text.Trifecta hiding (Rendering, Span)
 --    >
 --    > <character>: <paragraph>
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
+--
 -- □  add CLI option to suppress `Read` entry output (see `guardStrSearch` for
 --    control point
--- -- □  add def/quot/title prefix/infix/suffix search
+--
+-- □  add def/quot/title prefix/infix/suffix search
 --    - search quote attributions w/ title & author search strings
+--
 -- □  ignore all meta log info, e.g., containing:
 --    - "muse"
 --    - "muse-pre"
 --    - "muse-interim"
+--
 -- □  improve error messages
+--
 -- □  (!!!) parse n.b.s after all entry types
 --    from "(note | N.B.)", containing some specialization
 --    grouping of (log) entries by title.
@@ -130,26 +148,40 @@ import Text.Trifecta hiding (Rendering, Span)
 --  |]
 -- 
 -- □  finish multiple books at once?
+--
 -- □  parse "read (book | article | play ) <title>, by <author>" to specify media
---    type; default to "book"?
--- watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
+--    type; default to "book"?  
+--    watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
+--
 -- □  (?) chapter numbers, for instance, "ch <num"
+--
 -- □  add "research" keyword?
+--
 -- □  add citation/external reference entry type, as in, "see <ref>", "see @<link>"
+--
 -- □  (unprefixed?) life log entries
+--
 --    □  fix the unprefixed
+--
 --    □  parse "do <act>"
+--
 --    □  "distract <activity>" (meaningful only when nested inside "do[: ]");
 --       support list syntax (semicolons or bullets?)
+--
 --    □  custom keywords for frequent actions, e.g., "hap", "walk", "coffee",
 --       "eat (breakfast | lunch | dinner | snack) <food-desc>"
+--
 --    □  closing timestamp with "done ..."?
+--
 -- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
 --    - distinguish between syntaxes, collect?
 --    - where are comments permitted? end of line, dedicated line, or both?
+--
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 --    BLOCKED: `entryBody` can't be factored out a.t.m.
+
+
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp
   { hr :: Int

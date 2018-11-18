@@ -106,12 +106,12 @@ def = do
 --  _ <- many (void newline <|> void (some space) <* void newline)
 --  _ <- many $ try (void (some space) <* newline) <|> void newline
 --  _ <- emptyLines
--- | Extracts page number as one of form: 
+-- | Extracts page number as one of: 
 --
---  - "p<num>"  -- page number 
---  - "s<num>"  -- pg at start of reading session 
---  - "e<num>" -- pg at end of reading session 
---  - "f<num>" -- pg at end of book; shorthand for completion of book
+--  > "p <num>" -- page number 
+--  > "s <num>" -- pg at start of reading session 
+--  > "e <num>" -- pg at end of reading session 
+--  > "f <num>" -- pg at end of book; shorthand for completion of book
 page :: Parser Entry
 page = do
   _ <- skipOptional (many space)

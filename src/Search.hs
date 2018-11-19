@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, TupleSections, MultiWayIf, QuasiQuotes #-}
- -----------------------------------------------------------------------------
 
+-----------------------------------------------------------------------------
 -- |
 -- Module      :  Search
 -- Copyright   :  2018 Keane Yahn-Kraft

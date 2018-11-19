@@ -332,7 +332,7 @@ main = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
-showDebug = True
+showDebug = False
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) =
@@ -373,11 +373,10 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
          show s ++
          "\n" ++
          "end date: " ++
-         show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize
+         show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize >>
+         pPrint (filterWith' input testLogWithDumpOutput)
     else return ()
   putStrLn "predicates:"
-  pPrint (filterWith' input testLogWithDumpOutput)
-  -- TODO map quote, def, projections as requested
   sequence_ . fmap (colRender colorize) $ filtered
   return ()
 

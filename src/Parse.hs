@@ -180,8 +180,6 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 --    BLOCKED: `entryBody` can't be factored out a.t.m.
-
-
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp
   { hr :: Int

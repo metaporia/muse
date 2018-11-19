@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings #-}
- -----------------------------------------------------------------------------
 
+-----------------------------------------------------------------------------
 -- |
 -- Module      :  Lib
 -- Copyright   :  2018 Keane Yahn-Kraft

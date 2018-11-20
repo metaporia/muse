@@ -349,6 +349,8 @@ dispatch (Opts color (Parse it)) = do
       File fp -> readFile fp
       StdIn s -> return s
       -- TODO fix unintuitive/broken parse CLI behavior
+      -- TODO `muse parse` should run `--update` by default, using cached logs
+      -- where the source file is unchanged
       All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
@@ -521,23 +523,27 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
       selectModified fps =
         if ignoreCache
           then putStrLn "ignoring parsed entry cache" >> return fps
+          -- TODO fix cache file use
           else foldr
                  (\fp rest
-            -- check for cache existence
                    -> do
+                    -- check for cache existence
                     existsCache <-
                       doesFileExist $ T.unpack (entryCache mc) ++ fp
                     if existsCache
-                        -- compare cache and log modification times
+                      -- compare  and log modification times
                       then do
                         logMd <-
                           getModificationTime $ T.unpack (entrySource mc) ++ fp
                         cacheMd <-
                           getModificationTime $ T.unpack (entryCache mc) ++ fp
-                        if cacheMd >= logMd
-                          then (fp :) <$> rest
-                          else rest
-                      else rest)
+                        if cacheMd < logMd -- FIXME reparses today's log since filenames
+                          then do 
+                            putStrLn $ "Update/add: " ++ fp 
+                            (fp :) <$> rest
+                          else rest -- exclude unchanged
+                      -- include uncached log sources
+                      else  (fp:) <$> rest)
                  (return [])
                  fps
       parse :: String -> IO (String, Either String [LogEntry])
@@ -564,7 +570,11 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
                       then rest
                       else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >>
                            rest
-                  Right res -> ((fp, res) :) <$> rest)
+                  Right res -> do 
+                    if showDebug
+                       then putStrLn $ "Success: " ++ fp 
+                       else return ()
+                    ((fp, res) :) <$> rest)
              (return [])
   if quiet
     then putStrLn "\nSuppressing entry parse error output"

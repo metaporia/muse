@@ -368,12 +368,12 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
         return filtered
   filtered <- join dateFilter
   if debug
-    then putStrLn $
-         "start date: " ++
-         show s ++
-         "\n" ++
-         "end date: " ++
-         show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize >>
+    then putStrLn
+           ("start date: " ++
+            show s ++
+            "\n" ++
+            "end date: " ++
+            show e ++ "\nfancy search magick!" ++ "colors?: " ++ show colorize) >>
          pPrint (filterWith' input testLogWithDumpOutput)
     else return ()
   putStrLn "predicates:"

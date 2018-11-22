@@ -15,7 +15,7 @@ relieve a vocabulary's growing pains.
 
 ## Installation 
 Depends on [stack](https://docs.haskellstack.org/en/stable/README/). (Built with version
-1.71.)
+1.7.1)
 
 Clone; build; and initialize config, cache, and log directory.
 ```bash

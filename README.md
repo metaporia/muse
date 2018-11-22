@@ -4,7 +4,7 @@
 
 tl;dr: a reading log parser and search interface
 
-A nascent attempt to solve the what problems arise from defining lots of words,
+A nascent attempt to solve what problems arise from defining lots of words,
 forgetting them but not their context, and then becoming rather miffed at
 knowing that one knows a word, when one knew the word, the first letter of the
 word, and, possibly, the author or title of the book which contained the word,

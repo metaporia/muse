@@ -58,7 +58,7 @@ au FileType muse setlocal efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#
 
 After writing logs to ~/.muse/entries, parse them:
 ```bash
-muse parse --all --ignore-cache
+muse parse
 ```
 
 And behold how spectacularly you flubbed things w.r.t. grammar compliance.

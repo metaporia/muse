@@ -11,7 +11,7 @@
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- This module provides the necessaries for the "muse" CLI.
+-- This module provides the necessaries for muse's CLI.
 -----------------------------------------------------------------------------
 module Main where
 
@@ -432,8 +432,8 @@ writeMuseConf mc = do
 --    cacheDir/entries (bucket by month); collect filenames of parse failures 
 --    into cacheDir/failures. 
 --
---    -  write valid date range to config ?
---    TODO tag generation based on entry grouping
+--    - write valid date range to config ?
+--    - tag generation based on entry grouping
 -- 4. 
 -- | Prompt user for log dir, cache dir, 
 prompt :: IO MuseConf
@@ -461,7 +461,11 @@ prompt = do
 
 -- | Creates ~/.muse/{entries/,config.yaml} and ~/.cache/muse/entries.
 --
--- TODO check if file exists before overwriting/tampering with it!!
+--  Checks whether the following exist before mutation:
+--      
+--      ▣  config file, `config.yaml`
+--      □  `.muse{,entries}`
+--      □  `.cache/muse{,parsedEntries}`
 --
 museInit :: Bool -> Bool -> IO MuseConf
 museInit quiet ignoreCache = do
@@ -508,7 +512,6 @@ decodeCachedEntries :: MuseConf -> IO [Maybe [LogEntry]]
 decodeCachedEntries = fmap decodeEntries <$> loadCachedEntries
 
 -- | Parse all entries from logDir into cacheDir/entries.
--- TODO pass counter through `showErrOrCollect` to tally parse errors
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
   -- read in log file names; parse 'em

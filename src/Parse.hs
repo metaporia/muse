@@ -12,32 +12,10 @@
 -- Portability :  portable
 --
 -- This module provides atomic parsers, as it were, for "Parsers.Entry".
+--
+-- Note 'toDefVersus', 'inlineMeaning', and 
 -----------------------------------------------------------------------------
-module Parse
-  --( DefQuery(..)
-  --, day'
-  --, Entry(..)
-  --, entries
-  --, entryOrDump
-  --, LogEntry(..)
-  --, logEntries
-  --, parse
-  --, timestamp
-  --, TimeStamp(..)
-  --, toMaybe
-  --, relDur
-  --, trim
-  --, PageNum(..)
-  --, PgNum
-  --, Attr
-  --, RelDur(..)
-  --, Quote
-  --, Author
-  --, Body
-  --, Title
-  --, parseByteString
-  --) where
- where
+module Parse where
 
 import Control.Applicative
 import Control.Lens.TH (makePrisms)
@@ -180,6 +158,8 @@ import Text.Trifecta hiding (Rendering, Span)
 -- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
 --    and into `entry` (see `emptyLines`)
 --    BLOCKED: `entryBody` can't be factored out a.t.m.
+todo = undefined
+
 -- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
 data TimeStamp = TimeStamp
   { hr :: Int
@@ -199,49 +179,16 @@ twoDigit :: Parser Int
 twoDigit = read <$> count 2 digit <* skipOptColon
 
 -- | Collects timestamp of the form "14:19:00 λ. ".
+--
 -- N.B. Collect tabs before invoking `timestapm` as it will greedily consume
 -- preceeding whitespace.
 timestamp :: Parser TimeStamp
 timestamp = do
   h <- lpad twoDigit
   m <- twoDigit
-  s <- twoDigit <* space <* char 'λ' <* char '.' <* space -- todo replace `char '.'` with `symbolic '.'`.
+  s <- twoDigit <* space <* char 'λ' <* char '.' <* space 
   return $ TimeStamp h m s
 
--- | Definition parsing. The following are valid definition query forms:
---
---   * ▣  a comma separated query list
---
---     > "d word1[, ..., ]"
---
---      - works over multiple lines
---      - NB: no support for commentary, explication; include such in a
---        separate entry.
---
---   * ▣  for inline definition of headword
---
---     > "d headword : meaning"
---
---   * ▣  headword comparison
---
---     > "dvs headword1 : meaning
---     >      --- vs ---
---     >      headword2 : meaning"
---
---   * ▣  quotation
---
---     > [r|
---     >  quotation
---     >
---     >  "There was no treachery too base for the world to commit. She knew
---     >  that..."
---     >
---     >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
---     > |]
--- | Examples of headwords:
---
--- * "venal" -- [A-Za-z]*
--- * "lèse majesté" -- [A-Za-z ]
 data DefQuery
   = Defn (Maybe PgNum)
          [Headword]
@@ -269,6 +216,16 @@ trimDefQuery (DefVersus hw m h' m') =
 trim' :: String -> [Char]
 trim' = intercalate " " . fmap trim . lines
 
+-- Parses one or more headwords in a comma separated list; e.g.,
+--
+-- > d callipygous
+--
+-- or
+--
+-- > d moue, wen, serac
+--
+-- N.B. as newline is the closing delimiter, headword list shouldn't exceed one
+-- line.
 toDefn :: Parser DefQuery
 toDefn = do
   _ <- symbolic 'd'
@@ -276,12 +233,20 @@ toDefn = do
   headwords <- sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
   return $ Defn pg headwords
 
--- recent
-inlineMeaning :: Parser DefQuery -- InlineDef Headword Meaning
+-- | Parses inline definition of headword. E.g.,
+--
+-- > "d headword : meaning"- recent
+--
+inlineMeaning :: Parser DefQuery 
 inlineMeaning =
   InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
 
--- | Splits on delimiter
+-- | Splits on delimiter. E.g.,
+--
+-- > "dvs headword1 : meaning
+-- >      --- vs ---
+-- >      headword2 : meaning"
+--
 toDefVersus :: Parser DefQuery
 toDefVersus =
   collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> p1

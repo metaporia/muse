@@ -48,6 +48,14 @@ import Text.Trifecta hiding (Rendering, Span)
 --
 --  Meant to store quotable excerpts for retrieval.
 --
+--  E.g.,
+--  >  quotation
+--  >
+--  >  "There was no treachery too base for the world to commit. She knew
+--  >  that..."
+--  >
+--  >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
+--  
 --  TODO: conditionally omit capture of attribution when it can be inferred
 --  from indentation context.
 quotation :: Parser Entry
@@ -99,13 +107,8 @@ book = do
 def :: Parser Entry
 def = do
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
-  -- _ <- many $ try (void (some space) <* void newline) <|> void newline <?> "lonely spaces"
-  -- _ <- many (try space <* newline) <?> "consume solitary spaces on newline"
   return . Def . trimDefQuery $ dq
 
---  _ <- many (void newline <|> void (some space) <* void newline)
---  _ <- many $ try (void (some space) <* newline) <|> void newline
---  _ <- emptyLines
 -- | Extracts page number as one of: 
 --
 --  > "p <num>" -- page number 

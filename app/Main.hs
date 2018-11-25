@@ -526,7 +526,6 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
       selectModified fps =
         if ignoreCache
           then putStrLn "ignoring parsed entry cache" >> return fps
-          -- TODO fix cache file use
           else foldr
                  (\fp rest
                    -> do

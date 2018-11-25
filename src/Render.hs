@@ -146,6 +146,9 @@ class Show a =>
     -> a -- ^ Item to render
     -> IO ()
 
+newtype QuoteBody = QuoteBody String
+  deriving (Eq, Show)
+
 instance ColRender LogEntry where
   colRender col (Dump s) = putStr "Dump:    " >> colRender col s
   colRender col (TabTsEntry (_, _, entry)) = colRender col entry
@@ -154,7 +157,7 @@ instance ColRender Entry where
   colRender col (Def dq) = colRender col dq
   colRender col (Quotation b attr pg) =
     colorize col magenta (putStr "Quote:   ") >>
-    colorize col cyan (colRender col $ surround '"' b) >>
+    colorize col cyan (colRender col . QuoteBody $ surround '"' b) >>
     putStr indent >>
     colorize col yellow (colRender col attr) >>
     putStr indent >>
@@ -192,6 +195,15 @@ instance ColRender Phrase where
     colorize col blue $ colRender col (intercalate ", " ps)
   colRender col (Defined p m) =
     colorize col green (putStr $ upper p ++ ": ") >> colRender col m
+
+instance ColRender QuoteBody where
+  colRender col =
+    colorize col cyan .
+    putStr . 
+    T.unpack .
+    T.unlines .
+    applyToRest ((T.replicate indentation " ") <>) .
+    wrapTextToLines defaultWrapSettings 79 . T.pack . \(QuoteBody s) -> s
 
 instance ColRender a => ColRender (Maybe a) where
   colRender col (Just x) = colRender col x

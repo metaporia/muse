@@ -169,7 +169,6 @@ tGetDialogueOrQuote = do
 tGetDialogue :: IO [LogEntry]
 tGetDialogue = do
   i <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
-  i' <- input (Just (isInfixOf "Woolf")) Nothing [Just isDialogue]
   return $ filterWith' i tDialogueFilter
 
 tGetDialogueOrQuoteOut =
@@ -634,7 +633,6 @@ tTitleStr =
 
           In "Thank You, Jeeves" by P.G. Wodehouse  
 |]
-
 tTitle =
   [ TabTsEntry
       ( 0
@@ -673,3 +671,84 @@ tTitle =
           "In \"Thank You, Jeeves\" by P.G. Wodehouse  "
           Nothing)
   ]
+
+-- TODO add test case for this
+tDedup =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 41, sec = 7}
+      , Read "Jane Eyre" "Charlotte Bront\235")
+  , TabTsEntry (1, TimeStamp {hr = 9, min = 41, sec = 35}, PN (Page 403))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 41, sec = 53}
+      , Def (Defn Nothing ["halcyon"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 47, sec = 20}
+      , Def (Defn Nothing ["affluence"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 54, sec = 47}
+      , Def (Defn Nothing ["meet", "meed", "morass"]))
+  , TabTsEntry
+      (1, TimeStamp {hr = 9, min = 58, sec = 16}, Def (Defn Nothing ["delf"]))
+  , TabTsEntry
+      (1, TimeStamp {hr = 10, min = 10, sec = 9}, Def (Defn Nothing ["torpid"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 11, sec = 30}
+      , Def (Defn Nothing ["emulous"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 18, sec = 12}
+      , Def (Defn Nothing ["carmine"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 44, sec = 7}
+      , Def (Defn Nothing ["ebullition"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 57, sec = 21}
+      , Def (Defn Nothing ["lustre"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 11, min = 2, sec = 26}
+      , Def (Defn Nothing ["helpmeet"]))
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 11, min = 42, sec = 52}
+      , Def (Defn Nothing ["cicatrize"]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 12, min = 1, sec = 47}
+      , Read "Jane Eyre" "Charlotte Bront\235")
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 12, min = 1, sec = 47}
+      , Read "Jane Eyre" "Charlotte Bront\235")
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 12, min = 1, sec = 47}
+      , Read "Jane Eyre" "Charlotte Bront\235")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , Quotation
+          "Thank you, Jeeves."
+          "In \"Thank You, Jeeves\" by P.G. Wodehouse  "
+          Nothing)
+  ]
+
+filter' :: Input -> [LogEntry] -> [LogEntry]
+filter' _ [] = []
+filter' input (x:xs)
+  -- exclude redundant read entries
+  | isRead x || variantSatisfies input x =
+    case compareRead <$> projectRead x <*> (head' rest >>= projectRead) of
+      Just True -> rest
+      _ -> x : rest
+  | otherwise = rest
+  where
+    rest = filter' input xs
+

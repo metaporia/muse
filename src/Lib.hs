@@ -12,6 +12,12 @@
 --
 -- This module merely exports modules "Diff", "Helpers", "Parse", "Parse.Entry", 
 -- "Search", and "Render".
+--
+-- TODO
+--
+-- □  create absolute paths to entries by appending log file name and entry
+--    timestamp; then store log of review times of entry ids, w type of entry;
+--    this will ease efficient review of quotes.
 -----------------------------------------------------------------------------
 module Lib
   ( module Helpers

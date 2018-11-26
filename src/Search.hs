@@ -17,7 +17,7 @@ module Search where
 import Control.Lens (makeLenses, preview, review)
 import Control.Lens.TH (makeLenses, makePrisms)
 import Control.Lens.Tuple
-import Control.Monad ((>=>), void)
+import Control.Monad ((>=>), void, join)
 import Data.Aeson hiding (Null)
 import Data.Bifunctor
 import qualified Data.ByteString as B
@@ -142,17 +142,29 @@ filterWith' _ [] = []
 filterWith' input (x:xs)
   -- no string search predicates; does no recurse
   | isNothing (titlePred input) && isNothing (authorPred input) =
-    filter (\e -> isRead e || variantSatisfies input e) (x : xs)
+    -- old: filter (\e -> isRead e || variantSatisfies input e) (x:xs)
+    filter' (x : xs)
   -- string search preds present; type preds poss.
   -- that is, collect entries which are nested w `variantSatisfies`; outside of
   -- nested collect nothing but quotations or read entries that satisfy
   -- (`searchSatisfy`)
   | otherwise = go (x : xs)
   where
+    filter' :: [LogEntry] -> [LogEntry]
+    filter' [] = []
+    filter' (x:xs) = 
+      case compareRead <$> projectRead x <*> (head' rest >>= projectRead) of
+        Just True -> rest
+        _ -> if | isRead x || variantSatisfies input x -> x : rest
+                | otherwise -> rest 
+      where rest = filter' xs
+    go :: [LogEntry] -> [LogEntry]
     go [] = []
     go ((Dump _):xs) = go xs
     go (x@(TabTsEntry (tabs, _, _)):xs)
       -- collect nested
+      -- TODO if read groups are empty, add none of the entries, including the
+      -- read entry itself
       | doesReadSatisfy input x =
         let (belong, rest) =
               takeWhileRestWithFilter
@@ -161,9 +173,18 @@ filterWith' input (x:xs)
                 xs
         -- inside filter; include read entries 
         -- do not recurse to `filterWith`; lack of search preds holds.
-        in (x : belong) ++ go rest
+        in if null belong
+             then go rest
+             else (x : belong) ++ go rest
       | searchSatisfies' input x = x : go xs
       | otherwise = go xs
+
+head' [] = Nothing
+head' (x:_) = Just x
+
+-- | Comparse auth, title strings of read entry
+compareRead :: (Title, Author) -> (Title, Author) -> Bool
+compareRead (t, a) (t', a') = t == t' && a' == a
 
 -- TODO 
 takeWhileRestWithFilter ::

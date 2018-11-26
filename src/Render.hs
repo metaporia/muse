@@ -164,8 +164,9 @@ instance ColRender Entry where
     colRender col (Page <$> pg) >>
     putStr "\n"
   colRender col (Read t a) =
-    colorize col yellow . putStrLn $
-    "Read:    " ++ (surround '"' t) ++ " by " ++ a
+    colorize col yellow (putStrLn $
+    "Read:    " ++ (surround '"' t) ++ " by " ++ a)
+    >> putStr "\n"
   colRender col (Commentary s) =
     putStr "Comment: " >> colorize col cyan (colRender col s)
   colRender col (PN pg) = colRender col pg

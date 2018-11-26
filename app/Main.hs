@@ -19,10 +19,12 @@ import Control.Monad ((>=>), join, void)
 import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Foldable (fold)
 import Data.List
        (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
 import Data.Maybe (catMaybes, fromJust, isJust)
 import Data.Monoid ((<>))
+import qualified Data.Monoid as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time
@@ -366,7 +368,11 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
               loadFiles (cachePath . dayToPath <$> dates) >>=
               return . catMaybes . decodeEntries
               -- TODO print date above each days `[LogEntry]`
-            filtered = concat . fmap (filterWith' input) <$> entries
+            filtered = concat . fmap (rmOnlyRead . filterWith' input) <$> entries
+              where rmOnlyRead xs 
+                      | M.getAll $ foldMap (M.All . isRead) xs = []
+                      | otherwise = xs
+
         return filtered
   filtered <- join dateFilter
   if debug

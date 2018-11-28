@@ -188,19 +188,35 @@ data Bucket
   | Qts
   | Dial
   | Phrs
+  | Pgs PageNum
   | Cmts
+  | Defs
+  | Null
   deriving (Eq, Ord, Show)
 
 deriveSafeCopy 0 'base ''Bucket
 
+toBucket :: LogEntry -> Bucket
+toBucket (Dump _) = Dmp
+toBucket (TabTsEntry (_, _, (Read _ _))) = Rds
+toBucket (TabTsEntry (_, _, (Def _))) = Defs
+toBucket (TabTsEntry (_, _, (Quotation _ _ _ ))) = Qts
+toBucket (TabTsEntry (_, _, (Commentary _))) = Cmts
+toBucket (TabTsEntry (_, _, (PN pg))) = Pgs pg
+toBucket (TabTsEntry (_, _, (Phr _))) = Phrs
+toBucket (TabTsEntry (_, _, (Dialogue _))) = Dial
+toBucket (TabTsEntry (_, _, (Parse.Entry.Null))) = Store.Null
+
 -- TODO replace tuples with newtypes, for each, index by utcTime
 data DB = DB
   { dumped :: IxSet Dumps
+  , defs :: IxSet (TsIdx DefQuery)
   , reads :: IxSet (TsIdxTup Title Author)
   , quotes :: IxSet (TsIdxTup Body Attr)
   , dialogues :: IxSet (TsIdx Text)
   , phrases :: IxSet (TsIdx Phrase)
   , comments :: IxSet (TsIdx Text)
+  --, pages :: IxSet (TsIdx PageNum) -- Perhaps keep these in 'chrono'?
   , chrono :: IxSet (TsIdxTup IndentDepth Bucket) -- ^ entry order of elements in entry variant buckets.
   } deriving (Eq, Show)
 
@@ -210,6 +226,7 @@ deriveSafeCopy 0 'base ''DB
 initDB :: DB
 initDB =
   DB
+    IxSet.empty
     IxSet.empty
     IxSet.empty
     IxSet.empty
@@ -323,3 +340,12 @@ purge = do
            createCheckpointAndClose
            (\acid -> update acid ReinitDB)
   pPrint r
+
+
+-- TODO
+-- □  impl; Q: how to handle key overwrites?
+--
+-- | Add a day's worth of log entries to DB.
+--
+updateDB :: Day -> [LogEntry] -> Update DB DB
+updateDB  = undefined

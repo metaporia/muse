@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0efc357cf81fbafc7b21b7176f41d8e7f50dcba59c8685b2f44c11a3b74260ac
+-- hash: 723a99fda6ee45de936ee81b0fe7b367fb3b8d8d3b091e2afbfeaf518b840d6e
 
 name:           muse
 version:        0.1.2
@@ -43,6 +43,7 @@ library
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
+    , containers
     , directory
     , hspec
     , ixset
@@ -76,6 +77,7 @@ executable muse
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
+    , containers
     , directory
     , hspec
     , ixset
@@ -114,6 +116,7 @@ test-suite muse-test
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
+    , containers
     , directory
     , hspec
     , ixset

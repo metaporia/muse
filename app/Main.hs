@@ -15,6 +15,7 @@
 -- TODO 
 -- □  serialize w "Data.Serialize" and "SafeCopy"
 -- □  persist with "Data.Acid"
+-- □  include locale time zone in config
 --
 -----------------------------------------------------------------------------
 module Main where

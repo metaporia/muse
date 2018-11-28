@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
   MultiWayIf #-}
-{-# LANGUAGE StandaloneDeriving, DeriveDataTypeable,
+{-# LANGUAGE RecordWildCards, StandaloneDeriving, DeriveDataTypeable,
   TemplateHaskell, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
@@ -15,7 +15,7 @@
 --
 -- Uses acid-state and safeCopy to serilaize and persist logs.
 --
--- DB schema:
+-- DB' schema:
 -----------------------------------------------------------------------------
 module Store where
 
@@ -30,10 +30,12 @@ import Data.Acid.Remote
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Data (Data, Typeable)
-import Data.IxSet (Indexable(..), IxSet(..), (@=), ixFun, ixSet, getOne)
+import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
 import qualified Data.IxSet as IxSet
 import Data.Monoid ((<>))
 import Data.SafeCopy
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -103,8 +105,8 @@ toLogEntry (Ts d i ts e) = (d, TabTsEntry (i, ts, e))
 pp :: LogEntry' -> IO ()
 pp = (\(d, le) -> putStrLn (show d) >> colRender True le) . toLogEntry
 
-data DB =
-  DB [LogEntry']
+data DB' =
+  DB' [LogEntry']
   deriving (Eq, Ord, Read, Show, Data, Typeable)
 
 -- | Since no search predicates target dumps (they're only present for
@@ -112,10 +114,28 @@ data DB =
 -- most searches, barring "fetch everything, including dumps".
 --
 -- TODO index
-data Dumps = Dumps Day [Text]
+data Dumps = Dumps Day (Set Text) -- ^ sorted, unique list of text
   deriving (Eq, Ord, Show, Read, Data)
 
+getDay :: Dumps -> Day
+getDay (Dumps d _) = d
+
+getDumps :: Dumps -> Set Text
+getDumps (Dumps _ ds) = ds
+
+insertDumpText :: Text -> Dumps -> Dumps
+insertDumpText t (Dumps d s) = Dumps d (Set.insert t s)
+
 deriveSafeCopy 0 'base ''Dumps
+
+
+instance Indexable Dumps where
+  empty =
+    ixSet
+      [ ixFun $ return . getDay -- primary key
+      , ixFun $ return . getDumps
+      ]
+
 
 -- | Logs are naturally indexed/bucketed by day, so we won't tamper with that.
 -- 
@@ -146,10 +166,6 @@ hasTs ts dl = ts `elem` ((\(_,ts',_) -> ts') <$> entries dl)
 -- □  (index) replace `[DayLog]` with `IxSet DayLog]`
 -- □  index by `(Day, TimeStamp)` (primary key?)
 -- □  index by `Day`
-data DB' = DB'
-  { dumps :: [Dumps]
-  , logs :: DayLogs
-  } deriving (Data, Eq, Ord, Read, Show, Typeable)
 
 -- | Datetime map indexed by tuple, fst, snd. fst should be the primary key.
 data TsIdx v = TsIdx
@@ -182,36 +198,93 @@ x = do
   return ()
 
 -- TODO replace tuples with newtypes, for each, index by utcTime
-data DB'' = DB''
-  { dumped :: TsIdx Dumps
-  , reads :: TsIdxTup Title Author
-  , quotes :: TsIdxTup Body Attr
-  , dialogues :: TsIdx Text
-  , phrases :: TsIdx Phrase
-  , comments :: TsIdx Text
+data DB = DB
+  { dumped :: IxSet Dumps
+  , reads :: IxSet (TsIdxTup Title Author)
+  , quotes :: IxSet (TsIdxTup Body Attr)
+  , dialogues :: IxSet (TsIdx Text)
+  , phrases :: IxSet (TsIdx Phrase)
+  , comments :: IxSet (TsIdx Text)
   } deriving (Data, Eq, Ord, Read, Show, Typeable)
 
-deriveSafeCopy 0 'base ''DB''
+-- | If day is already present, the text is added to that day's dumps,
+-- otherwise, a new 'Dumps' is added. Returns the updated or newly created
+-- 'Dumps'
+insertDump :: Day -> Text -> Update DB Dumps
+insertDump day content = do
+  db@DB {..} <- get
+  let dumps =
+        case getOne $ IxSet.getEQ day dumped of
+          Just dumps -> insertDumpText content dumps
+          Nothing -> Dumps day $ Set.singleton content
+  put DB {dumped = updateIx day dumps dumped, ..}
+  return dumps
 
-insertDayLog :: DayLog -> DB' -> DB'
-insertDayLog dl@(DayLog day' entries) db@(DB' dumps dls@(DayLogs logs))
-  | day' `notElem` (getDays dls) = 
-      DB' dumps (DayLogs (dl:logs))
-  | otherwise = db
+-- | Overwrites '(Title, Author)' tuple.
+updateRead :: UTCTime -> Title -> Author -> Update DB (Title, Author)
+updateRead ts t a = do
+  db@DB {..} <- get
+  put DB {reads = updateIxSetTsIdxTup (TsIdxTup $ TsIdx ts (t, a)) reads, ..}
+  return (t, a)
 
--- TODO
-insertEntryAtDay :: Day -> TimeStamp -> Int -> Entry -> DB' -> DB'
-insertEntryAtDay d ts depth e (DB' dmp dls) = undefined
-        
+updateQuote :: UTCTime -> Title -> Author -> Update DB (Title, Author)
+updateQuote ts t a = do
+  db@DB {..} <- get
+  put DB {quotes = updateIxSetTsIdxTup (TsIdxTup $ TsIdx ts (t, a)) quotes, ..}
+  return (t, a)
+
+updateDialogue :: UTCTime -> Text -> Update DB Text
+updateDialogue ts t = do
+  db@DB {..} <- get
+  put DB {dialogues = updateIxSetTsIdx (TsIdx ts t) dialogues, ..}
+  return t
+
+updatePhrase :: UTCTime -> Phrase -> Update DB Phrase
+updatePhrase ts p = do
+  db@DB {..} <- get
+  put DB {phrases = updateIxSetTsIdx (TsIdx ts p) phrases, ..}
+  return p
+
+updateComments :: UTCTime -> Text -> Update DB Text
+updateComments ts c = do
+  db@DB {..} <- get
+  put DB {comments = updateIxSetTsIdx (TsIdx ts c) comments, ..}
+  return c
+
+
+updateIxSetTsIdx ::
+     (Ord a, Typeable a) => TsIdx a -> IxSet (TsIdx a) -> IxSet (TsIdx a)
+updateIxSetTsIdx ti@TsIdx {..} = updateIx ts ti
+
+updateIxSetTsIdxTup ::
+     (Ord a, Typeable a, Ord b, Typeable b)
+  =>  TsIdxTup a b
+  -> IxSet (TsIdxTup a b)
+  -> IxSet (TsIdxTup a b)
+updateIxSetTsIdxTup tt@(TsIdxTup TsIdx{..}) = updateIx ts tt
+
+update :: Update DB' ()
+update = undefined
+
+--insert :: Update DB' ()
+--insert = undefined
+--
+--insert :: Update DB' ()
+--insert = undefined
+--
+--insert :: Update DB' ()
+--insert = undefined
+--
+--insert :: Update DB' ()
+--insert = undefined
+
+deriveSafeCopy 0 'base ''DB
 
 initDB' :: DB'
-initDB' = DB' [] (DayLogs [])
+initDB' = DB' []
 
-initDB :: DB
-initDB = DB []
-
-getDB :: DB -> [LogEntry']
-getDB (DB xs) = xs
+getDB' :: DB' -> [LogEntry']
+getDB' (DB' xs) = xs
 
 
 deriveSafeCopy 0 'base ''TimeStamp
@@ -220,31 +293,31 @@ deriveSafeCopy 0 'base ''PageNum
 deriveSafeCopy 0 'base ''DefQuery
 deriveSafeCopy 0 'base ''Entry
 deriveSafeCopy 0 'base ''LogEntry'
-deriveSafeCopy 0 'base ''DB
+deriveSafeCopy 0 'base ''DB'
 
 
 
 -- | Creates 'Ts' from 'Entry'' and inserts it into 'DB'.
-addEntry :: Day -> TimeStamp -> Int -> Entry -> Update DB LogEntry'
+addEntry :: Day -> TimeStamp -> Int -> Entry -> Update DB' LogEntry'
 addEntry day ts indent entry = do
-  db@(DB entries) <- get
+  db@(DB' entries) <- get
   let entry' = Ts day indent ts entry
-  put . DB $ entry' : entries
+  put . DB' $ entry' : entries
   return entry'
 
 -- | Creates 'Entry from 'Text' and inserts it into 'DB'.
-addDump :: Day -> Text -> Update DB LogEntry'
+addDump :: Day -> Text -> Update DB' LogEntry'
 addDump day text = do
-  db@(DB entries) <- get
+  db@(DB' entries) <- get
   let dump = Dump' day text
-  put . DB $ dump : entries
+  put . DB' $ dump : entries
   return dump
 
 
-viewDB :: Query DB [LogEntry']
-viewDB = getDB <$> ask
+viewDB' :: Query DB' [LogEntry']
+viewDB' = getDB' <$> ask
 
-makeAcidic ''DB ['addEntry, 'addDump, 'viewDB]
+makeAcidic ''DB' ['addEntry, 'addDump, 'viewDB']
 
 run :: IO ()
 run = do
@@ -252,17 +325,17 @@ run = do
   today <- utctDay <$> getCurrentTime
   r <-
     bracket
-      (openLocalState initDB)
+      (openLocalState initDB')
       createCheckpointAndClose
       (\acid -> do
          --update acid (AddDump today "dump body")
          --update acid (AddEntry today ts 0 (Read "Thank You, Jeeves" "P.G. Wodehouse"))
-         query acid ViewDB)
+         query acid ViewDB')
   mapM_ pp r
   return ()
 
 --fetch :: IO (0
 --fetch = do
---  bracket (openLocalState initDB)
+--  bracket (openLocalState initDB')
 
 

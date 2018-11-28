@@ -43,6 +43,7 @@ dependencies:
 - acid-state
 - safecopy
 - ixset
+- containers
 
 library:
   source-dirs: src

@@ -19,6 +19,15 @@ import Text.Show.Pretty
 import Text.Trifecta hiding (Rendering, Span, render, rendered)
 import qualified Text.Trifecta.Result as Tri
 
+
+eitherToMaybe :: Either a b -> Maybe b
+eitherToMaybe (Left _) = Nothing
+eitherToMaybe (Right b) = Just b
+
+maybeToEither :: Maybe a -> Either () a
+maybeToEither (Just a) = Right a
+maybeToEither Nothing = Left ()
+
 toMaybe :: Tri.Result a -> Maybe a
 toMaybe (Tri.Success a) = Just a
 toMaybe (Tri.Failure _) = Nothing

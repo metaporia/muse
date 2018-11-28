@@ -1,4 +1,6 @@
 .stack-work/
+*.db
+state/
 \#*.hs\#
 logParse.cabal
 errs

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c0ff90ada4776ec252c3b9303f5971f17aa82d2330ffe9cb7666070bb7071fac
+-- hash: 0efc357cf81fbafc7b21b7176f41d8e7f50dcba59c8685b2f44c11a3b74260ac
 
 name:           muse
 version:        0.1.2
@@ -31,23 +31,27 @@ library
       Helpers
       Search
       Render
+      Store
   other-modules:
       Paths_muse
   hs-source-dirs:
       src
   build-depends:
       QuickCheck
+    , acid-state
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
     , directory
     , hspec
+    , ixset
     , lens
     , mtl >=2.2.2
     , parsers
     , pretty-show
     , raw-strings-qq
+    , safecopy
     , split
     , text
     , text-metrics
@@ -67,12 +71,14 @@ executable muse
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
+    , acid-state
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
     , directory
     , hspec
+    , ixset
     , lens
     , mtl >=2.2.2
     , muse
@@ -80,6 +86,7 @@ executable muse
     , parsers
     , pretty-show
     , raw-strings-qq
+    , safecopy
     , split
     , text
     , text-metrics
@@ -102,18 +109,21 @@ test-suite muse-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
+    , acid-state
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
     , bytestring
     , directory
     , hspec
+    , ixset
     , lens
     , mtl >=2.2.2
     , muse
     , parsers
     , pretty-show
     , raw-strings-qq
+    , safecopy
     , split
     , text
     , text-metrics

@@ -40,6 +40,9 @@ dependencies:
 - lens
 - transformers
 - ansi-terminal
+- acid-state
+- safecopy
+- ixset
 
 library:
   source-dirs: src
@@ -51,6 +54,7 @@ library:
     - Helpers
     - Search
     - Render
+    - Store
 
 executables:
   muse:

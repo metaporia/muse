@@ -12,6 +12,10 @@
 -- Portability :  portable
 --
 -- This module provides the necessaries for muse's CLI.
+-- TODO 
+-- □  serialize w "Data.Serialize" and "SafeCopy"
+-- □  persist with "Data.Acid"
+--
 -----------------------------------------------------------------------------
 module Main where
 
@@ -303,14 +307,6 @@ author =
     (fmap Just str)
     (long "author" <> metavar "SUBSTR" <> short 'a' <> value Nothing <>
      help "Substring/affix of author")
-
-eitherToMaybe :: Either a b -> Maybe b
-eitherToMaybe (Left _) = Nothing
-eitherToMaybe (Right b) = Just b
-
-maybeToEither :: Maybe a -> Either () a
-maybeToEither (Just a) = Right a
-maybeToEither Nothing = Left ()
 
 title :: Parser (Maybe String)
 title =

@@ -286,13 +286,17 @@ updateComments ts c = do
 viewDB :: Query DB DB
 viewDB = ask
 
+reinitDB :: Update DB DB
+reinitDB = put initDB >> return initDB
+
 --makeAcidic ''DB' ['addEntry, 'addDump, 'viewDB']
-makeAcidic ''DB ['insertDump , 'updateRead , 'updateQuote , 'updateDialogue, 'updatePhrase, 'viewDB]
+makeAcidic ''DB ['insertDump , 'updateRead , 'updateQuote , 'updateDialogue, 'updatePhrase, 'viewDB, 'reinitDB]
 
 insert :: IO ()
 insert = do
   today <- utctDay <$> getCurrentTime
   utc <- getCurrentTime
+  utc' <- getCurrentTime
   r <-
     bracket
       (openLocalState initDB)
@@ -300,25 +304,22 @@ insert = do
       (\acid -> do
          update acid (InsertDump today "dump body")
          update acid (UpdateRead utc "Thank You, Jeeves" "P.G. Wodehouse")
-         db <- query acid ViewDB
-         return db)
-  pPrint $ r
+         update acid (UpdateRead utc' "Thank You, Jeeves" "P.G. Wodehouse")
+         query acid ViewDB
+         )
+  pPrint r
   return ()
 
+view :: IO ()
+view = do
+  r <- bracket (openLocalState initDB)
+           createCheckpointAndClose
+           (\acid -> query acid ViewDB)
+  pPrint r
 
-
----run' :: IO ()
----run' = do
----  let ts = TimeStamp 0 0 0
----  today <- utctDay <$> getCurrentTime
----  r <-
----    bracket
----      (openLocalState initDB')
----      createCheckpointAndClose
----      (\acid -> do
----         --update acid (AddDump today "dump body")
----         --update acid (AddEntry today ts 0 (Read "Thank You, Jeeves" "P.G. Wodehouse"))
----         query acid ViewDB')
----  mapM_ pp r
----  return ()
-
+purge :: IO ()
+purge = do
+  r <- bracket (openLocalState initDB)
+           createCheckpointAndClose
+           (\acid -> update acid ReinitDB)
+  pPrint r

@@ -56,6 +56,8 @@ library:
     - Search
     - Render
     - Store
+    - Time
+    - Store.Types
 
 executables:
   muse:

@@ -37,7 +37,7 @@ import Data.SafeCopy
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Text (Text)
+import Text.Show.Pretty (pPrint)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time
@@ -48,6 +48,8 @@ import Helpers
 import Parse (DefQuery(..), PageNum(..), TimeStamp(..))
 import Parse.Entry (Entry(..), LogEntry(..), Phrase(..))
 import Render (colRender, showAll)
+import Time (truncateUTC)
+import Store.Types
 
 type IndentDepth = Int
 type Quote = Text
@@ -63,30 +65,38 @@ deriving instance Read TimeStamp
 deriving instance Ord TimeStamp
 deriving instance Data TimeStamp
 
+deriveSafeCopy 0 'base ''TimeStamp
+
 deriving instance Data     Entry
 deriving instance Read     Entry
 deriving instance Ord      Entry
 deriving instance Typeable Entry
 
+deriveSafeCopy 0 'base ''Entry
+
 deriving instance Data     PageNum
 deriving instance Read     PageNum
 deriving instance Ord      PageNum
 deriving instance Typeable PageNum
+deriveSafeCopy 0 'base ''PageNum
 
 deriving instance Data     LogEntry
 deriving instance Read     LogEntry
 deriving instance Ord      LogEntry
 deriving instance Typeable LogEntry
+deriveSafeCopy 0 'base ''LogEntry
 
 deriving instance Data     Phrase
 deriving instance Read     Phrase
 deriving instance Ord      Phrase
 deriving instance Typeable Phrase
+deriveSafeCopy 0 'base ''Phrase
 
 deriving instance Data     DefQuery
 deriving instance Read     DefQuery
 deriving instance Ord      DefQuery
 deriving instance Typeable DefQuery
+deriveSafeCopy 0 'base ''DefQuery
 
 -- | 'LogEntry' with 'Day'.
 data LogEntry'
@@ -162,40 +172,26 @@ deriveSafeCopy 0 'base ''DayLogs
 hasTs :: TimeStamp -> DayLog -> Bool
 hasTs ts dl = ts `elem` ((\(_,ts',_) -> ts') <$> entries dl)
 
--- TODO 
--- □  (index) replace `[DayLog]` with `IxSet DayLog]`
--- □  index by `(Day, TimeStamp)` (primary key?)
--- □  index by `Day`
-
--- | Datetime map indexed by tuple, fst, snd. fst should be the primary key.
-data TsIdx v = TsIdx
-  { ts :: UTCTime
-  , val :: v
-  } deriving (Eq, Ord, Show, Read, Data)
-
-deriveSafeCopy 0 'base ''TsIdx
-
-instance (Ord v, Typeable v) => Indexable (TsIdx v) where
-  empty = ixSet [ixFun $ return . ts, ixFun $ return . val]
-
-newtype TsIdxTup a b = TsIdxTup
-  { tsIdx :: TsIdx (a, b)
-  } deriving (Eq, Ord, Show, Read, Data)
-
-instance (Ord a, Ord b, Typeable a, Typeable b) => Indexable (TsIdxTup a b) where
-  empty =
-    ixSet
-      [ ixFun $ return . ts . tsIdx
-      , ixFun $ return . val . tsIdx -- tuple
-      , ixFun $ return . fst . val . tsIdx -- fst
-      , ixFun $ return . snd . val . tsIdx -- snd
-      ]
-
-deriveSafeCopy 0 'base ''TsIdxTup
 
 x = do
   t <- getCurrentTime
   return ()
+
+-- | Entry variant 'DB' bucket identifier. The original, chronological log
+-- order is stored as a set of `(timestamps, tag)` pairs; the tag informs
+-- dispatch from which bucket to fetch the assoc'd entry. E.g., if when parsing
+-- the 'chrono' set, an entry of the form `(ts, Dmp)` is found, then `ts' will
+-- be fetched from `dumped (db :: DB)`.
+data Bucket
+  = Dmp
+  | Rds
+  | Qts
+  | Dial
+  | Phrs
+  | Cmts
+  deriving (Eq, Ord, Show)
+
+deriveSafeCopy 0 'base ''Bucket
 
 -- TODO replace tuples with newtypes, for each, index by utcTime
 data DB = DB
@@ -205,7 +201,39 @@ data DB = DB
   , dialogues :: IxSet (TsIdx Text)
   , phrases :: IxSet (TsIdx Phrase)
   , comments :: IxSet (TsIdx Text)
-  } deriving (Data, Eq, Ord, Read, Show, Typeable)
+  , chrono :: IxSet (TsIdxTup IndentDepth Bucket) -- ^ entry order of elements in entry variant buckets.
+  } deriving (Eq, Show)
+
+deriveSafeCopy 0 'base ''DB
+
+
+initDB :: DB
+initDB =
+  DB
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+
+-- | Updates entry in indexed set of timestamped pairs.
+updateIxSetTsIdx ::
+     (Ord a, Typeable a) => TsIdx a -> IxSet (TsIdx a) -> IxSet (TsIdx a)
+updateIxSetTsIdx ti = updateIx (ts ti) ti
+
+
+-- | Updates entry in indexed set of `(ts, (a, b))`; that is, pairs of timestamps
+-- and tuples.
+updateIxSetTsIdxTup ::
+     (Ord a, Typeable a, Ord b, Typeable b)
+  =>  TsIdxTup a b
+  -> IxSet (TsIdxTup a b)
+  -> IxSet (TsIdxTup a b)
+updateIxSetTsIdxTup tt@(TsIdxTup idx) = updateIx (ts idx) tt
+
+
 
 -- | If day is already present, the text is added to that day's dumps,
 -- otherwise, a new 'Dumps' is added. Returns the updated or newly created
@@ -224,118 +252,73 @@ insertDump day content = do
 updateRead :: UTCTime -> Title -> Author -> Update DB (Title, Author)
 updateRead ts t a = do
   db@DB {..} <- get
-  put DB {reads = updateIxSetTsIdxTup (TsIdxTup $ TsIdx ts (t, a)) reads, ..}
+  put DB {reads = updateIxSetTsIdxTup (mkTsIdxTup' ts (t, a)) reads, ..}
   return (t, a)
 
+-- | UTCTimes should be unique (globally), but the values attached to two
+-- identetical primary keys may not, and so the 'updateQuote' overwrites the
+-- mapping at the given time if it exists.
 updateQuote :: UTCTime -> Title -> Author -> Update DB (Title, Author)
 updateQuote ts t a = do
   db@DB {..} <- get
-  put DB {quotes = updateIxSetTsIdxTup (TsIdxTup $ TsIdx ts (t, a)) quotes, ..}
+  put DB {quotes = updateIxSetTsIdxTup (mkTsIdxTup' ts (t, a)) quotes, ..}
   return (t, a)
 
 updateDialogue :: UTCTime -> Text -> Update DB Text
 updateDialogue ts t = do
   db@DB {..} <- get
-  put DB {dialogues = updateIxSetTsIdx (TsIdx ts t) dialogues, ..}
+  put DB {dialogues = updateIxSetTsIdx (mkTsIdx ts t) dialogues, ..}
   return t
 
 updatePhrase :: UTCTime -> Phrase -> Update DB Phrase
 updatePhrase ts p = do
   db@DB {..} <- get
-  put DB {phrases = updateIxSetTsIdx (TsIdx ts p) phrases, ..}
+  put DB {phrases = updateIxSetTsIdx (mkTsIdx ts p) phrases, ..}
   return p
 
 updateComments :: UTCTime -> Text -> Update DB Text
 updateComments ts c = do
   db@DB {..} <- get
-  put DB {comments = updateIxSetTsIdx (TsIdx ts c) comments, ..}
+  put DB {comments = updateIxSetTsIdx (mkTsIdx ts c) comments, ..}
   return c
 
 
-updateIxSetTsIdx ::
-     (Ord a, Typeable a) => TsIdx a -> IxSet (TsIdx a) -> IxSet (TsIdx a)
-updateIxSetTsIdx ti@TsIdx {..} = updateIx ts ti
+viewDB :: Query DB DB
+viewDB = ask
 
-updateIxSetTsIdxTup ::
-     (Ord a, Typeable a, Ord b, Typeable b)
-  =>  TsIdxTup a b
-  -> IxSet (TsIdxTup a b)
-  -> IxSet (TsIdxTup a b)
-updateIxSetTsIdxTup tt@(TsIdxTup TsIdx{..}) = updateIx ts tt
+--makeAcidic ''DB' ['addEntry, 'addDump, 'viewDB']
+makeAcidic ''DB ['insertDump , 'updateRead , 'updateQuote , 'updateDialogue, 'updatePhrase, 'viewDB]
 
-update :: Update DB' ()
-update = undefined
-
---insert :: Update DB' ()
---insert = undefined
---
---insert :: Update DB' ()
---insert = undefined
---
---insert :: Update DB' ()
---insert = undefined
---
---insert :: Update DB' ()
---insert = undefined
-
-deriveSafeCopy 0 'base ''DB
-
-initDB' :: DB'
-initDB' = DB' []
-
-getDB' :: DB' -> [LogEntry']
-getDB' (DB' xs) = xs
-
-
-deriveSafeCopy 0 'base ''TimeStamp
-deriveSafeCopy 0 'base ''Phrase
-deriveSafeCopy 0 'base ''PageNum
-deriveSafeCopy 0 'base ''DefQuery
-deriveSafeCopy 0 'base ''Entry
-deriveSafeCopy 0 'base ''LogEntry'
-deriveSafeCopy 0 'base ''DB'
-
-
-
--- | Creates 'Ts' from 'Entry'' and inserts it into 'DB'.
-addEntry :: Day -> TimeStamp -> Int -> Entry -> Update DB' LogEntry'
-addEntry day ts indent entry = do
-  db@(DB' entries) <- get
-  let entry' = Ts day indent ts entry
-  put . DB' $ entry' : entries
-  return entry'
-
--- | Creates 'Entry from 'Text' and inserts it into 'DB'.
-addDump :: Day -> Text -> Update DB' LogEntry'
-addDump day text = do
-  db@(DB' entries) <- get
-  let dump = Dump' day text
-  put . DB' $ dump : entries
-  return dump
-
-
-viewDB' :: Query DB' [LogEntry']
-viewDB' = getDB' <$> ask
-
-makeAcidic ''DB' ['addEntry, 'addDump, 'viewDB']
-
-run :: IO ()
-run = do
-  let ts = TimeStamp 0 0 0
+insert :: IO ()
+insert = do
   today <- utctDay <$> getCurrentTime
+  utc <- getCurrentTime
   r <-
     bracket
-      (openLocalState initDB')
+      (openLocalState initDB)
       createCheckpointAndClose
       (\acid -> do
-         --update acid (AddDump today "dump body")
-         --update acid (AddEntry today ts 0 (Read "Thank You, Jeeves" "P.G. Wodehouse"))
-         query acid ViewDB')
-  mapM_ pp r
+         update acid (InsertDump today "dump body")
+         update acid (UpdateRead utc "Thank You, Jeeves" "P.G. Wodehouse")
+         db <- query acid ViewDB
+         return db)
+  pPrint $ r
   return ()
 
---fetch :: IO (0
---fetch = do
---  bracket (openLocalState initDB')
 
+
+---run' :: IO ()
+---run' = do
+---  let ts = TimeStamp 0 0 0
+---  today <- utctDay <$> getCurrentTime
+---  r <-
+---    bracket
+---      (openLocalState initDB')
+---      createCheckpointAndClose
+---      (\acid -> do
+---         --update acid (AddDump today "dump body")
+---         --update acid (AddEntry today ts 0 (Read "Thank You, Jeeves" "P.G. Wodehouse"))
+---         query acid ViewDB')
+---  mapM_ pp r
+---  return ()
 

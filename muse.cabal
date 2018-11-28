@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 723a99fda6ee45de936ee81b0fe7b367fb3b8d8d3b091e2afbfeaf518b840d6e
+-- hash: a87d0dc6c04cec435a2d7222295d838959a56da5d066a6b6cf65e55f461f7a7a
 
 name:           muse
 version:        0.1.2
@@ -32,6 +32,8 @@ library
       Search
       Render
       Store
+      Time
+      Store.Types
   other-modules:
       Paths_muse
   hs-source-dirs:

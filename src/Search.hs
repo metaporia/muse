@@ -85,18 +85,6 @@ pathsToDays' = fmap $ \fp -> (fp, showErr $ parse day' fp)
 pathToDay :: FilePath ->  Maybe Day
 pathToDay = join . preview _Right . showErr . parse day'
 
--- TODO 
--- □  use locale to convert timezone to correct UTC offset (see
--- 'getCurrentTimeZone')
-toUTC :: Day -> TimeStamp -> UTCTime
-toUTC d (TimeStamp h m s) =
-  UTCTime d . secondsToDiffTime . fromIntegral $ hrs + mins + s 
-  where hrs = 60 * 60 * h
-        mins = 60 * m
-
-left :: Either a b -> Maybe a
-left = preview _Left
-
 showInvalidNames :: [(String, Either String (Maybe Day))] -> IO [Day]
 showInvalidNames es = foldr f (return []) es
   where
@@ -113,6 +101,8 @@ pathsToDays = showInvalidNames . pathsToDays'
 
 dayToPath :: Day -> String
 dayToPath = replace '-' '.' . drop 2 . show
+
+
 
 replace :: Eq b => b -> b -> [b] -> [b]
 replace a b =

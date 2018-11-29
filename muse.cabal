@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a87d0dc6c04cec435a2d7222295d838959a56da5d066a6b6cf65e55f461f7a7a
+-- hash: 5c6ef0d2b09d4d748761501463afb13812446031464b791f6dfdab24f3013c62
 
 name:           muse
 version:        0.1.2
@@ -107,6 +107,7 @@ test-suite muse-test
   other-modules:
       ParseSpec
       SearchSpec
+      StoreSpec
       Paths_muse
   hs-source-dirs:
       test

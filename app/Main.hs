@@ -477,6 +477,8 @@ museInit quiet ignoreCache = do
       defConfPath = home <> "/.muse/config.yaml"
       defConfPath' = T.unpack defConfPath
       defCacheDir = home <> "/.cache/muse/"
+      -- FIXME
+      stateDir = home <> "/.muse/state"
       defLogDir = home <> "/.muse/entries/"
       defaults = MuseConf defLogDir defCacheDir home
   T.putStrLn $ "Expects configuration file at: " <> home <> defConfPath <> "\n"

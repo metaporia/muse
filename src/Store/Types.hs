@@ -23,9 +23,13 @@ module Store.Types
   , TsIdx
   , ts
   , val
+  , TsIdxTrip(..)
+  , mkTsIdxTrip
+  , mkTsIdxTrip'
   , TsIdxTup(..))
   where
 
+import Control.Lens (_1, _2, _3, view)
 import Data.Data (Data, Typeable)
 import Data.SafeCopy
 import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
@@ -79,3 +83,25 @@ instance (Ord a, Ord b, Typeable a, Typeable b) => Indexable (TsIdxTup a b) wher
 
 deriveSafeCopy 0 'base ''TsIdxTup
 
+newtype TsIdxTrip a b c = TsIdxTrip
+  { tsTrip :: TsIdx (a, b, c)
+  } deriving (Eq, Ord, Show, Read, Data)
+
+mkTsIdxTrip' :: UTCTime -> (a, b, c) -> TsIdxTrip a b c
+mkTsIdxTrip' ts v = TsIdxTrip $ mkTsIdx ts v
+
+mkTsIdxTrip :: TsIdx (a, b, c) -> TsIdxTrip a b c
+mkTsIdxTrip = TsIdxTrip
+
+deriveSafeCopy 0 'base ''TsIdxTrip
+
+instance (Ord a, Ord b, Typeable a, Typeable b, Ord c, Typeable c) =>
+         Indexable (TsIdxTrip a b c) where
+  empty =
+    ixSet
+      [ ixFun $ return . ts . tsTrip
+      , ixFun $ return . val . tsTrip -- tuple
+      , ixFun $ return . view _1 . val . tsTrip -- fst
+      , ixFun $ return . view _2 . val . tsTrip -- snd
+      , ixFun $ return . view _3 . val . tsTrip -- third
+      ]

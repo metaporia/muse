@@ -197,7 +197,7 @@ toBucket (TabTsEntry (_, _, (Phr _))) = Phrs
 toBucket (TabTsEntry (_, _, (Dialogue _))) = Dial
 toBucket (TabTsEntry (_, _, (Parse.Entry.Null))) = Store.Null
 
--- TODO replace tuples with newtypes, for each, index by utcTime
+-- TODO replace tuples with newtypes
 data DB = DB
   { dumped :: IxSet Dumps
   , defs :: IxSet (TsIdx DefQuery)

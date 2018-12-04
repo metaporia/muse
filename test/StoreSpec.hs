@@ -241,7 +241,6 @@ output =
         "In \"To the Lighthouse\", by Virginia Woolf"
         (Just 38))
   ]
-
 tNullOut =
   [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null)
   , TabTsEntry
@@ -256,18 +255,14 @@ tNullOut =
 -- TODO add testcase for output
 test = do
   day <- utctDay <$> getCurrentTime
-  let updates :: Update DB ()
-      updates =
-        foldr (>>) (return ()) $
-        fmap (\x -> addLogEntry day (TabTsEntry x) Nothing) output
+  let updates :: AddDay
+      updates = AddDay day $ fmap TabTsEntry output
+        --foldr (>>) (return ()) $
+        --fmap (\x -> addLogEntry day (TabTsEntry x) Nothing) output
   bracket
     (openLocalState initDB)
     createCheckpointAndClose
-    (\acid ->
-       let x = fmap TabTsEntry output
-       in do foldr (>>) (return ()) $
-               fmap
-                 (update acid . (\x -> AddLogEntry day (TabTsEntry x) Nothing))
-                 output
-             query acid ViewDB >>= pPrint)
+    (\acid -> do
+       update acid updates
+       query acid ViewDB >>= pPrint)
   return ()

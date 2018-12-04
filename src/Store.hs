@@ -261,9 +261,9 @@ addLogEntry day le tag = do
 --
 -- TODO test!!
 addDay :: Day -> [LogEntry] -> Update DB ()
-addDay day les = undefined
+addDay day = tagAndUpdate
   where
-    naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
+    --naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
     tagAndUpdate :: [LogEntry] -> Update DB ()
     tagAndUpdate [] = return ()
     tagAndUpdate (x:xs)
@@ -305,7 +305,7 @@ updateIxSetTsIdx ti = updateIx (ts ti) ti
 -- | Updates entry in indexed set of timestamped pairs.
 updateIxSetTsIdxTag ::
      (Ord a, Typeable a) => TsIdxTag a -> IxSet (TsIdxTag a) -> IxSet (TsIdxTag a)
-updateIxSetTsIdxTag ti = updateIx (tsTag ti) ti
+updateIxSetTsIdxTag tt@(TsIdxTag idx attr) = updateIx (ts idx) tt
 
 
 -- | Updates entry in indexed set of `(ts, (a, b))`; that is, pairs of timestamps
@@ -399,6 +399,7 @@ reinitDB = put initDB >> return initDB
 makeAcidic
   ''DB
   [ 'insertDump
+  , 'updateDef
   , 'updateRead
   , 'updateQuote
   , 'updateDialogue
@@ -406,6 +407,7 @@ makeAcidic
   , 'viewDB
   , 'reinitDB
   , 'addLogEntry
+  , 'addDay
   ]
 
 insert :: IO ()
@@ -418,9 +420,10 @@ insert = do
       (openLocalState initDB)
       createCheckpointAndClose
       (\acid -> do
-         update acid (InsertDump today "dump body")
-         update acid (UpdateRead utc "Thank You, Jeeves" "P.G. Wodehouse")
-         update acid (UpdateRead utc' "Thank You, Jeeves" "P.G. Wodehouse")
+         --update acid (InsertDump today "dump body")
+         --update acid (UpdateRead utc "Thank You, Jeeves" "P.G. Wodehouse")
+         --update acid (UpdateRead utc' "Thank You, Jeeves" "P.G. Wodehouse")
+         update acid (UpdateDef utc' (Defn Nothing ["concupiscent"]) Nothing)
          query acid ViewDB)
   pPrint r
   return ()

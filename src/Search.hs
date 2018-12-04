@@ -139,6 +139,8 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 --
 --      tl;dr; try to identify attr under cursor, if successful display result,
 --      if not show top matches (above satisfaction threshold)
+idea = undefined
+
 -- | Where there is neither a title predicate nor an author predicate, applies
 -- only variant (a.t.m. def and quote) filters; otherwise, where there is at
 -- least one `Read` predicate, filters by nesting and applies variant filters.
@@ -244,6 +246,12 @@ searchSatisfies' (Input _ _ ap tp _) le
   | otherwise = foldr (&&) True $ catMaybes res
   where
     res = [ap <*> pure le, tp <*> pure le]
+
+-- | Checks whether a 'LogEntry' is indented; for 'Dump's returns @False@.
+isIndentedTo :: Int -> LogEntry -> Bool
+isIndentedTo depth (Dump _) = False
+isIndentedTo depth (TabTsEntry (indentation, _, _)) = indentation >= depth 
+
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery

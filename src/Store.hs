@@ -19,6 +19,7 @@
 -----------------------------------------------------------------------------
 module Store where
 
+import Prelude
 import Control.Exception (bracket)
 import Control.Monad ((>=>), void)
 import Control.Monad.Reader
@@ -48,6 +49,7 @@ import Text.Show.Pretty (pPrint)
 import Helpers
 import Parse (DefQuery(..), PageNum(..), TimeStamp(..))
 import Parse.Entry (Entry(..), LogEntry(..), Phrase(..))
+import Search
 import Render (colRender, showAll)
 import Store.Types
 import Time (toUTC, truncateUTC)
@@ -72,12 +74,6 @@ deriving instance Ord      Entry
 deriving instance Typeable Entry
 
 deriveSafeCopy 0 'base ''Entry
-
-deriving instance Data     PageNum
-deriving instance Read     PageNum
-deriving instance Ord      PageNum
-deriving instance Typeable PageNum
-deriveSafeCopy 0 'base ''PageNum
 
 deriving instance Data     LogEntry
 deriving instance Read     LogEntry
@@ -167,85 +163,127 @@ x = do
   t <- getCurrentTime
   return ()
 
--- | Entry variant 'DB' bucket identifier. The original, chronological log
--- order is stored as a set of `(timestamps, tag)` pairs; the tag informs
--- dispatch from which bucket to fetch the assoc'd entry. E.g., if when parsing
--- the 'chrono' set, an entry of the form `(ts, Dmp)` is found, then `ts' will
--- be fetched from `dumped (db :: DB)`.
-data Bucket
-  = Dmp
-  | Rds
-  | Qts
-  | Dial
-  | Phrs
-  | Pgs PageNum
-  | Cmts
-  | Defs
-  | Null
-  deriving (Eq, Ord, Show)
-
-deriveSafeCopy 0 'base ''Bucket
-
-toBucket :: LogEntry -> Bucket
-toBucket (Dump _) = Dmp
-toBucket (TabTsEntry (_, _, (Read _ _))) = Rds
-toBucket (TabTsEntry (_, _, (Def _))) = Defs
-toBucket (TabTsEntry (_, _, (Quotation _ _ _))) = Qts
-toBucket (TabTsEntry (_, _, (Commentary _))) = Cmts
-toBucket (TabTsEntry (_, _, (PN pg))) = Pgs pg
-toBucket (TabTsEntry (_, _, (Phr _))) = Phrs
-toBucket (TabTsEntry (_, _, (Dialogue _))) = Dial
-toBucket (TabTsEntry (_, _, (Parse.Entry.Null))) = Store.Null
-
 -- TODO replace tuples with newtypes
 data DB = DB
   { dumped :: IxSet Dumps
-  , defs :: IxSet (TsIdx DefQuery)
+  , defs :: IxSet (TsIdxTag DefQuery)
   , reads :: IxSet (TsIdxTup Title Author)
+  -- TODO fix tagging logic, that is, optional manual attribution; blocked on
+  -- parser update.
   , quotes :: IxSet (TsIdxTrip Body Attr (Maybe PgNum))
   , dialogues :: IxSet (TsIdx Text)
-  , phrases :: IxSet (TsIdx Phrase)
-  , comments :: IxSet (TsIdx Text)
-  , chrono :: IxSet (TsIdxTup IndentDepth Bucket) -- ^ entry order of elements in entry variant buckets.
+  , phrases :: IxSet (TsIdxTag Phrase)
+  , comments :: IxSet (TsIdxTag Text)
+  -- | entry order of elements in entry variant buckets.
+  , chrono :: IxSet (TsIdxTup IndentDepth Bucket) 
   } deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''DB
 
+-- ** Search logic
+
+data Attribution = Attribution Title Author
+  deriving (Eq, Show)
+
+data Search = Attr [Attribution -> Bool] VariantSearch
+            | Other [Text -> Bool] -- ^ a.t.m., only for 'Dialogue'
+
+data VariantSearch
+  = NullS -- ^ for, e.g., 'Read', where 'Search' exhausts predicates
+  -- | search quote body; may extend to multiple body preds
+  | QuoteS [Text -> Bool]
+  | DefS [Headword -> Bool] -- FIXME: return matching headwords or entire `[Headword]`?
+         [Meaning -> Bool] -- ^ only applied to 'InlineDef's
+  | PhrS [Headword -> Bool]
+         [Meaning -> Bool] -- ^ only applied to 'Defined's
+  | DialogueS [Text -> Bool] -- ^ infix search of comment body
+  | CommentS [Text -> Bool]
+  | DumpS [Text -> Bool]
+
+
+-- | Type returned by 'DB' queries. Nearly identical to 'LogEntry'.
+--
+-- TODO
+-- □  'ColRender' instance
+-- □  'fromLogEntry :: LogEnty -> Result'
+-- □  'fromEntry :: Enty -> Result'
+data Result = DumpR Text
+            | TsR UTCTime Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
+            deriving (Eq, Show)
+
+-- | Applies search predicates to 'DB'.
+search :: Query DB [Result]
+search = undefined
+
+
+-- ** 'DB' management
+
 -- | Insert 'LogEntry' into 'DB'. For each, an entry is added to 'chrono' and,
--- except for 'Null' and 'Phrs', to the appropriate bucket.
-addLogEntry :: Day -> LogEntry -> Update DB ()
-addLogEntry day le = do 
+-- except for 'Null' and 'Phrs', to the appropriate bucket. Adds 'AttrTag'
+-- when applicable (see definition of 'DB').
+addLogEntry :: Day -> LogEntry -> Maybe AttrTag -> Update DB (Maybe UTCTime)
+addLogEntry day le tag = do
   db@DB {..} <- get
   case le of
-    (Dump body) -> void $ insertDump day (T.pack body)  -- FIXME dumps have no 'chrono' entry?
-    (TabTsEntry (indent, ts, (Read t a))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateRead utc (T.pack t) (T.pack a) >> 
-         updateChrono utc indent Rds
-    (TabTsEntry (indent, ts, (Def dq))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateDef utc dq 
-          >> updateChrono utc indent Defs
-    (TabTsEntry (indent, ts, (Quotation q attr mp))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp)
-          >> updateChrono utc indent Qts
-    (TabTsEntry (indent, ts, (Commentary body))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateComment utc (T.pack body)
-          >> updateChrono utc indent Cmts
-    (TabTsEntry (indent, ts, (PN pg))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateChrono utc indent (Pgs pg)
-    (TabTsEntry (indent, ts, (Phr p))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updatePhrase utc p
-          >> updateChrono utc indent Phrs
-    (TabTsEntry (indent, ts, (Dialogue body))) -> 
-      let utc = (toUTC day ts) 
-       in void $ updateDialogue utc (T.pack body)
-          >> updateChrono utc indent Dial
-    (TabTsEntry (indent, ts, (Parse.Entry.Null))) -> return () 
+    (Dump body) -> insertDump day (T.pack body) >> return Nothing -- FIXME dumps have no 'chrono' entry?
+    (TabTsEntry (indent, ts, (Read t a))) ->
+      let utc = (toUTC day ts)
+      in updateRead utc (T.pack t) (T.pack a) >> updateChrono utc indent Rds >>
+         return (Just utc)
+    (TabTsEntry (indent, ts, (Def dq))) ->
+      let utc = (toUTC day ts)
+      in updateDef utc dq tag >> updateChrono utc indent Defs
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (Quotation q attr mp))) ->
+      let utc = (toUTC day ts)
+      in updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp) >>
+         updateChrono utc indent Qts
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (Commentary body))) ->
+      let utc = (toUTC day ts)
+      in updateComment utc (T.pack body) tag >> updateChrono utc indent Cmts
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (PN pg))) ->
+      let utc = (toUTC day ts)
+      in updateChrono utc indent (Pgs pg)
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (Phr p))) ->
+      let utc = (toUTC day ts)
+      in updatePhrase utc p tag >> updateChrono utc indent Phrs
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (Dialogue body))) ->
+      let utc = (toUTC day ts)
+      in updateDialogue utc (T.pack body) >> updateChrono utc indent Dial
+         >> return (Just utc)
+    (TabTsEntry (indent, ts, (Parse.Entry.Null))) -> return Nothing
+
+-- | Tags and adds to 'DB' a day's worth of 'LogEntry's.
+--
+-- TODO test!!
+addDay :: Day -> [LogEntry] -> Update DB ()
+addDay day les = undefined
+  where
+    naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
+    tagAndUpdate :: [LogEntry] -> Update DB ()
+    tagAndUpdate [] = return ()
+    tagAndUpdate (x:xs)
+      -- only tags when read entry is toplevel
+      | isRead x && isIndentedTo 0 x =
+        addLogEntry day x Nothing >>= (\t -> tagRest (AttrTag <$> t) xs) >>=
+        tagAndUpdate -- tag and update rest of indented; recurse
+      | otherwise = addLogEntry day x Nothing >> tagAndUpdate xs
+    -- | Given id of parent read entry, @tagRest@ inserts tagged entries
+    -- as long as their indentation level never drops below 1. Returns
+    -- untagged. 
+    -- FIXME take @AttrTag@ not @Maybe AttrTag@. @tagRest@ should not be
+    -- invoked with @Nothing@.
+    tagRest :: Maybe AttrTag -> [LogEntry] -> Update DB [LogEntry] -- rest
+    tagRest tag = go tag $ return [] -- ((return []) :: Update DB [LogEntry])
+      where go :: Maybe AttrTag -> Update DB [LogEntry] -> [LogEntry] -> Update DB [LogEntry]
+            go tag acc [] = acc
+            go tag acc (x:xs) 
+              | isIndentedTo 1 x = go tag (acc >> addLogEntry day x tag >> return []) xs 
+              | otherwise = return (x : xs)
 
 initDB :: DB
 initDB =
@@ -263,6 +301,12 @@ initDB =
 updateIxSetTsIdx ::
      (Ord a, Typeable a) => TsIdx a -> IxSet (TsIdx a) -> IxSet (TsIdx a)
 updateIxSetTsIdx ti = updateIx (ts ti) ti
+
+-- | Updates entry in indexed set of timestamped pairs.
+updateIxSetTsIdxTag ::
+     (Ord a, Typeable a) => TsIdxTag a -> IxSet (TsIdxTag a) -> IxSet (TsIdxTag a)
+updateIxSetTsIdxTag ti = updateIx (tsTag ti) ti
+
 
 -- | Updates entry in indexed set of `(ts, (a, b))`; that is, pairs of timestamps
 -- and tuples.
@@ -301,10 +345,10 @@ updateRead ts t a = do
   return (t, a)
 
 -- | Overwrites '(Title, Author)' tuple.
-updateDef :: UTCTime -> DefQuery -> Update DB DefQuery
-updateDef ts dq = do
+updateDef :: UTCTime -> DefQuery -> Maybe AttrTag -> Update DB DefQuery
+updateDef ts dq tag = do
   db@DB {..} <- get
-  put DB {defs = updateIxSetTsIdx (mkTsIdx ts dq) defs, ..}
+  put DB {defs = updateIxSetTsIdxTag (mkTsIdxTag ts dq tag) defs, ..}
   return dq
 
 -- | UTCTimes should be unique (globally), but the values attached to two
@@ -327,16 +371,16 @@ updateDialogue ts t = do
   put DB {dialogues = updateIxSetTsIdx (mkTsIdx ts t) dialogues, ..}
   return t
 
-updatePhrase :: UTCTime -> Phrase -> Update DB Phrase
-updatePhrase ts p = do
+updatePhrase :: UTCTime -> Phrase -> Maybe AttrTag -> Update DB Phrase
+updatePhrase ts p tag = do
   db@DB {..} <- get
-  put DB {phrases = updateIxSetTsIdx (mkTsIdx ts p) phrases, ..}
+  put DB {phrases = updateIxSetTsIdxTag (mkTsIdxTag ts p tag) phrases, ..}
   return p
 
-updateComment :: UTCTime -> Text -> Update DB Text
-updateComment ts c = do
+updateComment :: UTCTime -> Text -> Maybe AttrTag -> Update DB Text
+updateComment ts c tag = do
   db@DB {..} <- get
-  put DB {comments = updateIxSetTsIdx (mkTsIdx ts c) comments, ..}
+  put DB {comments = updateIxSetTsIdxTag (mkTsIdxTag ts c tag) comments, ..}
   return c
 
 updateChrono ::

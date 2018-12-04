@@ -258,14 +258,16 @@ test = do
   day <- utctDay <$> getCurrentTime
   let updates :: Update DB ()
       updates =
-        foldr (>>) (return ()) $ fmap (addLogEntry day . TabTsEntry) output
-  bracket (openLocalState initDB)
-           createCheckpointAndClose
-           (\acid -> 
-             let x = fmap TabTsEntry output
-              in do 
-                foldr (>>) (return ()) $ fmap (update acid . AddLogEntry day . TabTsEntry) output
-                query acid ViewDB >>= pPrint)
+        foldr (>>) (return ()) $
+        fmap (\x -> addLogEntry day (TabTsEntry x) Nothing) output
+  bracket
+    (openLocalState initDB)
+    createCheckpointAndClose
+    (\acid ->
+       let x = fmap TabTsEntry output
+       in do foldr (>>) (return ()) $
+               fmap
+                 (update acid . (\x -> AddLogEntry day (TabTsEntry x) Nothing))
+                 output
+             query acid ViewDB >>= pPrint)
   return ()
-
-

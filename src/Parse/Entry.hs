@@ -64,6 +64,7 @@ quotation = do
   pg <- optional digits
   skipOptional emptyLines
   q <- between quot quot (some $ noneOf "\"")
+  -- TODO discard post quote attribution when indent >= 1
   titleAuthEtc <-
     try (lookAhead (skipOptional emptyLines <* lpad timestamp) >> return "") <|>
     entryBody

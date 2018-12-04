@@ -44,6 +44,7 @@ dependencies:
 - safecopy
 - ixset
 - containers
+- basic-prelude
 
 library:
   source-dirs: src
@@ -56,8 +57,9 @@ library:
     - Search
     - Render
     - Store
-    - Time
+    - Store.Render
     - Store.Types
+    - Time
 
 executables:
   muse:

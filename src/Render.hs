@@ -49,58 +49,6 @@ applyToRest f (x:xs) = x : fmap f xs
 surround :: Char -> String -> String
 surround c s = c : (s ++ [c])
 
--- | For pretty user-end rendering of `LogEntry`s and such.
-class Render a where
-  render :: a -> String
-
-instance Render LogEntry where
-  render (Dump s) = "Dump:    " ++ render s
-  render (TabTsEntry (_, _, entry)) = render entry
-
-instance Render Entry where
-  render (Def dq) = render dq
-  render (Quotation b attr pg) =
-    "Quote:   " ++
-    surround '"' (render b) ++
-    "\n" ++ indent ++ render attr ++ indent ++ render (Page <$> pg) ++ "\n"
-  render (Read t a) = "Read:    " ++ surround '"' t ++ " by " ++ a
-  render (Commentary s) = show s
-  render (PN pg) = render pg
-  render Null = ""
-  -- todo add `Phr` variant handling
-
-instance Render DefQuery where
-  render (Defn mpg hws) =
-    "Query:   " ++ render mpg ++ " " ++ intercalate ", " hws
-  render (InlineDef hw m) = "Define:  " ++ upper hw ++ ": " ++ render m
-  render (DefVersus h m h' m') =
-    "Compare: " ++
-    upper h ++
-    ": " ++
-    render m ++
-    indent ++ "--- vs ---\n" ++ indent ++ upper h' ++ ": " ++ render m'
-
-instance Render a => Render (Maybe a) where
-  render (Just x) = render x
-  render Nothing = ""
-  -- assumse text width of 79
-
-instance Render [Char] where
-  render =
-    T.unpack .
-    T.unlines .
-    applyToRest ((T.replicate indentation " ") <>) .
-    wrapTextToLines defaultWrapSettings 79 . T.pack
-
-instance Render PageNum where
-  render = show
-
-instance Render Integer where
-  render = show
-
-instance Render Int where
-  render = show
-
 colorize :: Bool -> (IO () -> IO ()) -> IO () -> IO ()
 colorize True col = col
 colorize False col = id
@@ -145,6 +93,8 @@ class Show a =>
        Bool -- ^ Colorize?
     -> a -- ^ Item to render
     -> IO ()
+  render :: a -> IO ()
+  render = colRender False
 
 newtype QuoteBody = QuoteBody String
   deriving (Eq, Show)
@@ -162,7 +112,7 @@ instance ColRender Entry where
     colorize col yellow (colRender col attr) >>
     putStr indent >>
     colRender col (Page <$> pg) >>
-    putStr "\n"
+    putStr "\n\n"
   colRender col (Read t a) =
     colorize col yellow (putStrLn $
     "Read:    " ++ (surround '"' t) ++ " by " ++ a)
@@ -214,7 +164,7 @@ instance ColRender [Char] where
   colRender _ =
     putStr .
     T.unpack .
-    T.unlines .
+    T.intercalate "\n" .
     applyToRest ((T.replicate indentation " ") <>) .
     wrapTextToLines defaultWrapSettings 79 . T.pack
 

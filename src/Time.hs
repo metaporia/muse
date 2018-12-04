@@ -29,8 +29,6 @@ toUTC d (TimeStamp h m s) =
   where hrs = 60 * 60 * h
         mins = 60 * m
 
-
-
 -- | Truncates pico seconds from 'DiffTime'.
 truncateUTC :: UTCTime -> UTCTime
 truncateUTC UTCTime {..} =

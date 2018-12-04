@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5c6ef0d2b09d4d748761501463afb13812446031464b791f6dfdab24f3013c62
+-- hash: f0f5a05eb4309be55891d3211c53b66135b7f9b6614aa62d08f87774fb9ef618
 
 name:           muse
 version:        0.1.2
@@ -32,8 +32,9 @@ library
       Search
       Render
       Store
-      Time
+      Store.Render
       Store.Types
+      Time
   other-modules:
       Paths_muse
   hs-source-dirs:
@@ -44,6 +45,7 @@ library
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
+    , basic-prelude
     , bytestring
     , containers
     , directory
@@ -78,6 +80,7 @@ executable muse
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
+    , basic-prelude
     , bytestring
     , containers
     , directory
@@ -118,6 +121,7 @@ test-suite muse-test
     , aeson
     , ansi-terminal
     , base >=4.7 && <5
+    , basic-prelude
     , bytestring
     , containers
     , directory

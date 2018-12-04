@@ -12,10 +12,18 @@
 -- Portability :  portable
 --
 -- This module provides the necessaries for muse's CLI.
+--
 -- TODO 
--- □  serialize w "Data.Serialize" and "SafeCopy"
--- □  persist with "Data.Acid"
--- □  include locale time zone in config
+--
+-- ▣  persist with "Data.Acid"
+--
+-- ▣  serialize w "Data.Serialize" and "SafeCopy"
+--
+-- □  include locale time zone per file. for midday timezone change, create
+--    extra log file for each, with special name. add name handling .
+--
+-- □  convert inline defs, phrases with meanings to anki card *.txt format
+--    □  vim helper: generate cloze from selected quote
 --
 -----------------------------------------------------------------------------
 module Main where

@@ -25,7 +25,7 @@ import qualified Data.Text.IO as T
 import Data.Time (Day, UTCTime(..), toGregorian)
 import Data.Time.LocalTime
 import Render
-import Store (DB(..), Dumps(..), Result(..), getUTC)
+import Store (DB(..), Dumps(..), Result(..), getUTC, Results(..))
 import Store.Types
 import Text.Show.Pretty
 import Text.Wrap
@@ -118,9 +118,6 @@ instance ColRender Result where
   colRender col (DumpR t) = putStr "Dump:    " >> colRender col t
   colRender col (TsR utc entry) =
     colRender col (utctDay utc) >> putStrLn "" >> colRender col entry
-
-newtype Results = Results { results :: [Result] }
-  deriving (Eq, Show)
 
 instance ColRender Results where
   colRender col (Results rs)  = go Nothing rs

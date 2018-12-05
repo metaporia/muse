@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
   MultiWayIf #-}
-{-# LANGUAGE RecordWildCards, StandaloneDeriving,
+{-# LANGUAGE RecordWildCards, NamedFieldPuns, StandaloneDeriving,
   DeriveDataTypeable, TemplateHaskell, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
@@ -34,7 +34,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Data (Data, Typeable)
 import Data.IxSet
-       (Indexable(..), IxSet(..), (@=), getOne, ixFun, ixSet, updateIx)
+       (Indexable(..), IxSet(..), Proxy(..), (@=), getOne, ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
 import Data.Monoid ((<>))
 import Data.SafeCopy
@@ -62,7 +62,7 @@ type Title = Text
 type Author = Text
 type Attr = Text
 type Body = Text
-type PgNum = Int
+type PgNum = Integer
 
 deriving instance Read TimeStamp
 deriving instance Ord TimeStamp
@@ -213,6 +213,8 @@ data Result = DumpR Text
             | TsR UTCTime Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
             deriving (Eq, Show)
 
+deriveSafeCopy 0 'base ''Result
+
 getUTC :: Result -> Maybe UTCTime
 getUTC (DumpR _) = Nothing
 getUTC (TsR utc _) = Just utc
@@ -223,6 +225,68 @@ fromLogEntry day (TabTsEntry (_, ts, e)) = fromEntry (toUTC day ts) e
 
 fromEntry :: UTCTime -> Entry -> Result
 fromEntry utc entry = TsR utc entry
+
+fromDumps :: Dumps -> [Result]
+fromDumps (Dumps _ set) = DumpR <$> (Set.toList set)
+
+newtype Results = Results { results :: [Result] }
+  deriving (Eq, Show)
+
+deriveSafeCopy 0 'base ''Results
+
+
+-- Traverses @chrono@ and rebuilds input.
+fromDB' :: DB -> Results
+fromDB' DB {chrono, ..} =
+  Results . go $ IxSet.toAscList (Proxy :: Proxy UTCTime) chrono
+  where
+    go = foldr f []
+    f (TsIdxTup tsIdx) xs =
+      let t = ts tsIdx
+      in case snd . val $ tsIdx of
+           Pgs pg -> fromEntry t (PN pg) : xs
+           Dmp ->
+             case getOne $ dumped @= t of
+               Just dumps -> fromDumps dumps
+               Nothing -> xs
+           Qts ->
+             case getOne $ quotes @= t of
+               Just i ->
+                 (fromEntry t $
+                  Quotation
+                    (T.unpack $ getFst i)
+                    (T.unpack $ getSnd i)
+                    (getThrd i)) :
+                 xs
+               Nothing -> xs
+           Rds ->
+             case getOne $ reads @= t of
+               Just (TsIdxTup i) ->
+                 (fromEntry t $
+                  Read (T.unpack . fst . val $ i) (T.unpack . snd . val $ i)) :
+                 xs
+               Nothing -> xs
+           Dial ->
+             case getOne $ dialogues @= t of
+               Just idx -> (fromEntry t . Dialogue . T.unpack . val $ idx) : xs
+               Nothing -> xs
+           Defs ->
+             case getOne $ defs @= t of
+               Just idx -> (fromEntry t . Def . val . tsTag $ idx) : xs
+               Nothing -> xs
+           Phrs ->
+             case getOne $ phrases @= t of
+               Just idx -> (fromEntry t . Phr . val . tsTag $ idx) : xs
+               Nothing -> xs
+           Cmts ->
+             case getOne $ comments @= t of
+               Just idx ->
+                 (fromEntry t . Commentary . T.unpack . val . tsTag $ idx) : xs
+               Nothing -> xs
+           Store.Types.Null -> xs
+fromDB :: Query DB Results
+fromDB = fromDB' <$> ask
+
 
 -- | Applies search predicates to 'DB'.
 search :: Query DB [Result]
@@ -421,6 +485,7 @@ makeAcidic
   , 'reinitDB
   , 'addLogEntry
   , 'addDay
+  , 'fromDB
   ]
 
 insert :: IO ()

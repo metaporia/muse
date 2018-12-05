@@ -29,6 +29,9 @@ module Store.Types
   , TsIdxTag(..)
   , mkTsIdxTag
   , TsIdxTrip(..)
+  , getFst
+  , getSnd
+  , getThrd
   , mkTsIdxTrip
   , mkTsIdxTrip'
   , TsIdxTup(..))
@@ -160,6 +163,10 @@ mkTsIdxTrip' ts v = TsIdxTrip $ mkTsIdx ts v
 
 mkTsIdxTrip :: TsIdx (a, b, c) -> TsIdxTrip a b c
 mkTsIdxTrip = TsIdxTrip
+
+getFst = (\(x,_,_) -> x) . val . tsTrip
+getSnd = (\(_,x,_) -> x) . val . tsTrip
+getThrd = (\(_,_,x) -> x) . val . tsTrip
 
 deriveSafeCopy 0 'base ''TsIdxTrip
 

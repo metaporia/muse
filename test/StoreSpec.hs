@@ -266,5 +266,5 @@ test = do
     createCheckpointAndClose
     (\acid -> do
        update acid updates
-       query acid ViewDB >>= colRender True)
+       query acid FromDB >>= colRender True)
   return ()

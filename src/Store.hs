@@ -15,7 +15,9 @@
 --
 -- Uses acid-state and safeCopy to serilaize and persist logs.
 --
--- DB' schema:
+-- TODO
+-- □  impl; Q: how to handle key overwrites?
+--          A: collect overwritten keys (whose values are distinct)
 -----------------------------------------------------------------------------
 module Store where
 
@@ -210,6 +212,17 @@ data VariantSearch
 data Result = DumpR Text
             | TsR UTCTime Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
             deriving (Eq, Show)
+
+getUTC :: Result -> Maybe UTCTime
+getUTC (DumpR _) = Nothing
+getUTC (TsR utc _) = Just utc
+
+fromLogEntry :: Day -> LogEntry -> Result
+fromLogEntry _ (Dump s) = DumpR (T.pack s)
+fromLogEntry day (TabTsEntry (_, ts, e)) = fromEntry (toUTC day ts) e
+
+fromEntry :: UTCTime -> Entry -> Result
+fromEntry utc entry = TsR utc entry
 
 -- | Applies search predicates to 'DB'.
 search :: Query DB [Result]
@@ -445,17 +458,3 @@ purge = do
       createCheckpointAndClose
       (\acid -> update acid ReinitDB)
   pPrint r
-
--- TODO
--- □  impl; Q: how to handle key overwrites?
---          A: collect overwritten keys (whose values are distinct)
---
--- | Add a day's worth of log entries to DB.
---
--- Should not alter db if the day alread exists. For update logic, see
--- 'updateDay'
-addNewDay :: Day -> [LogEntry] -> Update DB DB
-addNewDay = undefined
-
-updateDay :: Day -> [LogEntry] -> Update DB DB
-updateDay = undefined

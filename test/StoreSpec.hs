@@ -36,7 +36,9 @@ import Data.Time
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
 import Text.Show.Pretty (pPrint)
+import Render
 import Store hiding (Null)
+import Store.Render
 import Helpers
 import Parse
 import Parse.Entry
@@ -44,7 +46,7 @@ import Prelude hiding (min)
 import Test.Hspec
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
-import Text.Trifecta
+import Text.Trifecta hiding (render)
 import qualified Text.Trifecta.Result as Tri
 
 --import Text.Trifecta.Result (Result(..))
@@ -264,5 +266,5 @@ test = do
     createCheckpointAndClose
     (\acid -> do
        update acid updates
-       query acid ViewDB >>= pPrint)
+       query acid ViewDB >>= colRender True)
   return ()

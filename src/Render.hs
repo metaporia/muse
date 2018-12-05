@@ -100,7 +100,7 @@ newtype QuoteBody = QuoteBody String
   deriving (Eq, Show)
 
 instance ColRender LogEntry where
-  colRender col (Dump s) = putStr "Dump:    " >> colRender col s
+  colRender col (Dump s) = putStr "Dump:    " >> colRender col (T.pack s)
   colRender col (TabTsEntry (_, _, entry)) = colRender col entry
 
 instance ColRender Entry where
@@ -109,7 +109,7 @@ instance ColRender Entry where
     colorize col magenta (putStr "Quote:   ") >>
     colorize col cyan (colRender col . QuoteBody $ surround '"' b) >>
     putStr indent >>
-    colorize col yellow (colRender col attr) >>
+    colorize col yellow (colRender col (T.pack attr)) >>
     putStr indent >>
     colRender col (Page <$> pg) >>
     putStr "\n\n"
@@ -118,7 +118,7 @@ instance ColRender Entry where
     "Read:    " ++ (surround '"' t) ++ " by " ++ a)
     >> putStr "\n"
   colRender col (Commentary s) =
-    putStr "Comment: " >> colorize col cyan (colRender col s)
+    putStr "Comment: " >> colorize col cyan (colRender col (T.pack s))
   colRender col (PN pg) = colRender col pg
   colRender col (Phr p) =
     colorize col magenta (putStr "Phrase:  ") >> colRender col p
@@ -128,24 +128,24 @@ instance ColRender Entry where
 
 instance ColRender DefQuery where
   colRender col (Defn mpg hws) =
-    colorize col blue (putStr "Query:   ") >> colRender col mpg >>
+    colorize col blue (putStr "Query:   ") >> colRender col mpg >> putStr " " >>
     putStrLn (trim $ " " ++ intercalate ", " hws)
   colRender col (InlineDef hw m) =
     colorize col green (putStr ("Define:  " ++ upper hw ++ ": ")) >>
-    colRender col m
+    colRender col (T.pack m)
   colRender col (DefVersus h m h' m') =
     colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >>
-    colRender col m >>
-    putStr (indent ++ "--- vs ---\n" ++ indent) >>
+    colRender col (T.pack m) >>
+    putStr ("\n" <> indent ++ "--- vs ---\n" ++ indent) >>
     colorize col red (putStr $ upper h' ++ ": ") >>
-    colRender col m' >>
+    colRender col (T.pack m') >>
     putStrLn ""
 
 instance ColRender Phrase where
   colRender col (Plural ps) =
-    colorize col blue $ colRender col (intercalate ", " ps)
+    colorize col blue $ colRender col (T.pack $ intercalate ", " ps)
   colRender col (Defined p m) =
-    colorize col green (putStr $ upper p ++ ": ") >> colRender col m
+    colorize col green (putStr $ upper p <> ": ") >> colRender col (T.pack m)
 
 instance ColRender QuoteBody where
   colRender col =
@@ -160,13 +160,14 @@ instance ColRender a => ColRender (Maybe a) where
   colRender col (Just x) = colRender col x
   colRender _ Nothing = return ()
 
-instance ColRender [Char] where
+
+instance ColRender T.Text where
   colRender _ =
     putStr .
     T.unpack .
     T.intercalate "\n" .
     applyToRest ((T.replicate indentation " ") <>) .
-    wrapTextToLines defaultWrapSettings 79 . T.pack
+    wrapTextToLines defaultWrapSettings 79
 
 fmt =
   T.unpack .

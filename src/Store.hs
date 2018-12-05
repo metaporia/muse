@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
   MultiWayIf #-}
-{-# LANGUAGE RecordWildCards, NamedFieldPuns, StandaloneDeriving,
+{-# LANGUAGE RecordWildCards, BangPatterns, NamedFieldPuns, StandaloneDeriving,
   DeriveDataTypeable, TemplateHaskell, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
@@ -33,10 +33,11 @@ import Data.Acid.Remote
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Data (Data, Typeable)
+import Data.Foldable (foldl')
 import Data.IxSet
        (Indexable(..), IxSet(..), Proxy(..), (@=), getOne, ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
-import Data.Monoid ((<>))
+import Data.Monoid ((<>), Any(..), All(..))
 import Data.SafeCopy
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -88,12 +89,6 @@ deriving instance Read     Phrase
 deriving instance Ord      Phrase
 deriving instance Typeable Phrase
 deriveSafeCopy 0 'base ''Phrase
-
-deriving instance Data     DefQuery
-deriving instance Read     DefQuery
-deriving instance Ord      DefQuery
-deriving instance Typeable DefQuery
-deriveSafeCopy 0 'base ''DefQuery
 
 -- | 'LogEntry' with 'Day'.
 data LogEntry'
@@ -187,10 +182,11 @@ deriveSafeCopy 0 'base ''DB
 data Attribution = Attribution Title Author
   deriving (Eq, Show)
 
-data Search = Attr [Attribution -> Bool] VariantSearch
-            | Other [Text -> Bool] -- ^ a.t.m., only for 'Dialogue'
+-- | Lists of predicates applied and folded with @All@.
+data Search' = Search' [Attribution -> Bool] VariantSearch'
 
-data VariantSearch
+-- Broke AF
+data VariantSearch'
   = NullS -- ^ for, e.g., 'Read', where 'Search' exhausts predicates
   -- | search quote body; may extend to multiple body preds
   | QuoteS [Text -> Bool]
@@ -202,7 +198,50 @@ data VariantSearch
   | CommentS [Text -> Bool]
   | DumpS [Text -> Bool]
 
+data Search where
+  Search :: Day -- ^ Start date
+         -> Day -- ^ End date
+         -> [Attribution -> Bool] -- ^ title/auth preds
+         -> BucketList -- ^ bucket specific predicates
+         -> Search
 
+-- N.B. apply attribution filters to all but dialogues.
+data BucketList = BucketList
+  { filterDumps :: Maybe [Text -> Bool]
+  , filterDefs :: Maybe ([Headword -> Bool], [Headword -> Bool])
+  , filterReads :: Maybe ([Headword -> Bool], [Headword -> Bool])
+  , filterQuotes :: Maybe [Text -> Bool]
+  , filterDialogues :: Maybe [Text -> Bool]
+  , filterPhrases :: Maybe [Text -> Bool]
+  , filterComments :: Maybe [Text -> Bool]
+  }
+
+-- Search logic
+-- 1. check whether list of title/auth preds is empty; if so, do not
+--    dereference tags and proceed with bucketlist-based filtration
+--  i. check whether there all members of bucketlist are None or all are Maybe;
+--     if so, apply filters to chrono--this will save us time sorting filtered
+--     buckets--, otherwise, fetch entries from each requested bucket within
+--     date range with @entries @>= s @=< e@ and package it up in a 'DB' 
+--
+--     (use some @collectHeads :: DB -> Maybe [Attribution -> Bool] -> Maybe AttrCache 
+--     -> BucketList -> [Results]@ that takes the
+--     first entry that satisfies from each non-empty bucket (unwanted buckets should 
+--     be empty at this point) and sorts them; repeat until all buckets are
+--     empty, and/or 'collectHeads' returns an empty set.)
+--
+--  ii. should title/auth preds be present, create a @AttrCache :: [(AttrTag ->
+--      Attribution)] -> AttrCache@ and then apply 'collectHeads'
+
+getPredFor Dmp = undefined
+getPredFor Rds = undefined
+getPredFor Qts = undefined
+getPredFor Dial = undefined
+getPredFor Phrs = undefined
+getPredFor (Pgs pg) = undefined
+getPredFor Cmts = undefined
+getPredFor Defs = undefined
+getPredFor Store.Types.Null = undefined
 -- | Type returned by 'DB' queries. Nearly identical to 'LogEntry'.
 --
 -- TODO
@@ -284,13 +323,9 @@ fromDB' DB {chrono, ..} =
                  (fromEntry t . Commentary . T.unpack . val . tsTag $ idx) : xs
                Nothing -> xs
            Store.Types.Null -> xs
+
 fromDB :: Query DB Results
 fromDB = fromDB' <$> ask
-
-
--- | Applies search predicates to 'DB'.
-search :: Query DB [Result]
-search = undefined
 
 
 -- ** 'DB' management
@@ -339,8 +374,8 @@ addLogEntry day le tag = do
 -- TODO test!!
 addDay :: Day -> [LogEntry] -> Update DB ()
 addDay day = tagAndUpdate
-  where
     --naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
+  where
     tagAndUpdate :: [LogEntry] -> Update DB ()
     tagAndUpdate [] = return ()
     tagAndUpdate (x:xs)
@@ -355,12 +390,19 @@ addDay day = tagAndUpdate
     -- FIXME take @AttrTag@ not @Maybe AttrTag@. @tagRest@ should not be
     -- invoked with @Nothing@.
     tagRest :: Maybe AttrTag -> [LogEntry] -> Update DB [LogEntry] -- rest
-    tagRest tag = go tag $ return [] -- ((return []) :: Update DB [LogEntry])
-      where go :: Maybe AttrTag -> Update DB [LogEntry] -> [LogEntry] -> Update DB [LogEntry]
-            go tag acc [] = acc
-            go tag acc (x:xs) 
-              | isIndentedTo 1 x = go tag (acc >> addLogEntry day x tag >> return []) xs 
-              | otherwise = return (x : xs)
+    tagRest tag = foldr f (return []) -- note use of @foldl'@ for strictness
+      where
+        f x acc
+          | isIndentedTo 1 x =
+            acc >>= \les -> (addLogEntry day x tag >> return les)
+          | otherwise = (x :) <$> acc
+
+-- | Applies search predicates to 'DB'.
+search :: Search' -> Query DB [Result]
+search (Search' [] vs) = undefined 
+search (Search' (x:xs) vs) = undefined -- must fetch read entries from tags
+
+
 
 initDB :: DB
 initDB =

@@ -215,10 +215,6 @@ tGetDialogueOut =
       , Read "To the Lighthouse" "Virginia Woolf")
   , TabTsEntry
       ( 0
-      , TimeStamp {hr = 9, min = 55, sec = 6}
-      , Read "To the Lighthouse" "Virginia Woolf")
-  , TabTsEntry
-      ( 0
       , TimeStamp {hr = 8, min = 34, sec = 34}
       , Dialogue
           "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")

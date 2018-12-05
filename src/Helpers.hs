@@ -66,7 +66,6 @@ data MediaType
   = Play
   | Book
   | ShortStory
-  | Other
   deriving (Eq, Show)
 
 data Author' = Author

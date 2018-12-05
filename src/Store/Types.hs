@@ -60,6 +60,12 @@ deriving instance Ord      PageNum
 deriving instance Typeable PageNum
 deriveSafeCopy 0 'base ''PageNum
 
+deriving instance Data     DefQuery
+deriving instance Read     DefQuery
+deriving instance Ord      DefQuery
+deriving instance Typeable DefQuery
+deriveSafeCopy 0 'base ''DefQuery
+
 
 -- | Entry variant 'DB' bucket identifier. The original, chronological log
 -- order is stored as a set of `(timestamps, tag)` pairs; the tag informs
@@ -180,3 +186,10 @@ instance (Ord a, Ord b, Typeable a, Typeable b, Ord c, Typeable c) =>
       , ixFun $ return . view _2 . val . tsTrip -- snd
       , ixFun $ return . view _3 . val . tsTrip -- third
       ]
+
+data Defns = Defns { defTs :: TsIdx DefQuery 
+                   , defAttr :: Maybe AttrTag }
+  deriving (Data, Eq, Ord, Show, Read)
+
+instance Indexable Defns where
+  empty = ixSet [ ixFun $ return . ts . defTs ]

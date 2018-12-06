@@ -132,7 +132,7 @@ instance ColRender DefQuery where
     putStrLn (trim $ " " ++ intercalate ", " hws)
   colRender col (InlineDef hw m) =
     colorize col green (putStr ("Define:  " ++ upper hw ++ ": ")) >>
-    colRender col (T.pack m)
+    colRender col (T.pack m) >> putStrLn ""
   colRender col (DefVersus h m h' m') =
     colorize col red (putStr ("Compare: " ++ upper h ++ ": ")) >>
     colRender col (T.pack m) >>
@@ -143,9 +143,9 @@ instance ColRender DefQuery where
 
 instance ColRender Phrase where
   colRender col (Plural ps) =
-    colorize col blue $ colRender col (T.pack $ intercalate ", " ps)
+    colorize col blue $ colRender col (T.pack $ intercalate ", " ps) >> putStrLn ""
   colRender col (Defined p m) =
-    colorize col green (putStr $ upper p <> ": ") >> colRender col (T.pack m)
+    colorize col green (putStr $ upper p <> ": ") >> colRender col (T.pack m) >> putStrLn ""
 
 instance ColRender QuoteBody where
   colRender col =

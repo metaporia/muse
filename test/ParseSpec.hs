@@ -456,7 +456,6 @@ v3 =
             "There was no treachery too base for the world to commit. She knew
             that.  Happiness did not last. She knew that."
 
-            Mrs. Ramsey in "To the Lighthouse", by Virgina Woolf
 |]
 
 v3'' =

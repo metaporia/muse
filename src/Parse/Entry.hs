@@ -12,6 +12,9 @@
 -- Portability :  portable
 --
 -- This module provides parsers for `LogEntry` and its constituent types.
+--
+-- TODO
+-- □  add 'Poem' 'Entry' variant
 -----------------------------------------------------------------------------
 module Parse.Entry where
 
@@ -66,7 +69,7 @@ quotation = do
   q <- between quot quot (some $ noneOf "\"")
   -- TODO discard post quote attribution when indent >= 1
   titleAuthEtc <-
-    try (lookAhead (skipOptional emptyLines <* lpad timestamp) >> return "") <|>
+    try (lookAhead (skipOptional emptyLines <* (void (lpad timestamp) <|> eof)) >> return "") <|>
     entryBody
   _ <- many newline
   return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc pg

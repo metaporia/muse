@@ -19,6 +19,10 @@ import Text.Show.Pretty
 import Text.Trifecta hiding (Rendering, Span, render, rendered)
 import qualified Text.Trifecta.Result as Tri
 
+-- Like 'maybe' for lists.
+list :: b -> ([a] -> b) -> [a] -> b
+list emptyCase f [] = emptyCase
+list _ f xs = f xs
 
 eitherToMaybe :: Either a b -> Maybe b
 eitherToMaybe (Left _) = Nothing

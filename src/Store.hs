@@ -16,6 +16,7 @@
 -- Uses acid-state and safeCopy to serilaize and persist logs.
 --
 -- TODO
+-- □  egad! timezone protection.
 -- □  impl; Q: how to handle key overwrites?
 --          A: collect overwritten keys (whose values are distinct)
 -----------------------------------------------------------------------------
@@ -35,7 +36,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Data (Data, Typeable)
 import Data.Foldable (foldl')
 import Data.IxSet
-       (Indexable(..), IxSet(..), Proxy(..), (@=), getOne, ixFun, ixSet, updateIx)
+       (Indexable(..), IxSet(..), Proxy(..), (@=), (@>=), (@<=), (@>=<=), getOne, ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
 import Data.Monoid ((<>), Any(..), All(..))
 import Data.SafeCopy
@@ -177,71 +178,6 @@ data DB = DB
 
 deriveSafeCopy 0 'base ''DB
 
--- ** Search logic
-
-data Attribution = Attribution Title Author
-  deriving (Eq, Show)
-
--- | Lists of predicates applied and folded with @All@.
-data Search' = Search' [Attribution -> Bool] VariantSearch'
-
--- Broke AF
-data VariantSearch'
-  = NullS -- ^ for, e.g., 'Read', where 'Search' exhausts predicates
-  -- | search quote body; may extend to multiple body preds
-  | QuoteS [Text -> Bool]
-  | DefS [Headword -> Bool] -- FIXME: return matching headwords or entire `[Headword]`?
-         [Meaning -> Bool] -- ^ only applied to 'InlineDef's
-  | PhrS [Headword -> Bool]
-         [Meaning -> Bool] -- ^ only applied to 'Defined's
-  | DialogueS [Text -> Bool] -- ^ infix search of comment body
-  | CommentS [Text -> Bool]
-  | DumpS [Text -> Bool]
-
-data Search where
-  Search :: Day -- ^ Start date
-         -> Day -- ^ End date
-         -> [Attribution -> Bool] -- ^ title/auth preds
-         -> BucketList -- ^ bucket specific predicates
-         -> Search
-
--- N.B. apply attribution filters to all but dialogues.
-data BucketList = BucketList
-  { filterDumps :: Maybe [Text -> Bool]
-  , filterDefs :: Maybe ([Headword -> Bool], [Headword -> Bool])
-  , filterReads :: Maybe ([Headword -> Bool], [Headword -> Bool])
-  , filterQuotes :: Maybe [Text -> Bool]
-  , filterDialogues :: Maybe [Text -> Bool]
-  , filterPhrases :: Maybe [Text -> Bool]
-  , filterComments :: Maybe [Text -> Bool]
-  }
-
--- Search logic
--- 1. check whether list of title/auth preds is empty; if so, do not
---    dereference tags and proceed with bucketlist-based filtration
---  i. check whether there all members of bucketlist are None or all are Maybe;
---     if so, apply filters to chrono--this will save us time sorting filtered
---     buckets--, otherwise, fetch entries from each requested bucket within
---     date range with @entries @>= s @=< e@ and package it up in a 'DB' 
---
---     (use some @collectHeads :: DB -> Maybe [Attribution -> Bool] -> Maybe AttrCache 
---     -> BucketList -> [Results]@ that takes the
---     first entry that satisfies from each non-empty bucket (unwanted buckets should 
---     be empty at this point) and sorts them; repeat until all buckets are
---     empty, and/or 'collectHeads' returns an empty set.)
---
---  ii. should title/auth preds be present, create a @AttrCache :: [(AttrTag ->
---      Attribution)] -> AttrCache@ and then apply 'collectHeads'
-
-getPredFor Dmp = undefined
-getPredFor Rds = undefined
-getPredFor Qts = undefined
-getPredFor Dial = undefined
-getPredFor Phrs = undefined
-getPredFor (Pgs pg) = undefined
-getPredFor Cmts = undefined
-getPredFor Defs = undefined
-getPredFor Store.Types.Null = undefined
 -- | Type returned by 'DB' queries. Nearly identical to 'LogEntry'.
 --
 -- TODO
@@ -397,12 +333,133 @@ addDay day = tagAndUpdate
             acc >>= \les -> (addLogEntry day x tag >> return les)
           | otherwise = (x :) <$> acc
 
--- | Applies search predicates to 'DB'.
-search :: Search' -> Query DB [Result]
-search (Search' [] vs) = undefined 
-search (Search' (x:xs) vs) = undefined -- must fetch read entries from tags
+data Attribution = Attribution Title Author
+  deriving (Eq, Show)
+
+-- | Lists of predicates applied and folded with @All@.
+data Search' = Search' [Attribution -> Bool] VariantSearch'
+
+-- Broke AF
+data VariantSearch'
+  = NullS -- ^ for, e.g., 'Read', where 'Search' exhausts predicates
+  -- | search quote body; may extend to multiple body preds
+  | QuoteS [Text -> Bool]
+  | DefS [Headword -> Bool] -- FIXME: return matching headwords or entire `[Headword]`?
+         [Meaning -> Bool] -- ^ only applied to 'InlineDef's
+  | PhrS [Headword -> Bool]
+         [Meaning -> Bool] -- ^ only applied to 'Defined's
+  | DialogueS [Text -> Bool] -- ^ infix search of comment body
+  | CommentS [Text -> Bool]
+  | DumpS [Text -> Bool]
+
+data Search where
+  Search :: Day -- ^ Start date
+         -> Day -- ^ End date
+         -> [Attribution -> Bool] -- ^ title/auth preds
+         -> BucketList -- ^ bucket specific predicates
+         -> Search
+
+-- N.B. apply attribution filters to all but dialogues.
+data BucketList = BucketList
+  { dumpsPreds :: [Text -> Bool]
+  , defsPreds :: ([Headword -> Bool], [Headword -> Bool])
+  , readsPreds :: ([Headword -> Bool], [Headword -> Bool])
+  , quotesPreds :: [Text -> Bool]
+  , dialoguesPreds :: [Text -> Bool]
+  , phrasesPreds :: [Text -> Bool]
+  , commentsPreds :: [Text -> Bool]
+  }
+
+-- | Dispatches search predicates.
+--
+-- Search logic:
+--
+-- 1. check whether list of title/auth preds is empty; if so, do not
+--    dereference tags and proceed with bucketlist-based filtration
+--  i. check whether there all members of bucketlist are None or all are Maybe;
+--     if so, apply filters to chrono--this will save us time sorting filtered
+--     buckets--, otherwise, fetch entries from each requested bucket within
+--     date range with @entries @>= s @=< e@ and package it up in a 'DB' 
+--
+--     (use some @collectHeads :: DB -> Maybe [Attribution -> Bool] -> Maybe AttrCache 
+--     -> BucketList -> [Results]@ that takes the
+--     first entry that satisfies from each non-empty bucket (unwanted buckets should 
+--     be empty at this point) and sorts them; repeat until all buckets are
+--     empty, and/or 'collectHeads' returns an empty set.)
+--
+--  ii. should title/auth preds be present, create a @AttrCache :: [(AttrTag ->
+--      Attribution)] -> AttrCache@ and then apply 'collectHeads'
+--
+-- OR, more simply, favor single variant searchs like so:
+--
+--  (USE ME!) for each bucket type requested, dispatch relevant predicates
+--   to it. return the sorted union of the results. BOOYAH
+--
+--   N.B. Since (I think) the moste common/useful search queries will have a
+--   specific result in mind (which implies a single desired return type), to
+--   optimize single type lookup will benefit users (or at least me) more than
+--   crippling fast single entry variant filtration in order to speed up
+--   joining the results of filtered lists. In any case, the first pass will
+--   use this latter implementation sketch.
+--
+--   The body of the search function will be a case expression on the search
+--   object, which should contain a field for each bucket containing
+--   bucket-specific predicates, and a general field, say, for auth/title
+--   preds, to be applied as appropriate. The current 'Search' type seems to
+--   suffice.
+filterBuckets :: Query DB Results
+filterBuckets = undefined
+
+-- | Applies auth/title preds, and dump searches.
+filterDumps :: Search -> IxSet Dumps -> [Text]
+filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet = do
+  let dumped' =
+        (IxSet.toAscList (Proxy :: Proxy Day) $ ixSet @>=<= (s, e)) >>=
+        Set.toList . getDumps
+      -- TODO add pred for fold over boolean OR, that is, @Any@
+      satisfiesAll t = foldl' (&&) True $ dumpsPreds <*> [t]
+  case dumpsPreds of
+    [] -> dumped'
+    xs -> filter satisfiesAll dumped'
+
+filterDefs :: Search -> Query DB Results
+filterDefs (Search s e authPreds BucketList {dumpsPreds}) = do
+  DB {defs} <- ask
+  undefined
+
+filterReads :: Search -> Query DB Results
+filterReads = undefined
+
+filterQuotes :: Search -> Query DB Results
+filterQuotes = undefined
+
+filterDialogues :: Search -> Query DB Results
+filterDialogues = undefined
+
+filterPhrases :: Search -> Query DB Results
+filterPhrases = undefined
+
+filterComments :: Search -> Query DB Results
+filterComments = undefined
 
 
+
+
+
+
+
+
+
+
+getPredFor Dmp = undefined
+getPredFor Rds = undefined
+getPredFor Qts = undefined
+getPredFor Dial = undefined
+getPredFor Phrs = undefined
+getPredFor (Pgs pg) = undefined
+getPredFor Cmts = undefined
+getPredFor Defs = undefined
+getPredFor Store.Types.Null = undefined
 
 initDB :: DB
 initDB =
@@ -552,9 +609,9 @@ view :: IO ()
 view = do
   r <-
     bracket
-      (openLocalState initDB)
+      (openLocalStateFrom "state/DB" initDB)
       createCheckpointAndClose
-      (\acid -> query acid ViewDB)
+      (\acid -> query acid ViewDB>>=pPrint)
   pPrint r
 
 purge :: IO ()

@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes, OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes, NamedFieldPuns, OverloadedStrings, RecordWildCards #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -19,16 +19,18 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Acid
 import Data.Acid.Advanced (query', update')
-import Data.Acid.Local (createCheckpointAndClose)
+import Data.Acid.Local (Checkpoint, createCheckpointAndClose)
+import Data.Acid.Log
 import Data.Acid.Remote
 import qualified Data.ByteString as B
+import Data.Foldable (foldl')
 import Data.IxSet
-       (Indexable(..), IxSet(..), (@<), (@>), (@=), getOne, ixFun, ixSet, updateIx)
+       (Indexable(..), IxSet(..), Proxy(..), (@<), (@>=<=), (@=), (@>), getOne,
+        ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
 import Data.Monoid ((<>))
 import Data.SafeCopy
 import Data.Set (Set)
-import Search (pathToDay)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -41,6 +43,7 @@ import Parse
 import Parse.Entry
 import Prelude hiding (min)
 import Render
+import Search (pathToDay)
 import Store hiding (Null)
 import Store.Render
 import Test.Hspec
@@ -400,7 +403,10 @@ withNewConnFrom fp action =
 
 spec :: Spec
 spec = do
-  around (withNewConnFrom "testState") $ do
+  -- Wipes test DB before each test. write another context setup/teardown
+  -- function to persist (but don't; tests results ought to be replicable
+  -- whenever possible)
+  around (withNewConnFrom "testState/DB") $ do
     describe "Add day's worth of logs to DB." $
       it "converts and inserts logs to DB; compares with conversion directly to `Results`" $ \acid -> do
         backupDay <- utctDay <$> getCurrentTime
@@ -413,31 +419,53 @@ spec = do
 --        query acid FromDB>>=colRender True
         r `shouldBe` r'
         return ()
+    describe "Dump filtration." $ 
+      it "Fetch dumps that contain the string \"dump\"." $
+        \acid -> do
+          day <- utctDay <$> getCurrentTime
+          update acid $ InsertDump day "wasss" 
+          update acid $ InsertDump day "hello dump" 
+          update acid $ InsertDump day "goodbye dump"
+          let s = addDays (-182) day -- ~ six months
+              e = day 
+              search =
+                Search s e [] $
+                  BucketList [T.isInfixOf "dump"] ([], []) ([], []) [] [] [] []
+          query acid ViewDB >>= \DB {dumped} -> 
+            filterDumps search dumped `shouldBe` ["goodbye dump", "hello dump"]
+
+
+data EntryType = Checkpoint | Event
+
+-- | Fetches 'LogKey' of requested log type at the given acid-state path.
+logKey :: EntryType -> FilePath -> LogKey object
+logKey et fp = case et of
+                 Checkpoint -> LogKey fp "checkpoints"
+                 Event -> LogKey fp "events"
+rollbackExample = do
+  let k = logKey Checkpoint "state/DB" :: LogKey Checkpoint
+  fl <- openFileLog k
+  id <- askCurrentEntryId fl
+  let prev = id - 2
+  print $ "rolling back from " <> show id <> " to " <> show prev
+  closeFileLog fl
+  --rollbackTo k prev
 
 test = do
   day <- utctDay <$> getCurrentTime
-  let updates :: AddDay
-      updates = AddDay day $ fmap TabTsEntry output
-        --foldr (>>) (return ()) $
-        --fmap (\x -> addLogEntry day (TabTsEntry x) Nothing) output
-  
-  backupDay <- utctDay <$> getCurrentTime
-  let day = maybe backupDay id $ pathToDay "18.11.20"
-      updates' = AddDay day breakage
   bracket
-    (openLocalStateFrom "testState" initDB)
+    (openLocalStateFrom "state/DB" initDB)
     createCheckpointAndClose
-    (\acid -> do
-       -- PURGE DB
-       update acid ReinitDB
-       update acid updates'
-       --query acid FromDB >>= colRender True)
-       db@DB{..} <- query acid ViewDB
-       t <- getCurrentTime 
-       query acid FromDB>>=colRender True
-       --query acid ViewDB>>=pPrint
-       let -- x :: _
-           x = defs @< t 
-       return ()
-       )
+    (\acid
+      --update acid $ InsertDump day "sayonara dump"
+      -> do
+       update acid $ InsertDump day "wasss"
+       let s = addDays (-182) day -- ~ six months
+           e = day
+           search =
+             Search s e [] $
+             BucketList [T.isInfixOf "dump"] ([], []) ([], []) [] [] [] []
+       query acid ViewDB >>= \DB {dumped} -> do
+         pPrint dumped
+         pPrint $ filterDumps search dumped)
   return ()

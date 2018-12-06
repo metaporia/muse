@@ -192,4 +192,6 @@ data Defns = Defns { defTs :: TsIdx DefQuery
   deriving (Data, Eq, Ord, Show, Read)
 
 instance Indexable Defns where
-  empty = ixSet [ ixFun $ return . ts . defTs ]
+  empty = ixSet [ ixFun $ return . ts . defTs 
+                , ixFun $ return . defAttr
+                ]

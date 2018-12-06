@@ -24,6 +24,16 @@ list :: b -> ([a] -> b) -> [a] -> b
 list emptyCase f [] = emptyCase
 list _ f xs = f xs
 
+-- Filters elements, applies function to those which satisfy.
+filtermap' :: (a -> Bool) -> (a -> b) -> [a] -> [b]
+filtermap' p f = foldr (\a bs -> if p a then f a : bs else bs) []
+
+-- Filters elements, applies function to those which satisfy.
+filtermap :: (a -> Maybe b) -> [a] -> [b]
+filtermap f = foldr (\a bs -> maybe bs (:bs) (f a)) []
+
+
+
 eitherToMaybe :: Either a b -> Maybe b
 eitherToMaybe (Left _) = Nothing
 eitherToMaybe (Right b) = Just b

@@ -1,8 +1,9 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
   MultiWayIf #-}
-{-# LANGUAGE RecordWildCards, BangPatterns, NamedFieldPuns, StandaloneDeriving,
-  DeriveDataTypeable, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE RecordWildCards, BangPatterns, NamedFieldPuns,
+  StandaloneDeriving, DeriveDataTypeable, TemplateHaskell,
+  TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -22,7 +23,6 @@
 -----------------------------------------------------------------------------
 module Store where
 
-import Prelude
 import Control.Exception (bracket)
 import Control.Monad ((>=>), void)
 import Control.Monad.Reader
@@ -36,9 +36,10 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Data (Data, Typeable)
 import Data.Foldable (foldl')
 import Data.IxSet
-       (Indexable(..), IxSet(..), Proxy(..), (@=), (@>=), (@<=), (@>=<=), getOne, ixFun, ixSet, updateIx)
+       (Indexable(..), IxSet(..), Proxy(..), (@<=), (@=), (@>=), (@>=<=),
+        getOne, ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
-import Data.Monoid ((<>), Any(..), All(..))
+import Data.Monoid (All(..), Any(..), (<>))
 import Data.SafeCopy
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -48,47 +49,66 @@ import qualified Data.Text.IO as T
 import Data.Time
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
-import Text.Show.Pretty (pPrint)
-
 import Helpers
 import Parse (DefQuery(..), PageNum(..), TimeStamp(..))
 import Parse.Entry (Entry(..), LogEntry(..), Phrase(..))
-import Search
+import Prelude
 import Render (colRender, showAll)
+import Search
 import Store.Types
+import Text.Show.Pretty (pPrint)
 import Time (toUTC, truncateUTC)
 
 type IndentDepth = Int
+
 type Quote = Text
+
 type Title = Text
+
 type Author = Text
+
 type Attr = Text
+
 type Body = Text
+
 type PgNum = Integer
 
 deriving instance Read TimeStamp
+
 deriving instance Ord TimeStamp
+
 deriving instance Data TimeStamp
 
 deriveSafeCopy 0 'base ''TimeStamp
 
-deriving instance Data     Entry
-deriving instance Read     Entry
-deriving instance Ord      Entry
+deriving instance Data Entry
+
+deriving instance Read Entry
+
+deriving instance Ord Entry
+
 deriving instance Typeable Entry
 
 deriveSafeCopy 0 'base ''Entry
 
-deriving instance Data     LogEntry
-deriving instance Read     LogEntry
-deriving instance Ord      LogEntry
+deriving instance Data LogEntry
+
+deriving instance Read LogEntry
+
+deriving instance Ord LogEntry
+
 deriving instance Typeable LogEntry
+
 deriveSafeCopy 0 'base ''LogEntry
 
-deriving instance Data     Phrase
-deriving instance Read     Phrase
-deriving instance Ord      Phrase
+deriving instance Data Phrase
+
+deriving instance Read Phrase
+
+deriving instance Ord Phrase
+
 deriving instance Typeable Phrase
+
 deriveSafeCopy 0 'base ''Phrase
 
 -- | 'LogEntry' with 'Day'.
@@ -113,7 +133,9 @@ pp = (\(d, le) -> putStrLn (show d) >> colRender True le) . toLogEntry
 -- most searches, barring "fetch everything, including dumps".
 --
 -- TODO index
-data Dumps = Dumps Day (Set Text) -- ^ sorted, unique list of text
+data Dumps =
+  Dumps Day
+        (Set Text) -- ^ sorted, unique list of text
   deriving (Eq, Ord, Show, Read, Data)
 
 getDay :: Dumps -> Day
@@ -144,7 +166,8 @@ data DayLog = DayLog
 
 deriveSafeCopy 0 'base ''DayLog
 
-newtype DayLogs = DayLogs [DayLog]
+newtype DayLogs =
+  DayLogs [DayLog]
   deriving (Eq, Ord, Show, Read, Data)
 
 getDayLogs (DayLogs dls) = dls
@@ -155,7 +178,7 @@ getDays = fmap day . getDayLogs
 deriveSafeCopy 0 'base ''DayLogs
 
 hasTs :: TimeStamp -> DayLog -> Bool
-hasTs ts dl = ts `elem` ((\(_,ts',_) -> ts') <$> entries dl)
+hasTs ts dl = ts `elem` ((\(_, ts', _) -> ts') <$> entries dl)
 
 x = do
   t <- getCurrentTime
@@ -173,7 +196,7 @@ data DB = DB
   , phrases :: IxSet (TsIdxTag Phrase)
   , comments :: IxSet (TsIdxTag Text)
   -- | entry order of elements in entry variant buckets.
-  , chrono :: IxSet (TsIdxTup IndentDepth Bucket) 
+  , chrono :: IxSet (TsIdxTup IndentDepth Bucket)
   } deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''DB
@@ -184,9 +207,11 @@ deriveSafeCopy 0 'base ''DB
 -- □  'ColRender' instance
 -- □  'fromLogEntry :: LogEnty -> Result'
 -- □  'fromEntry :: Enty -> Result'
-data Result = DumpR Text
-            | TsR UTCTime Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
-            deriving (Eq, Show)
+data Result
+  = DumpR Text
+  | TsR UTCTime
+        Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
+  deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''Result
 
@@ -204,11 +229,11 @@ fromEntry utc entry = TsR utc entry
 fromDumps :: Dumps -> [Result]
 fromDumps (Dumps _ set) = DumpR <$> (Set.toList set)
 
-newtype Results = Results { results :: [Result] }
-  deriving (Eq, Show)
+newtype Results = Results
+  { results :: [Result]
+  } deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''Results
-
 
 -- Traverses @chrono@ and rebuilds input.
 fromDB' :: DB -> Results
@@ -263,9 +288,7 @@ fromDB' DB {chrono, ..} =
 fromDB :: Query DB Results
 fromDB = fromDB' <$> ask
 
-
 -- ** 'DB' management
-
 -- | Insert 'LogEntry' into 'DB'. For each, an entry is added to 'chrono' and,
 -- except for 'Null' and 'Phrs', to the appropriate bucket. Adds 'AttrTag'
 -- when applicable (see definition of 'DB').
@@ -280,29 +303,28 @@ addLogEntry day le tag = do
          return (Just utc)
     (TabTsEntry (indent, ts, (Def dq))) ->
       let utc = (toUTC day ts)
-      in updateDef utc dq tag >> updateChrono utc indent Defs
-         >> return (Just utc)
+      in updateDef utc dq tag >> updateChrono utc indent Defs >>
+         return (Just utc)
     (TabTsEntry (indent, ts, (Quotation q attr mp))) ->
       let utc = (toUTC day ts)
       in updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp) >>
-         updateChrono utc indent Qts
-         >> return (Just utc)
+         updateChrono utc indent Qts >>
+         return (Just utc)
     (TabTsEntry (indent, ts, (Commentary body))) ->
       let utc = (toUTC day ts)
-      in updateComment utc (T.pack body) tag >> updateChrono utc indent Cmts
-         >> return (Just utc)
+      in updateComment utc (T.pack body) tag >> updateChrono utc indent Cmts >>
+         return (Just utc)
     (TabTsEntry (indent, ts, (PN pg))) ->
       let utc = (toUTC day ts)
-      in updateChrono utc indent (Pgs pg)
-         >> return (Just utc)
+      in updateChrono utc indent (Pgs pg) >> return (Just utc)
     (TabTsEntry (indent, ts, (Phr p))) ->
       let utc = (toUTC day ts)
-      in updatePhrase utc p tag >> updateChrono utc indent Phrs
-         >> return (Just utc)
+      in updatePhrase utc p tag >> updateChrono utc indent Phrs >>
+         return (Just utc)
     (TabTsEntry (indent, ts, (Dialogue body))) ->
       let utc = (toUTC day ts)
-      in updateDialogue utc (T.pack body) >> updateChrono utc indent Dial
-         >> return (Just utc)
+      in updateDialogue utc (T.pack body) >> updateChrono utc indent Dial >>
+         return (Just utc)
     (TabTsEntry (indent, ts, (Parse.Entry.Null))) -> return Nothing
 
 -- | Tags and adds to 'DB' a day's worth of 'LogEntry's.
@@ -333,11 +355,15 @@ addDay day = tagAndUpdate
             acc >>= \les -> (addLogEntry day x tag >> return les)
           | otherwise = (x :) <$> acc
 
-data Attribution = Attribution Title Author
+data Attribution =
+  Attribution Title
+              Author
   deriving (Eq, Show)
 
 -- | Lists of predicates applied and folded with @All@.
-data Search' = Search' [Attribution -> Bool] VariantSearch'
+data Search' =
+  Search' [Attribution -> Bool]
+          VariantSearch'
 
 -- Broke AF
 data VariantSearch'
@@ -353,20 +379,21 @@ data VariantSearch'
   | DumpS [Text -> Bool]
 
 data Search where
-  Search :: Day -- ^ Start date
-         -> Day -- ^ End date
-         -> [Attribution -> Bool] -- ^ title/auth preds
-         -> BucketList -- ^ bucket specific predicates
-         -> Search
+  Search
+    :: Day -- ^ Start date
+    -> Day -- ^ End date
+    -> [Attribution -> Bool] -- ^ title/auth preds
+    -> BucketList -- ^ bucket specific predicates
+    -> Search
 
 -- N.B. apply attribution filters to all but dialogues.
 data BucketList = BucketList
   { dumpsPreds :: [Text -> Bool]
-  , defsPreds :: ([Headword -> Bool], [Headword -> Bool])
-  , readsPreds :: ([Headword -> Bool], [Headword -> Bool])
+  , defsPreds :: ([Headword -> Bool], [Meaning -> Bool])
+  , readsPreds :: [Attribution -> Bool]
   , quotesPreds :: [Text -> Bool]
   , dialoguesPreds :: [Text -> Bool]
-  , phrasesPreds :: [Text -> Bool]
+  , phrasesPreds :: ([Headword -> Bool], [Meaning -> Bool])
   , commentsPreds :: [Text -> Bool]
   }
 
@@ -412,44 +439,119 @@ filterBuckets = undefined
 
 -- | Applies auth/title preds, and dump searches.
 filterDumps :: Search -> IxSet Dumps -> [Text]
-filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet = do
-  let dumped' =
-        (IxSet.toAscList (Proxy :: Proxy Day) $ ixSet @>=<= (s, e)) >>=
-        Set.toList . getDumps
-      -- TODO add pred for fold over boolean OR, that is, @Any@
-      satisfiesAll t = foldl' (&&) True $ dumpsPreds <*> [t]
+filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet =
   case dumpsPreds of
     [] -> dumped'
     xs -> filter satisfiesAll dumped'
+  where
+    dumped' =
+      (IxSet.toAscList (Proxy :: Proxy Day) $ ixSet @>=<= (s, e)) >>=
+      Set.toList . getDumps
+    -- TODO add pred for fold over boolean OR, that is, @Any@
+    satisfiesAll t = foldl' (&&) True $ dumpsPreds <*> [t]
 
-filterDefs :: Search -> Query DB Results
-filterDefs (Search s e authPreds BucketList {dumpsPreds}) = do
-  DB {defs} <- ask
-  undefined
+filterDefs :: DB -> Search -> IxSet (TsIdxTag DefQuery) -> [DefQuery]
+filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
+  | null authPreds =
+    case defsPreds of
+      ([], []) -> defs''
+      (hs, ms) -> filter (satisfiesAll hs ms) defs''
+  | otherwise =
+    let (hs, ms) = defsPreds
+    in filtermap
+         (\tag ->
+            let dq = val $ tsTag tag
+            in if satisfiesAll hs ms dq && readSatisfies s e db tag authPreds
+                 then Just dq
+                 else Nothing)
+         defs'
+  where
+    defs'' = val . tsTag <$> defs'
+    defs' = IxSet.toAscList (Proxy :: Proxy Day) $ defs @>=<= (s, e)
+    satisfiesAll hs _ (Defn _ hws) = foldl' (&&) True $ hs <*> hws
+    satisfiesAll hs ms (InlineDef hw mn) =
+      foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
+    satisfiesAll hs ms (DefVersus hw mn hw' mn') =
+      satisfiesAll hs ms (InlineDef hw mn) &&
+      satisfiesAll hs ms (InlineDef hw' mn')
 
-filterReads :: Search -> Query DB Results
-filterReads = undefined
+readSatisfies :: Day -> Day -> DB -> TsIdxTag a -> [Attribution -> Bool] -> Bool
+readSatisfies s e DB {reads} tag [] = False
+readSatisfies s e DB {reads} tag ps =
+  case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (ts . tsTag $ tag) of
+    Just (t, a) -> foldl' (&&) True $ ps <*> pure (Attribution t a)
+    Nothing -> False
 
+filterDialogues :: DB -> Search -> IxSet (TsIdx Text) -> [Text]
+filterDialogues db (Search s e _ BucketList {dialoguesPreds}) ds =
+  case dialoguesPreds of
+    [] -> ds'
+    _ -> filter satisfiesAll ds'
+  where
+    ds' = val <$> (IxSet.toAscList (Proxy :: Proxy Day) $ ds @>=<= (s, e))
+    -- TODO add pred for fold over boolean OR, that is, @Any@
+    satisfiesAll t = foldl' (&&) True $ dialoguesPreds <*> [t]
+
+filterPhrases :: DB -> Search -> IxSet (TsIdxTag Phrase) -> [Phrase]
+filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
+  | null authPreds =
+    case phrasesPreds of
+      ([], []) -> phrases''
+      (hs, ms) -> filter (satisfiesAll hs ms) phrases''
+  | otherwise =
+    case phrasesPreds of
+      ([], []) ->
+        filtermap
+          (\tag ->
+             if readSatisfies s e db tag authPreds
+               then Just . val $ tsTag tag
+               else Nothing)
+          phrases'
+      (hs, ms) ->
+        filtermap
+          (\tag ->
+             let dq = val $ tsTag tag
+             in if satisfiesAll hs ms dq && readSatisfies s e db tag authPreds
+                  then Just dq
+                  else Nothing)
+          phrases'
+  where
+    phrases'' = val . tsTag <$> phrases'
+    phrases' = IxSet.toAscList (Proxy :: Proxy Day) $ phrases @>=<= (s, e)
+    satisfiesAll hs _ (Plural phrs) = foldl' (&&) True $ hs <*> phrs
+    satisfiesAll hs ms (Defined hw mn) =
+      foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
+
+filterComments :: DB -> Search -> IxSet (TsIdxTag Text) -> [Text]
+filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
+  | null authPreds =
+    case commentsPreds of
+      [] -> cmts''
+      _ -> filter (satisfiesAll commentsPreds) cmts''
+  | otherwise =
+    filtermap
+      (\tag ->
+         let dq = val $ tsTag tag
+         in if satisfiesAll commentsPreds dq &&
+               readSatisfies s e db tag authPreds
+              then Just dq
+              else Nothing)
+      cmts'
+  where
+    cmts'' = val . tsTag <$> cmts'
+    cmts' = IxSet.toAscList (Proxy :: Proxy Day) $ cmts @>=<= (s, e)
+    satisfiesAll [] t = True
+    satisfiesAll preds t = foldl' (&&) True $ preds <*> [t]
+
+-- Q: filter by manual attributions, or nesting?
 filterQuotes :: Search -> Query DB Results
 filterQuotes = undefined
 
-filterDialogues :: Search -> Query DB Results
-filterDialogues = undefined
-
-filterPhrases :: Search -> Query DB Results
-filterPhrases = undefined
-
-filterComments :: Search -> Query DB Results
-filterComments = undefined
-
-
-
-
-
-
-
-
-
+-- TODO cache attributions
+filterReads :: Search -> Query DB Results
+filterReads (Search s e authPreds BucketList {readsPreds}) = do
+  DB {reads} <- ask
+  undefined
 
 getPredFor Dmp = undefined
 getPredFor Rds = undefined
@@ -480,9 +582,11 @@ updateIxSetTsIdx ti = updateIx (ts ti) ti
 
 -- | Updates entry in indexed set of timestamped pairs.
 updateIxSetTsIdxTag ::
-     (Ord a, Typeable a) => TsIdxTag a -> IxSet (TsIdxTag a) -> IxSet (TsIdxTag a)
+     (Ord a, Typeable a)
+  => TsIdxTag a
+  -> IxSet (TsIdxTag a)
+  -> IxSet (TsIdxTag a)
 updateIxSetTsIdxTag tt@(TsIdxTag idx attr) = updateIx (ts idx) tt
-
 
 -- | Updates entry in indexed set of `(ts, (a, b))`; that is, pairs of timestamps
 -- and tuples.
@@ -596,10 +700,11 @@ insert = do
     bracket
       (openLocalState initDB)
       createCheckpointAndClose
-      (\acid -> do
+      (\acid
          --update acid (InsertDump today "dump body")
          --update acid (UpdateRead utc "Thank You, Jeeves" "P.G. Wodehouse")
          --update acid (UpdateRead utc' "Thank You, Jeeves" "P.G. Wodehouse")
+        -> do
          update acid (UpdateDef utc' (Defn Nothing ["concupiscent"]) Nothing)
          query acid ViewDB)
   pPrint r
@@ -611,7 +716,7 @@ view = do
     bracket
       (openLocalStateFrom "state/DB" initDB)
       createCheckpointAndClose
-      (\acid -> query acid ViewDB>>=pPrint)
+      (\acid -> query acid ViewDB >>= pPrint)
   pPrint r
 
 purge :: IO ()

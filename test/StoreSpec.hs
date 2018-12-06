@@ -430,7 +430,7 @@ spec = do
               e = day 
               search =
                 Search s e [] $
-                  BucketList [T.isInfixOf "dump"] ([], []) ([], []) [] [] [] []
+                  BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
           query acid ViewDB >>= \DB {dumped} -> 
             filterDumps search dumped `shouldBe` ["goodbye dump", "hello dump"]
 
@@ -464,7 +464,7 @@ test = do
            e = day
            search =
              Search s e [] $
-             BucketList [T.isInfixOf "dump"] ([], []) ([], []) [] [] [] []
+             BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
        query acid ViewDB >>= \DB {dumped} -> do
          pPrint dumped
          pPrint $ filterDumps search dumped)

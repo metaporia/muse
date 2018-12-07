@@ -14,6 +14,7 @@
 -- This module provides parsers for `LogEntry` and its constituent types.
 --
 -- TODO
+-- □  (!!) store quote as @Quotation Quote (Maybe Attr) (Maybe PgNum)@
 -- □  add 'Poem' 'Entry' variant
 -----------------------------------------------------------------------------
 module Parse.Entry where

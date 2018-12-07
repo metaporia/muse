@@ -170,9 +170,9 @@ mkTsIdxTrip' ts v = TsIdxTrip $ mkTsIdx ts v
 mkTsIdxTrip :: TsIdx (a, b, c) -> TsIdxTrip a b c
 mkTsIdxTrip = TsIdxTrip
 
-getFst = (\(x,_,_) -> x) . val . tsTrip
-getSnd = (\(_,x,_) -> x) . val . tsTrip
-getThrd = (\(_,_,x) -> x) . val . tsTrip
+getFst = (\(x,_,_) -> x)
+getSnd = (\(_,x,_) -> x)
+getThrd = (\(_,_,x) -> x)
 
 deriveSafeCopy 0 'base ''TsIdxTrip
 

@@ -17,7 +17,13 @@
 -- Uses acid-state and safeCopy to serilaize and persist logs.
 --
 -- TODO
+--
+-- □  finish acid-state based storage/search implementation
+--    benchmark against old (expose two @main@s for first round; if it's hard to
+--    tell with the UNIX `time` CLI, use a hs benchmarking lib, like "criterion")
+--
 -- □  egad! timezone protection.
+--
 -- □  impl; Q: how to handle key overwrites?
 --          A: collect overwritten keys (whose values are distinct)
 -----------------------------------------------------------------------------
@@ -191,7 +197,7 @@ data DB = DB
   , reads :: IxSet (TsIdxTup Title Author)
   -- TODO fix tagging logic, that is, optional manual attribution; blocked on
   -- parser update.
-  , quotes :: IxSet (TsIdxTrip Body Attr (Maybe PgNum))
+  , quotes :: IxSet (TsIdxTag (Body, Attr, (Maybe PgNum)))
   , dialogues :: IxSet (TsIdx Text)
   , phrases :: IxSet (TsIdxTag Phrase)
   , comments :: IxSet (TsIdxTag Text)
@@ -254,9 +260,9 @@ fromDB' DB {chrono, ..} =
                Just i ->
                  (fromEntry t $
                   Quotation
-                    (T.unpack $ getFst i)
-                    (T.unpack $ getSnd i)
-                    (getThrd i)) :
+                    (T.unpack . getFst . val $ tsTag i)
+                    (T.unpack . getSnd . val $ tsTag i)
+                    (getThrd . val $ tsTag i)) :
                  xs
                Nothing -> xs
            Rds ->
@@ -307,7 +313,7 @@ addLogEntry day le tag = do
          return (Just utc)
     (TabTsEntry (indent, ts, (Quotation q attr mp))) ->
       let utc = (toUTC day ts)
-      in updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp) >>
+      in updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp) tag >>
          updateChrono utc indent Qts >>
          return (Just utc)
     (TabTsEntry (indent, ts, (Commentary body))) ->
@@ -544,8 +550,9 @@ filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
     satisfiesAll preds t = foldl' (&&) True $ preds <*> [t]
 
 -- Q: filter by manual attributions, or nesting?
-filterQuotes :: Search -> Query DB Results
-filterQuotes = undefined
+-- A: filter by tag if present, fallback to manual attribution
+--filterQuotes :: DB -> Search IxSet (TsIdxTag -> Query DB Results
+--filterQuotes db (Search s e authPreds BucketList {commentsPreds}) cmts
 
 -- TODO cache attributions
 filterReads :: Search -> Query DB Results
@@ -639,10 +646,11 @@ updateQuote ::
   -> Text
   -> Text
   -> Maybe PgNum
+  -> Maybe AttrTag
   -> Update DB (Text, Text, Maybe PgNum)
-updateQuote ts b a mp = do
+updateQuote ts b a mp tag = do
   db@DB {..} <- get
-  put DB {quotes = updateIxSetTsIdxTrip (mkTsIdxTrip' ts (b, a, mp)) quotes, ..}
+  put DB {quotes = updateIxSetTsIdxTag (mkTsIdxTag ts (b, a, mp) tag) quotes, ..}
   return (b, a, mp)
 
 updateDialogue :: UTCTime -> Text -> Update DB Text

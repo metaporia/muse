@@ -22,7 +22,10 @@ Clone; build; and initialize config, cache, and log directory.
 git clone https://gitlab.com/metaporia/muse.git
 cd muse
 git checkout <release-tag> # e.g., v0.1.0
-stack build --copy-bins # or omit `--copy-bins` and link/copy yourself 
+
+stack build --copy-bins --ghc-options -O2
+# or omit `--copy-bins` and link/copy yourself 
+
 muse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, 
 ```
 

@@ -130,6 +130,7 @@ instance (Ord v, Typeable v) => Indexable (TsIdxTag v) where
   empty =
     ixSet
       [ ixFun $ return . ts . tsTag
+      , ixFun $ return . utctDay . ts . tsTag
       , ixFun $ return . val . tsTag
       , ixFun $ return . attr
       ]

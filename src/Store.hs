@@ -725,6 +725,7 @@ makeAcidic
   , 'updateQuote
   , 'updateDialogue
   , 'updatePhrase
+  , 'updateComment
   , 'viewDB
   , 'reinitDB
   , 'addLogEntry

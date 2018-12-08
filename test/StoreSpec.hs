@@ -37,7 +37,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time
 import Data.Time.Calendar
-import Data.Time.Clock (utctDay)
+import Data.Time.Clock
 import Helpers
 import Parse
 import Parse.Entry
@@ -46,6 +46,7 @@ import Render
 import Search (pathToDay)
 import Store hiding (Null)
 import Store.Render
+import Time
 import Test.Hspec
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
@@ -420,7 +421,7 @@ spec = do
         r `shouldBe` r'
         return ()
     describe "Dump filtration." $ 
-      it "Fetch dumps that contain the string \"dump\"." $
+      it "Fetches dumps that contain the string \"dump\"." $
         \acid -> do
           day <- utctDay <$> getCurrentTime
           update acid $ InsertDump day "wasss" 
@@ -433,6 +434,22 @@ spec = do
                   BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
           query acid ViewDB >>= \DB {dumped} -> 
             filterDumps search dumped `shouldBe` ["goodbye dump", "hello dump"]
+    describe "Comment filtration." $
+      it "applies single comment search pred" $ 
+      \acid -> do
+         day <- getCurrentTime
+         day' <- incrMin <$> getCurrentTime
+         day'' <- incrMin . incrMin <$> getCurrentTime
+         update acid $ UpdateComment day "comment body 1" Nothing
+         update acid $ UpdateComment day' "synthesis" Nothing
+         update acid $ UpdateComment day'' "comment body 2" Nothing
+         let s = addDays (-182) $ utctDay day -- ~ six months
+             e = utctDay day
+             search =
+               Search s e [] $
+               BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
+         query acid ViewDB >>= \db@DB {comments} -> do
+           filterComments db search comments `shouldBe` ["comment body 1", "comment body 2"]
 
 
 data EntryType = Checkpoint | Event
@@ -450,22 +467,29 @@ rollbackExample = do
   print $ "rolling back from " <> show id <> " to " <> show prev
   closeFileLog fl
   --rollbackTo k prev
+  --
+
 
 test = do
-  day <- utctDay <$> getCurrentTime
+  day <- getCurrentTime
+  day' <- incrMin <$> getCurrentTime
+  day'' <- incrMin . incrMin <$> getCurrentTime
   bracket
     (openLocalStateFrom "state/DB" initDB)
     createCheckpointAndClose
     (\acid
       --update acid $ InsertDump day "sayonara dump"
       -> do
-       update acid $ InsertDump day "wasss"
-       let s = addDays (-182) day -- ~ six months
-           e = day
+       update acid ReinitDB
+       update acid $ UpdateComment day "comment body 1" Nothing
+       update acid $ UpdateComment day' "synthesis" Nothing
+       update acid $ UpdateComment day'' "comment body 2" Nothing
+       let s = addDays (-182) $ utctDay day -- ~ six months
+           e = utctDay day
            search =
              Search s e [] $
-             BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
-       query acid ViewDB >>= \DB {dumped} -> do
-         pPrint dumped
-         pPrint $ filterDumps search dumped)
+             BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
+       query acid ViewDB >>= \db@DB {comments} -> do
+         pPrint comments
+         pPrint $ filterComments db search comments)
   return ()

@@ -34,6 +34,9 @@ truncateUTC :: UTCTime -> UTCTime
 truncateUTC UTCTime {..} =
   UTCTime {utctDayTime = (secondsToDiffTime . truncate $ utctDayTime), ..}
 
+incrMin :: UTCTime -> UTCTime
+incrMin UTCTime {..} = UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, .. }
+
 left :: Either a b -> Maybe a
 left = preview _Left
 

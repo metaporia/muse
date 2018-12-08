@@ -481,6 +481,8 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
       satisfiesAll hs ms (InlineDef hw mn) &&
       satisfiesAll hs ms (InlineDef hw' mn')
 
+-- | Applies title and author predicates to 'AttrTag' assoc'd with given 'DB'
+-- entry.
 readSatisfies :: Day -> Day -> DB -> TsIdxTag a -> [Attribution -> Bool] -> Bool
 readSatisfies s e DB {reads} tag [] = False
 readSatisfies s e DB {reads} tag ps =
@@ -551,8 +553,38 @@ filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
 
 -- Q: filter by manual attributions, or nesting?
 -- A: filter by tag if present, fallback to manual attribution
---filterQuotes :: DB -> Search IxSet (TsIdxTag -> Query DB Results
---filterQuotes db (Search s e authPreds BucketList {commentsPreds}) cmts
+filterQuotes ::
+     DB
+  -> Search
+  -> IxSet (TsIdxTag (Body, Attr, Maybe PgNum))
+  -> [(Body, Attr, Maybe PgNum)]
+filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
+  | null authPreds =
+    case quotesPreds of
+      [] -> quotes''
+      _ ->
+        filter (\(b, _, _) -> foldl' (&&) True $ quotesPreds <*> [b]) quotes''
+  | otherwise =
+    filtermap
+      (\t ->
+         if satisfiesAll quotesPreds (val $ tsTag t)
+           then Just . val $ tsTag t
+           else Nothing)
+      quotes'
+  where
+    quotes'' = val . tsTag <$> quotes'
+    quotes' = IxSet.toAscList (Proxy :: Proxy Day) $ quotes @>=<= (s, e)
+    satisfiesAll :: [Text -> Bool] -> (Body, Attr, Maybe PgNum) -> Bool
+    satisfiesAll preds (b, _, _) = foldl' (&&) True (preds <*> [b])
+    readSatisfies' :: TsIdxTag (Body, Attr, Maybe PgNum) -> Bool
+    readSatisfies' tag =
+      case attr tag of
+        Just (attrTag) -> readSatisfies s e db tag authPreds
+        -- no tag
+        Nothing ->
+          let (_, a, _) = val . tsTag $ tag
+          -- FIXME puts whole attr in both title and auth slot.
+          in foldl' (&&) True (authPreds <*> [Attribution a a])
 
 -- TODO cache attributions
 filterReads :: Search -> Query DB Results
@@ -650,7 +682,8 @@ updateQuote ::
   -> Update DB (Text, Text, Maybe PgNum)
 updateQuote ts b a mp tag = do
   db@DB {..} <- get
-  put DB {quotes = updateIxSetTsIdxTag (mkTsIdxTag ts (b, a, mp) tag) quotes, ..}
+  put
+    DB {quotes = updateIxSetTsIdxTag (mkTsIdxTag ts (b, a, mp) tag) quotes, ..}
   return (b, a, mp)
 
 updateDialogue :: UTCTime -> Text -> Update DB Text

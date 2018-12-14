@@ -28,6 +28,7 @@ import Data.IxSet
        (Indexable(..), IxSet(..), Proxy(..), (@<), (@>=<=), (@=), (@>), getOne,
         ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
+import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.SafeCopy
 import Data.Set (Set)
@@ -46,6 +47,7 @@ import Render
 import Search (pathToDay)
 import Store hiding (Null)
 import Store.Render
+import Store.Types (AttrTag(..), tsIdx, mkTsIdxTag, TsIdxTag(..), TsIdx(..))
 import Time
 import Test.Hspec
 import Text.RawString.QQ
@@ -450,16 +452,135 @@ spec = do
                BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
          query acid ViewDB >>= \db@DB {comments} -> do
            filterComments db search comments `shouldBe` ["comment body 1", "comment body 2"]
+    tDia
+    tQuote
 
 -- TODO 
 -- ▣  comments
 -- ▣  dumped
--- □  dialogues
+-- ▣  dialogues
 -- □  quotes
 -- □  defs
 -- □  phrases
 -- □  (??) chrono
 -- □  (???) reads
+--
+
+tDia =
+  describe "dialogues." $
+  it "dialogue single single searh pred; no preds returns all in date range" $ \acid -> do
+    day <- getCurrentTime
+    day' <- incrMin <$> getCurrentTime
+    day'' <- incrMin . incrMin <$> getCurrentTime
+    let d =
+          [r|
+    MARGO: (rushes forward) I love my mom—she's perfect!
+    NICOLE: (steps back embracingly; brushes away and downwards.) No. She's my lawyer.
+    |]
+    let d' =
+          [r| 
+    (After ~1hr of unbridled loquacity, having mercifully dammed mom's torrent)
+    MOM: Do you mind me telling all my favorite moments?
+    (Without looking up from his guitar playing)
+    DAD: No, just get it over with.
+    |]
+    update acid $ UpdateDialogue day' d
+    update acid $ UpdateDialogue day'' d'
+    let s = addDays (-182) $ utctDay day -- ~ six months
+        e = utctDay day
+        mkSearch = Search s e []
+        search =
+          mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "MARGO"]}
+        search' = mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "mom"]}
+        search'' = mkSearch initBucketList
+    query acid ViewDB >>= \db@DB {dialogues} -> do
+      print $ T.isInfixOf "mom" d
+      --pPrint dialogues
+      filterDialogues db search dialogues `shouldBe` [d]
+      filterDialogues db search' dialogues `shouldBe` [d, d']
+      filterDialogues db search'' dialogues `shouldBe` [d, d']
+
+tQuote =
+  describe "Quote filtration." $
+  it "applies single quote search pred" $ \acid -> do
+    day <- getCurrentTime
+    day' <- incrMin <$> getCurrentTime
+    day'' <- incrMin . incrMin <$> getCurrentTime
+    let q = "... nothing gave him more faith in the afterlife than the inexorable sarcasm of Fate."
+        q' = "Above all, he wanted to stop being a child without using the cheap disguise of becoming a parent."
+        q'' = "He who could call a spade a spade should be compelled to use one."
+        q''' = "Three people said it. It must be true."
+        edward = "Edward St. Aubyn"
+        oscar = "Oscar Wilde"
+    update acid $ UpdateRead day "The Picture of Dorian Gray" "Oscar Wilde"
+    update acid $
+      UpdateQuote
+        day'
+        q''
+        oscar
+        Nothing -- att attrTag
+        -- FIXME truncate utctimes on entry to DB
+        (Just . AttrTag $ truncateUTC day)
+    update acid $
+      UpdateQuote
+        day''
+        q
+        edward
+        Nothing -- att attrTag
+        Nothing
+
+    update acid $
+      UpdateQuote
+        (incrMin day'')
+        q'
+        edward
+        Nothing -- att attrTag
+        Nothing
+
+    update acid $
+      UpdateQuote
+        (incrMin $ incrMin day'')
+        q'''
+        oscar
+        Nothing
+        (Just . AttrTag $ truncateUTC day)
+    let s = addDays (-182) $ utctDay day -- ~ six months
+        e = utctDay . incrMin . incrMin . incrMin $ day''
+        byWilde (Attribution _ a) = T.isInfixOf "Oscar" a && T.isInfixOf "Wilde" a
+        search =
+          Search s e []
+          initBucketList { quotesPreds = [T.isInfixOf "sarcasm"] }
+        search' = 
+          Search s e []
+          initBucketList { quotesPreds = [T.isInfixOf "spade"] }
+
+        search'' = 
+          Search s e []
+          initBucketList { quotesPreds = [T.isInfixOf "child", T.isInfixOf "cheap disguise"] }
+
+        search''' = 
+          Search s e [byWilde]
+          initBucketList { quotesPreds = [] }
+
+        search'''' = 
+          Search s e [byWilde]
+          initBucketList { quotesPreds = [T.isInfixOf "spade"] }
+
+    query acid ViewDB >>= \db@DB {quotes, reads} -> do
+      let tag = (mkTsIdxTag day' (q'', oscar, Nothing) (Just . AttrTag . truncateUTC $ day))
+      -- empty
+      filterQuotes db (Search s e [] initBucketList) quotes `shouldBe`
+        [(q'', oscar, Nothing), (q, edward, Nothing), (q', edward, Nothing), (q''', oscar, Nothing)]
+      -- spade
+      filterQuotes db search' quotes `shouldBe` [(q'', oscar, Nothing)]
+      -- sarcasm 
+      filterQuotes db search quotes `shouldBe` [(q, edward, Nothing)]
+      -- cheap disguise & child
+      filterQuotes db search'' quotes `shouldBe` [(q', edward, Nothing)]
+      -- auth pred: Oscar Wilde
+      filterQuotes db search''' quotes `shouldBe` [(q'', oscar, Nothing), (q''', oscar, Nothing)]
+      -- auth pred (Oscar Wilde) & contains "spade"
+      filterQuotes db search'''' quotes `shouldBe` [(q'', oscar, Nothing)]
 
 data EntryType = Checkpoint | Event
 
@@ -478,6 +599,7 @@ rollbackExample = do
   --rollbackTo k prev
   --
 
+dbTest = hspec . around (withNewConnFrom "testState/DB")
 
 test = do
   day <- getCurrentTime

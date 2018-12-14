@@ -298,6 +298,12 @@ fromDB = fromDB' <$> ask
 -- | Insert 'LogEntry' into 'DB'. For each, an entry is added to 'chrono' and,
 -- except for 'Null' and 'Phrs', to the appropriate bucket. Adds 'AttrTag'
 -- when applicable (see definition of 'DB').
+--
+-- WARNING: this function is solely responsible for guaranteeing UTCTime
+-- truncation. Should this be done inconsistently, lookups will begin to fail
+-- silently. Take, for instance, the logic of 'readSatisfies' which would
+-- reject potentially satisfactory entries on account of a timestamp precision
+-- mismatch.
 addLogEntry :: Day -> LogEntry -> Maybe AttrTag -> Update DB (Maybe UTCTime)
 addLogEntry day le tag = do
   db@DB {..} <- get
@@ -403,6 +409,10 @@ data BucketList = BucketList
   , commentsPreds :: [Text -> Bool]
   }
 
+-- | Empty 'BucketList'.
+initBucketList :: BucketList
+initBucketList = BucketList [] ([],[]) [] [] [] ([], []) []
+
 -- | Dispatches search predicates.
 --
 -- Search logic:
@@ -483,10 +493,26 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
 
 -- | Applies title and author predicates to 'AttrTag' assoc'd with given 'DB'
 -- entry.
+--
+-- From tagged 'DB' value fetches assoc'd 'Read' entry to which it applies auth/title
+-- predicates.
+--
+-- Defaults to 'True', as the result is (usuall) ANDed with the results of the
+-- locally defined `satisfiesAll`.
+--
+-- However, if there are attributions but some attribution predicates present,
+-- then it returns 'False' as we shouldn't want to contaminate the output.
 readSatisfies :: Day -> Day -> DB -> TsIdxTag a -> [Attribution -> Bool] -> Bool
-readSatisfies s e DB {reads} tag [] = False
-readSatisfies s e DB {reads} tag ps =
-  case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (ts . tsTag $ tag) of
+-- no auth/title preds, allows all entries to pass 
+readSatisfies _ _ _ _ [] = True 
+-- no 'AttrTag' present, 
+readSatisfies _ _ _ (TsIdxTag tsTag Nothing) _ = False
+readSatisfies s e DB {reads} (TsIdxTag tsTag (Just attr)) ps =
+  -- FIXME: should the attribution of an entry be outside of the query's date
+  -- range, this will return false. Luckily, as yet this is impossible, since
+  -- there's no way for attributions to span days due to the log file's being
+  -- grouped by day.
+  case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (attrId attr) of
     Just (t, a) -> foldl' (&&) True $ ps <*> pure (Attribution t a)
     Nothing -> False
 
@@ -568,6 +594,7 @@ filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
     filtermap
       (\t ->
          if satisfiesAll quotesPreds (val $ tsTag t)
+            && readSatisfies' t
            then Just . val $ tsTag t
            else Nothing)
       quotes'

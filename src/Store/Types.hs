@@ -116,7 +116,10 @@ mkTsIdx ts v = TsIdx (truncateUTC ts) v
 deriveSafeCopy 0 'base ''TsIdx
 
 instance (Ord v, Typeable v) => Indexable (TsIdx v) where
-  empty = ixSet [ixFun $ return . ts, ixFun $ return . val]
+  empty = ixSet [ ixFun $ return . ts -- 'UTCTime'
+                , ixFun $ return . val
+                , ixFun $ return . utctDay . ts -- 'Day'
+                ]
   -- if input validation (for truncated 'UTCTime' doesn't work, apply 'truncateUTC' here
   
 data TsIdxTag v = TsIdxTag
@@ -154,6 +157,7 @@ instance (Ord a, Ord b, Typeable a, Typeable b) => Indexable (TsIdxTup a b) wher
   empty =
     ixSet
       [ ixFun $ return . ts . tsIdx
+      , ixFun $ return . utctDay . ts . tsIdx -- day
       , ixFun $ return . val . tsIdx -- tuple
       , ixFun $ return . fst . val . tsIdx -- fst
       , ixFun $ return . snd . val . tsIdx -- snd

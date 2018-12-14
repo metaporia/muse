@@ -57,6 +57,8 @@ import Text.Trifecta hiding (render)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 
+test = hspec spec
+
 tDialogueOut =
   [ TabTsEntry
       ( 0
@@ -455,15 +457,39 @@ spec = do
     tDia
     tQuote
 
--- TODO 
+-- TODO: 
+--
+-- # First Pass
+--
+-- test (non-exhaustively) a few preds on a few entries of the given
+-- type; don't cover:
+--
+--  * all pred combos for a given entry variant
+--  * chrono filtration, that is, bucket filter dispatch
+--
 -- ▣  comments
 -- ▣  dumped
 -- ▣  dialogues
--- □  quotes
+-- ▣  quotes
 -- □  defs
 -- □  phrases
--- □  (??) chrono
--- □  (???) reads
+-- □  (??) reads
+--
+-- # Second pass
+--
+-- cover:
+-- * bucket dispatch/chrono 
+-- * more exhaustive per variant predicate combos
+--
+-- □  chronological filters (port `filterWith'` to use 'chrono')
+--
+--    perhaps enable w/ `--chrono/list-mode`?
+--
+-- □  single predicate bucket dispatch (no list mode.
+--
+--    CLI defualt option: group output by type, since most query invocations will only
+--    focus on a single entry variant. accordingly, entry variant specific query options 
+--    have been expanded significantly. 
 --
 
 tDia =
@@ -494,7 +520,7 @@ tDia =
         search' = mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "mom"]}
         search'' = mkSearch initBucketList
     query acid ViewDB >>= \db@DB {dialogues} -> do
-      print $ T.isInfixOf "mom" d
+      --print $ T.isInfixOf "mom" d
       --pPrint dialogues
       filterDialogues db search dialogues `shouldBe` [d]
       filterDialogues db search' dialogues `shouldBe` [d, d']
@@ -601,7 +627,7 @@ rollbackExample = do
 
 dbTest = hspec . around (withNewConnFrom "testState/DB")
 
-test = do
+scratch = do
   day <- getCurrentTime
   day' <- incrMin <$> getCurrentTime
   day'' <- incrMin . incrMin <$> getCurrentTime

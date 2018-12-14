@@ -98,6 +98,16 @@ import Text.Trifecta hiding (Rendering, Span)
 --    > <character>: <paragraph>
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
 --
+-- □  (!!) ignore trailing comma in 'Defn'
+--
+-- □  (!!) allow empty quote body
+--
+-- □  (!!) (hard) consume rest of log loudly; a.t.m. when, say, the quote parser 
+--    fails, as above with a pair of empty quotes, do not silently consume, 
+--    discard the rest of the log file if/when it's easily determined whether 
+--    there are further entries.
+--
+--
 -- □  add CLI option to suppress `Read` entry output (see `guardStrSearch` for
 --    control point
 --

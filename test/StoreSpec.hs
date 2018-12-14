@@ -451,6 +451,15 @@ spec = do
          query acid ViewDB >>= \db@DB {comments} -> do
            filterComments db search comments `shouldBe` ["comment body 1", "comment body 2"]
 
+-- TODO 
+-- ▣  comments
+-- ▣  dumped
+-- □  dialogues
+-- □  quotes
+-- □  defs
+-- □  phrases
+-- □  (??) chrono
+-- □  (???) reads
 
 data EntryType = Checkpoint | Event
 

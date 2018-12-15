@@ -554,7 +554,9 @@ filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
   where
     phrases'' = val . tsTag <$> phrases'
     phrases' = IxSet.toAscList (Proxy :: Proxy Day) $ phrases @>=<= (s, e)
-    satisfiesAll hs _ (Plural phrs) = foldl' (&&) True $ hs <*> phrs
+    satisfiesAll [] [] _ = True
+    satisfiesAll [] _ (Plural phrs) = False
+    satisfiesAll hs _ (Plural phrs) = foldl' (&&) True (hs <*> phrs)
     satisfiesAll hs ms (Defined hw mn) =
       foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
 

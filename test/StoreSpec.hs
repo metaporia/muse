@@ -28,6 +28,7 @@ import Data.IxSet
        (Indexable(..), IxSet(..), Proxy(..), (@<), (@>=<=), (@=), (@>), getOne,
         ixFun, ixSet, updateIx)
 import qualified Data.IxSet as IxSet
+import Data.List (isInfixOf)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.SafeCopy
@@ -607,6 +608,83 @@ tQuote =
       filterQuotes db search''' quotes `shouldBe` [(q'', oscar, Nothing), (q''', oscar, Nothing)]
       -- auth pred (Oscar Wilde) & contains "spade"
       filterQuotes db search'''' quotes `shouldBe` [(q'', oscar, Nothing)]
+
+tDefs =
+  describe "definitions" $
+  it "definitions: headword, and meaning predicates" $ \acid -> do
+    day <- getCurrentTime
+    day' <- incrMin <$> getCurrentTime
+    day'' <- incrMin . incrMin <$> getCurrentTime
+    day''' <- incrMin . incrMin . incrMin <$> getCurrentTime
+    day'''' <- incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+    day''''' <-
+      incrMin . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+    day'''''' <-
+      incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
+      getCurrentTime
+    let envy = Defn Nothing ["emulous", "invidious", "enviable"]
+        serry = InlineDef "serry" "to crowd; to press together"
+        jostle = InlineDef "jostle" "to crowd; to run against; to bump"
+        jonquil = InlineDef "jonquil" "a yellow flower; a shade of yellow"
+        jonquil' = InlineDef "jonquil plus" "a yellow flower; a shade of yellow"
+        disen =
+          DefVersus
+            "dissent"
+            "verbal or civil contrariety"
+            "dissension"
+            "a more violent subversion, or opposition to"
+    update acid $ UpdateDef day' envy Nothing
+    update acid $ UpdateDef day'' serry Nothing
+    update acid $ UpdateDef day''' jonquil Nothing
+    update acid $ UpdateDef day'''' disen Nothing
+    update acid $ UpdateDef day''''' jostle Nothing
+    update acid $ UpdateDef day'''''' jonquil' Nothing
+    let s = addDays (-182) $ utctDay day -- ~ six months
+        e = utctDay (incrMin day'''''')
+        search = Search s e [] initBucketList {defsPreds = ([], [])}
+        search' =
+          Search s e [] initBucketList {defsPreds = ([], [isInfixOf "crowd"])}
+        search'' = Search s e [] initBucketList
+        search''' =
+          Search s e [] initBucketList {defsPreds = ([isInfixOf "jonquil"], [])}
+        search'''' =
+          Search
+            s
+            e
+            []
+            initBucketList {defsPreds = ([isInfixOf "e"], [isInfixOf "crowd"])}
+        searchVs =
+          Search s e [] initBucketList {defsPreds = ([isInfixOf "dissent"], [])}
+        searchVs' =
+          Search
+            s
+            e
+            []
+            initBucketList {defsPreds = ([], [isInfixOf "civil contrariety"])}
+        searchVs'' =
+          Search
+            s
+            e
+            []
+            initBucketList
+            { defsPreds =
+                ([isInfixOf "dissent"], [isInfixOf "civil contrariety"])
+            }
+    query acid ViewDB >>= \db@DB {defs} -> do
+      filterDefs db search defs `shouldBe`
+        [envy, serry, jonquil, disen, jostle, jonquil']
+      -- no headword preds
+      filterDefs db search' defs `shouldBe` [serry, jostle]
+      -- no meaning preds
+      filterDefs db search''' defs `shouldBe` [jonquil, jonquil']
+      -- both
+      filterDefs db search'''' defs `shouldBe` [serry, jostle]
+      -- versus no meaning preds
+      filterDefs db searchVs defs `shouldBe` [disen]
+      -- versus no headword preds
+      filterDefs db searchVs' defs `shouldBe` [disen]
+      -- both
+      filterDefs db searchVs'' defs `shouldBe` [disen]
 
 data EntryType = Checkpoint | Event
 

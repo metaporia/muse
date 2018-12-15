@@ -484,11 +484,13 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
   where
     defs'' = val . tsTag <$> defs'
     defs' = IxSet.toAscList (Proxy :: Proxy Day) $ defs @>=<= (s, e)
-    satisfiesAll hs _ (Defn _ hws) = foldl' (&&) True $ hs <*> hws
+    satisfiesAll [] [] _ = True -- allow all without any preds
+    satisfiesAll [] _ (Defn _ hws) = False
+    satisfiesAll hs _ (Defn _ hws) = foldl' (&&) True (hs <*> hws)
     satisfiesAll hs ms (InlineDef hw mn) =
       foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
     satisfiesAll hs ms (DefVersus hw mn hw' mn') =
-      satisfiesAll hs ms (InlineDef hw mn) &&
+      satisfiesAll hs ms (InlineDef hw mn) || -- FIXME or for 'DefVersus'
       satisfiesAll hs ms (InlineDef hw' mn')
 
 -- | Applies title and author predicates to 'AttrTag' assoc'd with given 'DB'

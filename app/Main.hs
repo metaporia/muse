@@ -60,6 +60,7 @@ import Render
 import Search
 import Store hiding (Author, Search, Search', Title, defs, quotes)
 import qualified Store
+import Store.Render
 import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
         listDirectory)
@@ -146,8 +147,6 @@ data DateTime =
 
 -- | Convert duration, combined with the system time, into UTC time. See the
 -- `time` library.
---
--- TODO: handle d/m/y excess w/ rollover
 subRelDur :: Day -> RelDur -> Day
 subRelDur day (RelDur y m d) =
   addGregorianYearsRollOver (negate y) .
@@ -516,29 +515,24 @@ dispatch' (Opts' color (Parse' it)) = do
     case it of
       File fp -> readFile fp
       StdIn s -> return s
-      -- TODO fix unintuitive/broken parse CLI behavior
-      -- TODO `muse parse` should run `--update` by default, using cached logs
-      -- where the source file is unchanged
+      -- TODO update 'parseAllEntries'
       All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
 ifNotNull l true false = if not (null l) then true else false
 
+-- | Pretty print output of bucket filters.
 runSearch' :: Bool -> Bool -> Store.Search -> DB -> IO ()
 runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _) = do
   -- FIXME: check for null predicate lists
-
-  let dmp' = filterDumps search dmp
-      def' = filterDefs db search defs
-      rds' = filterReads search
-      qts' = filterQuotes db search qts
-      dia' = filterDialogues db search dias
-      phr' = filterPhrases db search phrs
-      cmt' = filterComments db search cmts
-
-  -- TODO convert to 'Result'
-
-  return ()
+  colRender color $ join 
+       [ filterDumps search dmp
+       , filterDefs db search defs
+       , filterQuotes db search qts
+       , filterDialogues db search dias
+       , filterPhrases db search phrs
+       , filterComments db search cmts
+       ]
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) =
@@ -770,6 +764,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
         case me of
           Just e -> Just (fp, e)
           Nothing -> Nothing
+      -- TODO group `logEntry`s by day for use with 'addDay'
       parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
       parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
       showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
@@ -794,6 +789,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
     then putStrLn "\nSuppressing entry parse error output"
     else return ()
   entryGroups <- selectModified fps >>= parseAndShowErrs
+  -- TODO add to DB here
   sequence_ $
     fmap
       (\(fp, eg) ->

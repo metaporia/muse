@@ -811,6 +811,9 @@ updateLastUpdated d ts = do
 viewDB :: Query DB DB
 viewDB = ask
 
+viewLastUpdated :: Query DB (IxSet ModRec)
+viewLastUpdated = lastUpdated <$> ask
+
 reinitDB :: Update DB DB
 reinitDB = put initDB >> return initDB
 
@@ -828,6 +831,7 @@ makeAcidic
   , 'addLogEntry
   , 'addDay
   , 'fromDB
+  , 'viewLastUpdated
   ]
 
 insert :: IO ()

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, ApplicativeDo #-}
+  OverloadedStrings, ApplicativeDo, NamedFieldPuns, RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
@@ -50,6 +50,8 @@ import Data.Time
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
 import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
+import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
+import qualified Data.IxSet
 import Helpers
 import Lib
 import Options.Applicative
@@ -822,6 +824,34 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
       --   cached json.
       --   
       --   TODO write equivalent for 'DB'
+      --   1. if using cache, collect keys of modified entries from 'lastUpdated', otherwise use all
+      --      * for each log source, fetch last modification time. if there is
+      --        none, then add to list, otherwise compare the times: include only
+      --        if the source file's modification date is more recent than that
+      --        of 'lastUpdated`.
+      --   2. convert to list
+      
+      selectModified' fps lastUpdated =
+        let lastModified :: Day -> Maybe ModRec
+            lastModified day = getOne $ lastUpdated @= (day :: Day)
+            compare :: FilePath -> ModRec -> IO (Maybe FilePath)
+            compare fp ModRec {..} = do
+              logMd <- getModificationTime $ T.unpack (entrySource mc) ++ fp
+              if logMd > modified
+                then return $ Just fp
+                else return Nothing
+            f :: FilePath -> IO (Maybe FilePath)
+            f fp =
+              case pathToDay fp >>= lastModified of
+                Just mr -> compare fp mr
+                Nothing -> return $ Just fp
+        in foldr
+             (\a bs -> f a >>= maybe bs (\x -> fmap (x :) bs))
+             (return [] :: IO [FilePath])
+             fps
+
+        --filtermap pathToDay fps
+
       selectModified fps =
         if ignoreCache
           then putStrLn "ignoring parsed entry cache" >> return fps
@@ -880,21 +910,23 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
   if quiet
     then putStrLn "\nSuppressing entry parse error output"
     else return ()
-  entryGroups <- selectModified fps >>= parseAndShowErrs
-  let --x :: _
-      x =
-        bracket
-          (openLocalStateFrom "state/DB" initDB)
-          createCheckpointAndClose
-          (\acid -> do
-            utc <- getCurrentTime
-            sequence $
-               fmap (\(d, le) -> update acid $ AddDay d utc le) $
-               catMaybes $
-               fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups)
-  -- FIXME as yet writes to acid-state and file-system persistence solutions
-  sequence_ $
-    fmap
-      (\(fp, eg) ->
-         BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
-      entryGroups
+  bracket
+    (openLocalStateFrom "state/DB" initDB)
+    createCheckpointAndClose
+    (\acid -> do
+      utc <- getCurrentTime
+      mod <- query acid ViewLastUpdated
+      entryGroups <- selectModified' fps mod >>= parseAndShowErrs
+      sequence $
+         fmap (\(d, le) -> update acid $ AddDay d utc le) $
+         catMaybes $
+         fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups
+      -- FIXME as yet writes to acid-state and file-system persistence solutions
+      sequence_ $
+        fmap
+          (\(fp, eg) ->
+             BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
+          entryGroups              
+
+               )
+  

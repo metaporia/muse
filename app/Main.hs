@@ -28,7 +28,9 @@
 -----------------------------------------------------------------------------
 module Main where
 
+import Control.Exception (bracket)
 import Control.Monad ((>=>), join, void)
+import Control.Monad.State
 import Data.Acid
 import Data.Acid.Advanced (query', update')
 import Data.Acid.Local (createCheckpointAndClose)
@@ -36,8 +38,6 @@ import Data.Acid.Remote
 import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Control.Exception (bracket)
-import Control.Monad.State
 import Data.Foldable (fold)
 import Data.List
        (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
@@ -491,19 +491,19 @@ main = do
 main' :: IO ()
 main' = do
   today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> toplevel' today) 
-                   (fullDesc <> header "dispatch")) 
-                   >>= dispatch'
+  execParser (info (helper <*> toplevel' today) (fullDesc <> header "dispatch")) >>=
+    dispatch'
 
 dispatch' :: Opts' -> IO ()
 dispatch' opts@(Opts' color (Search' s)) = do
-  bracket (openLocalStateFrom "state/DB" initDB)
-          createCheckpointAndClose
-          (\acid -> do
-            db <- query acid ViewDB
-            putStrLn "searching...\n" 
-            runSearch' showDebug color s db
-            return ())
+  bracket
+    (openLocalStateFrom "state/DB" initDB)
+    createCheckpointAndClose
+    (\acid -> do
+       db <- query acid ViewDB
+       putStrLn "searching...\n"
+       runSearch' showDebug color s db
+       return ())
 dispatch' (Opts' color (Lint')) = putStrLn "linting"
 dispatch' (Opts' color (Init' quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
@@ -519,20 +519,25 @@ dispatch' (Opts' color (Parse' it)) = do
       All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
-ifNotNull l true false = if not (null l) then true else false
+ifNotNull l true false =
+  if not (null l)
+    then true
+    else false
 
 -- | Pretty print output of bucket filters.
 runSearch' :: Bool -> Bool -> Store.Search -> DB -> IO ()
-runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _) = do
+runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _)
   -- FIXME: check for null predicate lists
-  colRender color $ join 
-       [ filterDumps search dmp
-       , filterDefs db search defs
-       , filterQuotes db search qts
-       , filterDialogues db search dias
-       , filterPhrases db search phrs
-       , filterComments db search cmts
-       ]
+ = do
+  colRender color $
+    join
+      [ filterDumps search dmp
+      , filterDefs db search defs
+      , filterQuotes db search qts
+      , filterDialogues db search dias
+      , filterPhrases db search phrs
+      , filterComments db search cmts
+      ]
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) =
@@ -795,6 +800,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
       (\(fp, eg) ->
          BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
       entryGroups
+
 -- TODO 
 --
 -- ▣  centralize file path generation--save yourself the headache later of
@@ -802,3 +808,90 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
 --
 --    See `entryCache` and `entrySource`
 -- on parse failure, show user err info
+-- | Parse all entries from logDir into cacheDir/entries.
+parseAllEntries' :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
+  -- read in log file names; parse 'em
+  --putStrLn $ show mc
+ = do
+  fps <- sort <$> lsEntrySource mc
+  -- 
+  let selectModified :: [FilePath] -> IO [FilePath]
+      -- | Check, if for a given log file a parsed file has been cached, 
+      --   whether the log's modification date is greater than the that of the 
+      --   cached json.
+      selectModified fps =
+        if ignoreCache
+          then putStrLn "ignoring parsed entry cache" >> return fps
+          else foldr
+                 (\fp rest
+                    -- check for cache existence
+                   -> do
+                    existsCache <-
+                      doesFileExist $ T.unpack (entryCache mc) ++ fp
+                    if existsCache
+                      -- compare  and log modification times
+                      then do
+                        logMd <-
+                          getModificationTime $ T.unpack (entrySource mc) ++ fp
+                        cacheMd <-
+                          getModificationTime $ T.unpack (entryCache mc) ++ fp
+                        if cacheMd < logMd -- FIXME reparses today's log since filenames
+                          then do
+                            putStrLn $ "Update/add: " ++ fp
+                            (fp :) <$> rest
+                          else rest -- exclude unchanged
+                      else (fp :) <$> rest)
+                 (return [])
+                 fps
+      parse :: String -> IO (String, Either String [LogEntry])
+      parse fp =
+        (,) <$> pure fp <*>
+        (showErr . Tri.parseByteString logEntries mempty <$>
+         B.readFile (T.unpack (entrySource mc) ++ "/" ++ fp))
+      invert :: (fp, Maybe e) -> Maybe (fp, e)
+      invert (fp, me) =
+        case me of
+          Just e -> Just (fp, e)
+          Nothing -> Nothing
+      -- TODO group `logEntry`s by day for use with 'addDay'
+      parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
+      parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
+      showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
+      showOrCollect =
+        let sideBar = unlines . fmap ("> " ++) . lines
+        in foldr
+             (\(fp, e) rest ->
+                case e -- render errros w filename, `ErrInfo`
+                      of
+                  Left err ->
+                    if quiet
+                      then rest
+                      else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >>
+                           rest
+                  Right res -> do
+                    if showDebug
+                      then putStrLn $ "Success: " ++ fp
+                      else return ()
+                    ((fp, res) :) <$> rest)
+             (return [])
+  if quiet
+    then putStrLn "\nSuppressing entry parse error output"
+    else return ()
+  entryGroups <- selectModified fps >>= parseAndShowErrs
+  let --x :: _
+      x =
+        bracket
+          (openLocalStateFrom "state/DB" initDB)
+          createCheckpointAndClose
+          (\acid -> do
+             sequence $
+               fmap (\(d, le) -> update acid $ AddDay d le) $
+               catMaybes $
+               fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups)
+  -- FIXME as yet writes to acid-state and file-system persistence solutions
+  sequence_ $
+    fmap
+      (\(fp, eg) ->
+         BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
+      entryGroups

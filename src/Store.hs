@@ -203,7 +203,19 @@ data DB = DB
   , comments :: IxSet (TsIdxTag Text)
   -- | entry order of elements in entry variant buckets.
   , chrono :: IxSet (TsIdxTup IndentDepth Bucket)
+  -- | Record when a day's entries were last updated.
+  , lastUpdated :: IxSet ModRec
   } deriving (Eq, Show)
+
+data ModRec = ModRec { date :: Day, modified :: UTCTime }
+  deriving (Eq, Ord, Show, Read, Data)
+
+instance Indexable ModRec where
+  empty = ixSet [ ixFun $ return . date -- primary key
+                , ixFun $ return . modified -- UTCTime
+                ]
+
+deriveSafeCopy 0 'base ''ModRec
 
 deriveSafeCopy 0 'base ''DB
 
@@ -339,11 +351,15 @@ addLogEntry day le tag = do
          return (Just utc)
     (TabTsEntry (indent, ts, (Parse.Entry.Null))) -> return Nothing
 
--- | Tags and adds to 'DB' a day's worth of 'LogEntry's.
+-- | Tags and adds to 'DB' a day's worth of 'LogEntry's. Logs time of
+-- invocation in 'lastUpdated' to aid in caching parsed and unchanged logs.
 --
 -- TODO test!!
-addDay :: Day -> [LogEntry] -> Update DB ()
-addDay day = tagAndUpdate
+addDay :: Day -> UTCTime -> [LogEntry] -> Update DB ()
+addDay day utc le =
+  if not (null le)
+    then updateLastUpdated day utc >> tagAndUpdate le
+    else return ()
     --naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
   where
     tagAndUpdate :: [LogEntry] -> Update DB ()
@@ -687,6 +703,7 @@ initDB =
     IxSet.empty
     IxSet.empty
     IxSet.empty
+    IxSet.empty
 
 -- | Updates entry in indexed set of timestamped pairs.
 updateIxSetTsIdx ::
@@ -784,6 +801,12 @@ updateChrono ts i b = do
   db@DB {..} <- get
   put DB {chrono = updateIxSetTsIdxTup (mkTsIdxTup' ts (i, b)) chrono, ..}
   return (i, b)
+
+updateLastUpdated :: Day -> UTCTime -> Update DB ()
+updateLastUpdated d ts = do
+  DB {..} <- get
+  put DB {lastUpdated = updateIx d (ModRec d ts) lastUpdated, ..}
+  return ()
 
 viewDB :: Query DB DB
 viewDB = ask

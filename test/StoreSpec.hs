@@ -382,11 +382,14 @@ spec
     describe "Add day's worth of logs to DB." $
       it
         "converts and inserts logs to DB; compares with conversion directly to `Results`" $ \acid -> do
-        backupDay <- utctDay <$> getCurrentTime
-        let day = maybe backupDay id $ pathToDay "18.11.20"
-        update acid $ AddDay day breakage
+        utc <- getCurrentTime
+        let backupDay =  utctDay . incrMin $ utc
+            day = maybe backupDay id $ pathToDay "18.11.20"
+        update acid $ AddDay day utc breakage
         let r' = Results $ fromLogEntry day <$> breakage
         r <- query acid FromDB
+        last <- query acid ViewDB >>= return . \DB {lastUpdated} -> fromJust $ getOne lastUpdated
+        utc `shouldBe` modified last
         r `shouldBe` r'
         return ()
     describe "Dump filtration." $
@@ -832,7 +835,7 @@ scratch = do
            search =
              Search s e [] $
              BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
-       query acid ViewDB >>= \db@DB {comments} -> do
-         pPrint comments
-         pPrint $ filterComments db search comments)
+       query acid FromDB >>= colRender True
+       query acid ViewDB >>= \db -> pPrint db
+    )
   return ()

@@ -526,7 +526,7 @@ ifNotNull l true false =
 
 -- | Pretty print output of bucket filters.
 runSearch' :: Bool -> Bool -> Store.Search -> DB -> IO ()
-runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _)
+runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _ _)
   -- FIXME: check for null predicate lists
  = do
   colRender color $
@@ -820,6 +820,8 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
       -- | Check, if for a given log file a parsed file has been cached, 
       --   whether the log's modification date is greater than the that of the 
       --   cached json.
+      --   
+      --   TODO write equivalent for 'DB'
       selectModified fps =
         if ignoreCache
           then putStrLn "ignoring parsed entry cache" >> return fps
@@ -885,8 +887,9 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
           (openLocalStateFrom "state/DB" initDB)
           createCheckpointAndClose
           (\acid -> do
-             sequence $
-               fmap (\(d, le) -> update acid $ AddDay d le) $
+            utc <- getCurrentTime
+            sequence $
+               fmap (\(d, le) -> update acid $ AddDay d utc le) $
                catMaybes $
                fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups)
   -- FIXME as yet writes to acid-state and file-system persistence solutions

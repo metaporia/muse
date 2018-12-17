@@ -411,7 +411,7 @@ data BucketList = BucketList
 
 -- | Empty 'BucketList'.
 initBucketList :: BucketList
-initBucketList = BucketList [] ([],[]) [] [] [] ([], []) []
+initBucketList = BucketList [] ([], []) [] [] [] ([], []) []
 
 -- | Dispatches search predicates.
 --
@@ -438,7 +438,7 @@ initBucketList = BucketList [] ([],[]) [] [] [] ([], []) []
 --  (USE ME!) for each bucket type requested, dispatch relevant predicates
 --   to it. return the sorted union of the results. BOOYAH
 --
---   N.B. Since (I think) the moste common/useful search queries will have a
+--   N.B. Since (I think) the most common/useful search queries will have a
 --   specific result in mind (which implies a single desired return type), to
 --   optimize single type lookup will benefit users (or at least me) more than
 --   crippling fast single entry variant filtration in order to speed up
@@ -454,11 +454,11 @@ filterBuckets :: Query DB Results
 filterBuckets = undefined
 
 -- | Applies auth/title preds, and dump searches.
-filterDumps :: Search -> IxSet Dumps -> [Text]
+filterDumps :: Search -> IxSet Dumps -> [Result]
 filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet =
   case dumpsPreds of
-    [] -> dumped'
-    xs -> filter satisfiesAll dumped'
+    [] -> DumpR <$> dumped'
+    xs -> DumpR <$> filter satisfiesAll dumped'
   where
     dumped' =
       (IxSet.toAscList (Proxy :: Proxy Day) $ ixSet @>=<= (s, e)) >>=
@@ -466,19 +466,26 @@ filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet =
     -- TODO add pred for fold over boolean OR, that is, @Any@
     satisfiesAll t = foldl' (&&) True $ dumpsPreds <*> [t]
 
-filterDefs :: DB -> Search -> IxSet (TsIdxTag DefQuery) -> [DefQuery]
+filterDefs :: DB -> Search -> IxSet (TsIdxTag DefQuery) -> [Result]
 filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
   | null authPreds =
     case defsPreds of
-      ([], []) -> defs''
-      (hs, ms) -> filter (satisfiesAll hs ms) defs''
+      ([], []) -> (\t -> TsR (ts . tsTag $ t) (Def . val . tsTag $ t)) <$> defs'
+      (hs, ms) ->
+        filtermap
+          (\t ->
+             let dq = val $ tsTag t
+             in if (satisfiesAll hs ms dq)
+                  then Just $ TsR (ts . tsTag $ t) (Def dq)
+                  else Nothing)
+          defs'
   | otherwise =
     let (hs, ms) = defsPreds
     in filtermap
          (\tag ->
             let dq = val $ tsTag tag
             in if satisfiesAll hs ms dq && readSatisfies s e db tag authPreds
-                 then Just dq
+                 then Just $ TsR (ts . tsTag $ tag) (Def dq)
                  else Nothing)
          defs'
   where
@@ -506,49 +513,64 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
 -- then it returns 'False' as we shouldn't want to contaminate the output.
 readSatisfies :: Day -> Day -> DB -> TsIdxTag a -> [Attribution -> Bool] -> Bool
 -- no auth/title preds, allows all entries to pass 
-readSatisfies _ _ _ _ [] = True 
+readSatisfies _ _ _ _ [] = True
 -- no 'AttrTag' present, 
 readSatisfies _ _ _ (TsIdxTag tsTag Nothing) _ = False
-readSatisfies s e DB {reads} (TsIdxTag tsTag (Just attr)) ps =
+readSatisfies s e DB {reads} (TsIdxTag tsTag (Just attr)) ps
   -- FIXME: should the attribution of an entry be outside of the query's date
   -- range, this will return false. Luckily, as yet this is impossible, since
   -- there's no way for attributions to span days due to the log file's being
   -- grouped by day.
+ =
   case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (attrId attr) of
     Just (t, a) -> foldl' (&&) True $ ps <*> pure (Attribution t a)
     Nothing -> False
 
-filterDialogues :: DB -> Search -> IxSet (TsIdx Text) -> [Text]
+filterDialogues :: DB -> Search -> IxSet (TsIdx Text) -> [Result]
 filterDialogues db (Search s e _ BucketList {dialoguesPreds}) ds =
   case dialoguesPreds of
-    [] -> ds'
-    _ -> filter satisfiesAll ds'
+    [] -> (\t -> TsR (ts t) $ Dialogue . T.unpack . val $ t) <$> ds'
+    _ ->
+      filtermap
+        (\t ->
+           let d = val t
+           in if satisfiesAll d
+                then Just $ TsR (ts t) $ Dialogue . T.unpack . val $ t
+                else Nothing)
+        ds'
   where
-    ds' = val <$> (IxSet.toAscList (Proxy :: Proxy Day) $ ds @>=<= (s, e))
+    ds' = (IxSet.toAscList (Proxy :: Proxy Day) $ ds @>=<= (s, e))
     -- TODO add pred for fold over boolean OR, that is, @Any@
     satisfiesAll t = foldl' (&&) True $ dialoguesPreds <*> [t]
 
-filterPhrases :: DB -> Search -> IxSet (TsIdxTag Phrase) -> [Phrase]
+filterPhrases :: DB -> Search -> IxSet (TsIdxTag Phrase) -> [Result]
 filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
   | null authPreds =
     case phrasesPreds of
-      ([], []) -> phrases''
-      (hs, ms) -> filter (satisfiesAll hs ms) phrases''
+      ([], []) -> (\t -> TsR (ts $ tsTag t) (Phr . val $ tsTag t)) <$> phrases'
+      (hs, ms) ->
+        filtermap
+          (\t ->
+             let p = val . tsTag $ t
+             in if satisfiesAll hs ms (val . tsTag $ t)
+                  then Just $ TsR (ts . tsTag $ t) (Phr p)
+                  else Nothing)
+          phrases'
   | otherwise =
     case phrasesPreds of
       ([], []) ->
         filtermap
-          (\tag ->
-             if readSatisfies s e db tag authPreds
-               then Just . val $ tsTag tag
+          (\t ->
+             if readSatisfies s e db t authPreds
+               then Just $ TsR (ts . tsTag $ t) (Phr . val $ tsTag t)
                else Nothing)
           phrases'
       (hs, ms) ->
         filtermap
           (\tag ->
-             let dq = val $ tsTag tag
-             in if satisfiesAll hs ms dq && readSatisfies s e db tag authPreds
-                  then Just dq
+             let p = val $ tsTag tag
+             in if satisfiesAll hs ms p && readSatisfies s e db tag authPreds
+                  then Just $ TsR (ts $ tsTag tag) (Phr p)
                   else Nothing)
           phrases'
   where
@@ -560,19 +582,30 @@ filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
     satisfiesAll hs ms (Defined hw mn) =
       foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
 
-filterComments :: DB -> Search -> IxSet (TsIdxTag Text) -> [Text]
+-- FIXME text vs string
+filterComments :: DB -> Search -> IxSet (TsIdxTag Text) -> [Result]
 filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
   | null authPreds =
     case commentsPreds of
-      [] -> cmts''
-      _ -> filter (satisfiesAll commentsPreds) cmts''
+      [] ->
+        fmap
+          (\t -> TsR (ts $ tsTag t) (Commentary . T.unpack . val . tsTag $ t))
+          cmts'
+      _ ->
+        filtermap
+          (\t ->
+             let c = val $ tsTag t
+             in if satisfiesAll commentsPreds c
+                  then Just $ TsR (ts $ tsTag t) (Commentary $ T.unpack c)
+                  else Nothing)
+          cmts'
   | otherwise =
     filtermap
       (\tag ->
-         let dq = val $ tsTag tag
-         in if satisfiesAll commentsPreds dq &&
+         let c = val $ tsTag tag
+         in if satisfiesAll commentsPreds c &&
                readSatisfies s e db tag authPreds
-              then Just dq
+              then Just $ TsR (ts $ tsTag tag) $ Commentary $ T.unpack c
               else Nothing)
       cmts'
   where
@@ -581,27 +614,37 @@ filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
     satisfiesAll [] t = True
     satisfiesAll preds t = foldl' (&&) True $ preds <*> [t]
 
+-- TODO rewrite !!!!!
 -- Q: filter by manual attributions, or nesting?
 -- A: filter by tag if present, fallback to manual attribution
 filterQuotes ::
      DB
   -> Search
   -> IxSet (TsIdxTag (Body, Attr, Maybe PgNum))
-  -> [(Body, Attr, Maybe PgNum)]
+  -> [Result]
 filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
   | null authPreds =
     case quotesPreds of
-      [] -> quotes''
+      [] -> fmap (\t -> let (b, attr, mPg) = val $ tsTag t
+                         in TsR (ts $ tsTag t) (Quotation (T.unpack b) (T.unpack attr) mPg))
+                   quotes'
       _ ->
-        filter (\(b, _, _) -> foldl' (&&) True $ quotesPreds <*> [b]) quotes''
+        filtermap 
+          (\t -> 
+            let (b, attr, mPg) = val $ tsTag t
+             in if foldl' (&&) True $ quotesPreds <*> [b]
+                   then Just $ TsR (ts $ tsTag t) (Quotation (T.unpack b) (T.unpack attr) mPg)
+                   else Nothing) 
+                   quotes'
+        --filter (\(b, _, _) -> foldl' (&&) True $ quotesPreds <*> [b]) quotes''
   | otherwise =
     filtermap
       (\t ->
-         if satisfiesAll quotesPreds (val $ tsTag t)
-            && readSatisfies' t
-           then Just . val $ tsTag t
-           else Nothing)
-      quotes'
+        let (b, attr, mPg) = val $ tsTag t
+         in if satisfiesAll quotesPreds (val $ tsTag t) && readSatisfies' t
+               then Just $ TsR (ts $ tsTag t) (Quotation (T.unpack b) (T.unpack attr) mPg)
+               else Nothing)
+               quotes'
   where
     quotes'' = val . tsTag <$> quotes'
     quotes' = IxSet.toAscList (Proxy :: Proxy Day) $ quotes @>=<= (s, e)

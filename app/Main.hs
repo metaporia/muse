@@ -29,9 +29,15 @@
 module Main where
 
 import Control.Monad ((>=>), join, void)
+import Data.Acid
+import Data.Acid.Advanced (query', update')
+import Data.Acid.Local (createCheckpointAndClose)
+import Data.Acid.Remote
 import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Control.Exception (bracket)
+import Control.Monad.State
 import Data.Foldable (fold)
 import Data.List
        (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
@@ -52,7 +58,7 @@ import Parse.Entry
 import Prelude hiding (init, log, lookup)
 import Render
 import Search
-import Store hiding (Author, Search, Title, defs, quotes)
+import Store hiding (Author, Search, Search', Title, defs, quotes)
 import qualified Store
 import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
@@ -170,25 +176,25 @@ searchTmp today = do
   t <- fmap consumeSearchType <$> title
   pure (TmpInput w today a t [ds, qs, ps, dias])
 
-bucketList :: Day -> Parser Store.Search
-bucketList today = do
-   attrs <- (<>) <$> authorS <*> titleS
-   s <- (subRelDur today <$> since)
-   dhw <- (fmap . fmap) (isInfixOf) defHW
-   dm <- (fmap . fmap) (isInfixOf) defMeaning
-   q <- (fmap . fmap) (T.isInfixOf . T.pack) quoteBody
-   phw <- (fmap . fmap) isInfixOf phraseHW
-   pm <- (fmap . fmap) isInfixOf phraseMeaning
-   dias <- (fmap . fmap) (T.isInfixOf . T.pack) dialogueBody
-   comments <- (fmap . fmap) (T.isInfixOf . T.pack) commentBody
-   dumps <- (fmap . fmap) (T.isInfixOf . T.pack) dumpBody
-   return
-     (Store.Search
-        s
-        today
-        []
-        (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments))
-  
+search' :: Day -> Parser Store.Search
+search' today = do
+  attrs <- (<>) <$> authorS <*> titleS
+  s <- (subRelDur today <$> since)
+  dhw <- (fmap . fmap) (isInfixOf) defHW
+  dm <- (fmap . fmap) (isInfixOf) defMeaning
+  q <- (fmap . fmap) (T.isInfixOf . T.pack) quoteBody
+  phw <- (fmap . fmap) isInfixOf phraseHW
+  pm <- (fmap . fmap) isInfixOf phraseMeaning
+  dias <- (fmap . fmap) (T.isInfixOf . T.pack) dialogueBody
+  comments <- (fmap . fmap) (T.isInfixOf . T.pack) commentBody
+  dumps <- (fmap . fmap) (T.isInfixOf . T.pack) dumpBody
+  return
+    (Store.Search
+       s
+       today
+       []
+       (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments))
+
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) =
   let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
@@ -254,6 +260,9 @@ fileInput =
 init :: Parser SubCommand
 init = Init <$> quiet <*> ignore
 
+init' :: Parser SubCommand'
+init' = Init' <$> quiet <*> ignore
+
 quiet :: Parser Bool
 quiet =
   switch
@@ -269,6 +278,47 @@ color :: Parser Bool
 color =
   switch (long "color" <> short 'c' <> help "Colorize output; off by default")
 
+toplevel' :: Day -> Parser Opts'
+toplevel' today =
+  Opts' <$> color <*>
+  subparser
+    (command
+       "search"
+       (info
+          (Search' <$> search' today <**> helper)
+          (progDesc
+             "Search log entries by date, author, title, or predicate on entry contents.\
+             \ Inline definitions of headwords or phrases can be searched as well.")) <>
+     command
+       "parse"
+       (info
+          (Parse' <$> parse' <**> helper)
+          (progDesc "Parse entries; a bare invocation runs 'parse --all'")) <>
+     command
+       "lint"
+       (info
+          (pure Lint')
+          (progDesc "TBD; for, e.g., author attribution validation")) <>
+     command
+       "init"
+       (info
+          (init' <**> helper)
+          (progDesc
+             "Initialize config file, cache directory, and entry log\
+             \ directory; parse all entries in 'log-dir'")))
+
+data SubCommand'
+  = Search' Store.Search
+  | Parse' InputType
+  | Lint'
+  | Init' Bool
+          Bool
+
+data Opts' = Opts'
+  { colorize' :: Bool
+  , subcommand' :: SubCommand'
+  }
+
 toplevel :: Day -> Parser Opts
 toplevel today =
   Opts <$> color <*>
@@ -278,8 +328,8 @@ toplevel today =
        (info
           (Search <$> search today <**> helper)
           (progDesc
-             "Search log entries by date, author, or title; extract\
-              \ definitions or quotations.")) <>
+             "Search log entries by date, author, title, or predicate on entry contents.\
+             \ Inline definitions of headwords or phrases can be searched as well.")) <>
      command
        "parse"
        (info
@@ -326,18 +376,19 @@ defHW =
 defMeaning :: Parser [String]
 defMeaning =
   option (either (const []) id . parsePreds <$> str) $
-  long "dm" <> long "def-meaning" <> help "Search for strings within meaning/definition."
+  long "dm" <> long "def-meaning" <>
+  help "Search for strings within meaning/definition."
 
 phraseHW :: Parser [String]
 phraseHW =
   option (either (const []) id . parsePreds <$> str) $
-  long "phrases" <> short 'p' <>
-  help "Collect only satisfactory phrases"
+  long "phrases" <> short 'p' <> help "Collect only satisfactory phrases"
 
 phraseMeaning :: Parser [String]
 phraseMeaning =
   option (either (const []) id . parsePreds <$> str) $
-  long "pm" <> long "phr-meaning" <> help "Search for strings within meaning/definition."
+  long "pm" <> long "phr-meaning" <>
+  help "Search for strings within meaning/definition."
 
 quoteBody :: Parser [String]
 quoteBody =
@@ -373,7 +424,6 @@ titleS =
   long "title" <> short 't' <>
   help "Collect entries attributed to satisfactory authors."
 
-
 -- | Parse caret separated list of strings.
 parsePreds :: String -> Either String [String] -- search type, rest of string
 parsePreds s =
@@ -383,7 +433,6 @@ parsePreds s =
       Left $
       "Cannot parse '^' separated predicate list: " ++
       s ++ "\nErrInfo: " ++ show err
-
 
 quotes :: Parser (Maybe (LogEntry -> Bool))
 quotes =
@@ -432,6 +481,7 @@ since =
      short 's' <>
      value (RelDur 0 6 0))
 
+showDebug = False
 
 main :: IO ()
 main = do
@@ -439,7 +489,56 @@ main = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
-showDebug = False
+main' :: IO ()
+main' = do
+  today <- utctDay <$> getCurrentTime
+  execParser (info (helper <*> toplevel' today) 
+                   (fullDesc <> header "dispatch")) 
+                   >>= dispatch'
+
+dispatch' :: Opts' -> IO ()
+dispatch' opts@(Opts' color (Search' s)) = do
+  bracket (openLocalStateFrom "state/DB" initDB)
+          createCheckpointAndClose
+          (\acid -> do
+            db <- query acid ViewDB
+            putStrLn "searching...\n" 
+            runSearch' showDebug color s db
+            return ())
+dispatch' (Opts' color (Lint')) = putStrLn "linting"
+dispatch' (Opts' color (Init' quiet ignoreCache)) = do
+  putStrLn "initializing...\n" -- ++ showMuseConf mc
+  void $ museInit quiet ignoreCache
+dispatch' (Opts' color (Parse' it)) = do
+  mc <- loadMuseConf
+  putStrLn "parsing..."
+  s <-
+    case it of
+      File fp -> readFile fp
+      StdIn s -> return s
+      -- TODO fix unintuitive/broken parse CLI behavior
+      -- TODO `muse parse` should run `--update` by default, using cached logs
+      -- where the source file is unchanged
+      All silence ignore -> parseAllEntries silence ignore mc >> return ""
+  putStrLn s
+
+ifNotNull l true false = if not (null l) then true else false
+
+runSearch' :: Bool -> Bool -> Store.Search -> DB -> IO ()
+runSearch' debug color search db@(DB dmp defs rds qts dias phrs cmts _) = do
+  -- FIXME: check for null predicate lists
+
+  let dmp' = filterDumps search dmp
+      def' = filterDefs db search defs
+      rds' = filterReads search
+      qts' = filterQuotes db search qts
+      dia' = filterDialogues db search dias
+      phr' = filterPhrases db search phrs
+      cmt' = filterComments db search cmts
+
+  -- TODO convert to 'Result'
+
+  return ()
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) =
@@ -473,11 +572,12 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
               loadFiles (cachePath . dayToPath <$> dates) >>=
               return . catMaybes . decodeEntries
               -- TODO print date above each days `[LogEntry]`
-            filtered = concat . fmap (rmOnlyRead . filterWith' input) <$> entries
-              where rmOnlyRead xs 
-                      | M.getAll $ foldMap (M.All . isRead) xs = []
-                      | otherwise = xs
-
+            filtered =
+              concat . fmap (rmOnlyRead . filterWith' input) <$> entries
+              where
+                rmOnlyRead xs
+                  | M.getAll $ foldMap (M.All . isRead) xs = []
+                  | otherwise = xs
         return filtered
   filtered <- join dateFilter
   if debug
@@ -641,8 +741,8 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
           then putStrLn "ignoring parsed entry cache" >> return fps
           else foldr
                  (\fp rest
-                   -> do
                     -- check for cache existence
+                   -> do
                     existsCache <-
                       doesFileExist $ T.unpack (entryCache mc) ++ fp
                     if existsCache
@@ -653,12 +753,11 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
                         cacheMd <-
                           getModificationTime $ T.unpack (entryCache mc) ++ fp
                         if cacheMd < logMd -- FIXME reparses today's log since filenames
-                          then do 
-                            putStrLn $ "Update/add: " ++ fp 
+                          then do
+                            putStrLn $ "Update/add: " ++ fp
                             (fp :) <$> rest
                           else rest -- exclude unchanged
-                      -- include uncached log sources
-                      else  (fp:) <$> rest)
+                      else (fp :) <$> rest)
                  (return [])
                  fps
       parse :: String -> IO (String, Either String [LogEntry])
@@ -685,10 +784,10 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home)
                       then rest
                       else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >>
                            rest
-                  Right res -> do 
+                  Right res -> do
                     if showDebug
-                       then putStrLn $ "Success: " ++ fp 
-                       else return ()
+                      then putStrLn $ "Success: " ++ fp
+                      else return ()
                     ((fp, res) :) <$> rest)
              (return [])
   if quiet

@@ -52,6 +52,8 @@ import Parse.Entry
 import Prelude hiding (init, log, lookup)
 import Render
 import Search
+import Store hiding (Author, Search, Title, defs, quotes)
+import qualified Store
 import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
         listDirectory)
@@ -168,6 +170,25 @@ searchTmp today = do
   t <- fmap consumeSearchType <$> title
   pure (TmpInput w today a t [ds, qs, ps, dias])
 
+bucketList :: Day -> Parser Store.Search
+bucketList today = do
+   attrs <- (<>) <$> authorS <*> titleS
+   s <- (subRelDur today <$> since)
+   dhw <- (fmap . fmap) (isInfixOf) defHW
+   dm <- (fmap . fmap) (isInfixOf) defMeaning
+   q <- (fmap . fmap) (T.isInfixOf . T.pack) quoteBody
+   phw <- (fmap . fmap) isInfixOf phraseHW
+   pm <- (fmap . fmap) isInfixOf phraseMeaning
+   dias <- (fmap . fmap) (T.isInfixOf . T.pack) dialogueBody
+   comments <- (fmap . fmap) (T.isInfixOf . T.pack) commentBody
+   dumps <- (fmap . fmap) (T.isInfixOf . T.pack) dumpBody
+   return
+     (Store.Search
+        s
+        today
+        []
+        (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments))
+  
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) =
   let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
@@ -295,6 +316,75 @@ defs =
   flag Nothing (Just isDef) $
   long "definitions" <> short 'd' <> help "Collect only definitions"
 
+-- beginning of rewrite
+defHW :: Parser [String]
+defHW =
+  option (either (const []) id . parsePreds <$> str) $
+  long "definitions" <> short 'd' <>
+  help "Collect only satisfactory definitions"
+
+defMeaning :: Parser [String]
+defMeaning =
+  option (either (const []) id . parsePreds <$> str) $
+  long "dm" <> long "def-meaning" <> help "Search for strings within meaning/definition."
+
+phraseHW :: Parser [String]
+phraseHW =
+  option (either (const []) id . parsePreds <$> str) $
+  long "phrases" <> short 'p' <>
+  help "Collect only satisfactory phrases"
+
+phraseMeaning :: Parser [String]
+phraseMeaning =
+  option (either (const []) id . parsePreds <$> str) $
+  long "pm" <> long "phr-meaning" <> help "Search for strings within meaning/definition."
+
+quoteBody :: Parser [String]
+quoteBody =
+  option (either (const []) id . parsePreds <$> str) $
+  long "quote" <> short 'q' <> help "Collect satisfactory quotes."
+
+dialogueBody :: Parser [String]
+dialogueBody =
+  option (either (const []) id . parsePreds <$> str) $
+  long "dialogue" <> long "dia" <> help "Collect satisfactory dialogues."
+
+commentBody :: Parser [String]
+commentBody =
+  option (either (const []) id . parsePreds <$> str) $
+  long "comment" <> short 'c' <> help "Collect satisfactory comments."
+
+dumpBody :: Parser [String]
+dumpBody =
+  option (either (const []) id . parsePreds <$> str) $
+  long "dump" <> help "Collect satisfactory dumps."
+
+-- end of rewrite
+authorS :: Parser [String]
+authorS =
+  option (either (const []) id . parsePreds <$> str) $
+  long "author" <> short 'a' <>
+  help "Collect entries attributed to satisfactory authors."
+
+-- end of rewrite
+titleS :: Parser [String]
+titleS =
+  option (either (const []) id . parsePreds <$> str) $
+  long "title" <> short 't' <>
+  help "Collect entries attributed to satisfactory authors."
+
+
+-- | Parse caret separated list of strings.
+parsePreds :: String -> Either String [String] -- search type, rest of string
+parsePreds s =
+  case parse preds s of
+    Tri.Success rd -> Right rd
+    Tri.Failure err ->
+      Left $
+      "Cannot parse '^' separated predicate list: " ++
+      s ++ "\nErrInfo: " ++ show err
+
+
 quotes :: Parser (Maybe (LogEntry -> Bool))
 quotes =
   flag Nothing (Just isQuote) $
@@ -332,6 +422,16 @@ within =
      help "Lower bound of search filter range" <>
      short 'w' <>
      value (RelDur 0 6 0))
+
+since :: Parser RelDur
+since =
+  option
+    relDurReader
+    (long "since" <> metavar "REL_DATE" <>
+     help "Lower bound of search filter range" <>
+     short 's' <>
+     value (RelDur 0 6 0))
+
 
 main :: IO ()
 main = do

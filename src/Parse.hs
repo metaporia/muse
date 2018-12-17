@@ -25,7 +25,7 @@ import Control.Lens.TH (makePrisms)
 import Control.Monad (void)
 import Data.Aeson hiding (Null)
 import Data.Char (isSpace)
-import Data.List (dropWhile, dropWhileEnd, intercalate)
+import Data.List (dropWhile, dropWhileEnd, intercalate, foldl')
 
 --import Data.Maybe (fromJust)
 import Data.Time
@@ -453,7 +453,7 @@ index xs = zip [len,len - 1 .. 0] xs
     len = length xs - 1
 
 toInteger :: [Integer] -> Integer
-toInteger = foldr (\(pow, el) res -> (10 ^ pow) * el + res) 0 . index
+toInteger = foldl' (\res (pow, el) -> (10 ^ pow) * el + res) 0 . index
 
 digits :: Parser Integer
 digits = read <$> some digit
@@ -496,6 +496,11 @@ searchType = do
     const Suffix <$> char 's'
   space
   return st
+
+-- | Parses list of caret ('^') separated strings, e.g.,
+-- "Eliot^George" -> ["Eliot", "George"]
+preds :: Parser [String]
+preds = sepBy (some $ noneOf "^\n") (char '^')
 
 testDump' :: String
 testDump' =

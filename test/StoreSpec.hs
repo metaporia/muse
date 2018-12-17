@@ -438,8 +438,8 @@ spec
 -- ▣  dialogues
 -- ▣  quotes
 -- ▣  defs
--- □  phrases
--- □  (??) reads
+-- ▣  phrases
+-- □  (??) reads, perhaps only in chrono?
 --
 -- # Second pass
 --

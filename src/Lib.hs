@@ -151,7 +151,7 @@ someFunc = putStrLn "someFunc"
 relDurReader :: ReadM RelDur
 relDurReader =
   eitherReader $ \s ->
-    case parse relDur s of
+    case parse reldur s of
       Tri.Success rd -> Right rd
       Tri.Failure err ->
         Left $

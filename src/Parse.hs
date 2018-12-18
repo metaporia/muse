@@ -478,6 +478,69 @@ dmy = do
   y <- try year <|> return 0
   return $ RelDur y m d
 
+-- Defaults to '00d00m00y' a.t.m.
+ymd :: Parser RelDur
+ymd = do
+  y <- try year <|> return 0
+  m <- try month <|> return 0
+  d <- try day <|> return 0
+  return $ RelDur y m d
+
+ymd' = RelDur <$> year <*> month <*> day
+
+dmy' = do
+  d <- day 
+  m <- month
+  y <- year
+  return $ RelDur y m d
+
+mdy = do
+  m <- month
+  d <- day
+  y <- year
+  return $ RelDur y m d
+
+myd = do
+  m <- month
+  y <- year
+  d <- day
+  return $ RelDur y m d
+
+ym = do
+  y <- year
+  m <- month
+  return $ RelDur y m 0
+
+my = do
+  m <- month
+  y <- year
+  return $ RelDur y m 0
+
+md = do
+  m <- month
+  d <- day
+  return $ RelDur 0 m d
+
+y = do
+  y <- year
+  return $ RelDur y 0 0
+
+m = do
+  m <- month
+  return $ RelDur 0 m 0
+
+reldur :: Parser RelDur
+reldur =
+  try dmy' 
+  <|> try ymd' 
+  <|> try mdy
+  <|> try myd
+  <|> try ym 
+  <|> try my 
+  <|> try y 
+  <|> try m
+  <|> (return $ RelDur 0 0 0)
+
 -- | Parse `RelDur`
 relDur :: Parser RelDur
 relDur = dmy

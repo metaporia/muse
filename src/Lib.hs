@@ -221,14 +221,16 @@ newtype Variants a = Variants (a, Bool, Bool, Bool, Bool, Bool, Bool)
 
 search' :: Day -> Parser (Variants Store.Search)
 search' today = do
-  attrs <- (<>) <$> authorS <*> titleS
+  attrs <- fmap (<>) 
+          (fmap (\s (Attribution _ a) -> s `isInfixOf` (T.unpack a)) <$> authorS) 
+          <*> 
+          (fmap (\s (Attribution t _) -> s `isInfixOf` (T.unpack t)) <$> titleS) 
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
   ps <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
   qs <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
   dials <- switch $ long "dialogues" <> long "dias" <> long "dia" <> long "dial" <> help "Collect dialogues."
   cmts <- switch $ long "comments" <> long "cmts" <> help "Collect comments."
   dmps <- switch $ long "dumps" <> long "dmps" <> help "Collect dumps."
-
 
   s <- (subRelDur today <$> since)
   dhw <- (fmap . fmap) (isInfixOf) defHW
@@ -243,7 +245,7 @@ search' today = do
     (Store.Search
        s
        today
-       []
+       attrs
        (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments), ds, ps, qs, dials, cmts, dmps)
 
 toInput :: TmpInput -> Input

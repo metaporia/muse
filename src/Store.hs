@@ -545,14 +545,16 @@ readSatisfies s e DB {reads} (TsIdxTag tsTag (Just attr)) ps
     Nothing -> False
 
 filterDialogues :: DB -> Search -> IxSet (TsIdx Text) -> [Result]
-filterDialogues db (Search s e _ BucketList {dialoguesPreds}) ds =
+filterDialogues db (Search s e authPreds BucketList {dialoguesPreds}) ds 
+  | not $ null authPreds = [] -- when there are attr preds, skip these untagged entries
+  | otherwise =
   case dialoguesPreds of
     [] -> (\t -> TsR (ts t) $ Dialogue . T.unpack . val $ t) <$> ds'
     _ ->
       filtermap
         (\t ->
            let d = val t
-           in if satisfiesAll d
+           in if satisfiesAll d 
                 then Just $ TsR (ts t) $ Dialogue . T.unpack . val $ t
                 else Nothing)
         ds'

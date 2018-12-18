@@ -59,6 +59,7 @@ import Text.Trifecta hiding (render)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 import Time
+import Lib (runSearch')
 
 test = hspec spec
 
@@ -427,6 +428,7 @@ spec
     tDia
     tQuote
     tDefs
+    tPhrases
 
 --        query acid FromDB>>=colRender True
 -- TODO: 
@@ -690,25 +692,25 @@ tDefs =
 tPhrases =
   describe "definitions: 6" $
   it "definitions: headword, and meaning predicates" $ \acid -> do
-    day <- getCurrentTime
-    day' <- incrMin <$> getCurrentTime
-    day'' <- incrMin . incrMin <$> getCurrentTime
-    day''' <- incrMin . incrMin . incrMin <$> getCurrentTime
-    day'''' <- incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+    day <- truncateUTC <$> getCurrentTime
+    day' <- truncateUTC . incrMin <$> getCurrentTime
+    day'' <- truncateUTC . incrMin . incrMin <$> getCurrentTime
+    day''' <- truncateUTC . incrMin . incrMin . incrMin <$> getCurrentTime
+    day'''' <- truncateUTC . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
     day''''' <-
-      incrMin . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+      truncateUTC . incrMin . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
     day'''''' <-
-      incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
+      truncateUTC . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
       getCurrentTime
     day''''''' <-
-      incrMin . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
+      truncateUTC . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
       getCurrentTime
     day'''''''' <-
-      incrMin .
+      truncateUTC . incrMin .
       incrMin . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
       getCurrentTime
     day''''''''' <-
-      incrMin .
+      truncateUTC . incrMin .
       incrMin .
       incrMin . incrMin . incrMin . incrMin . incrMin . incrMin . incrMin <$>
       getCurrentTime
@@ -745,15 +747,16 @@ tPhrases =
         e = utctDay (incrMin day'''''')
         search = Search s e [] initBucketList
     query acid ViewDB >>= \db@DB {phrases} -> do
+      --runSearch' True True (Search s e [] initBucketList {phrasesPreds = ([isInfixOf "TROMPE"],[])}) db
       let ever' = TsR day' $ Phr ever
-          tacit' = TsR day' $ Phr tacit
-          arbiter' = TsR day' $ Phr arbiter
-          amour' = TsR day' $ Phr amour
-          byWay' = TsR day' $ Phr byWay
-          sine' = TsR day' $ Phr sine
-          irony' = TsR day' $ Phr irony
-          mezzo' = TsR day' $ Phr mezzo
-          trompe' = TsR day' $ Phr trompe
+          tacit' = TsR day'' $ Phr tacit
+          arbiter' = TsR day''' $ Phr arbiter
+          amour' = TsR day'''' $ Phr amour
+          byWay' = TsR day''''' $ Phr byWay
+          sine' = TsR  day'''''' $ Phr sine
+          irony' = TsR day''''''' $ Phr irony
+          mezzo' = TsR day'''''''' $ Phr mezzo
+          trompe' = TsR day''''''''' $ Phr trompe
       filterPhrases db search phrases `shouldBe`
         [ ever'
         , tacit'
@@ -830,6 +833,7 @@ scratch = do
        update acid $ UpdateComment day "comment body 1" Nothing
        update acid $ UpdateComment day' "synthesis" Nothing
        update acid $ UpdateComment day'' "comment body 2" Nothing
+       
        let s = addDays (-182) $ utctDay day -- ~ six months
            e = utctDay day
            search =

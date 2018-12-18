@@ -26,8 +26,8 @@
 --    □  vim helper: generate cloze from selected quote
 --
 -----------------------------------------------------------------------------
-module Main where
+module MainOld where
 
 import qualified Lib
 
-main = Lib.main'
+main = Lib.mainOld

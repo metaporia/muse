@@ -45,6 +45,7 @@ dependencies:
 - ixset
 - containers
 - basic-prelude
+- optparse-applicative
 
 library:
   source-dirs: src
@@ -62,6 +63,19 @@ library:
     - Time
 
 executables:
+  muse-old:
+    main:                MainOld.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - muse
+    - optparse-applicative
+    - time
+
+executables:
   muse:
     main:                Main.hs
     source-dirs:         app
@@ -73,6 +87,7 @@ executables:
     - muse
     - optparse-applicative
     - time
+
 
 tests:
   muse-test:
@@ -87,3 +102,4 @@ tests:
     - hspec
     - QuickCheck
     - trifecta
+    - optparse-applicative

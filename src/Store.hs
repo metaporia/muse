@@ -414,6 +414,8 @@ data Search where
     -> BucketList -- ^ bucket specific predicates
     -> Search
 
+bucketList (Search _ _ _ bl) = bl
+
 -- N.B. apply attribution filters to all but dialogues.
 data BucketList = BucketList
   { dumpsPreds :: [Text -> Bool]
@@ -870,3 +872,5 @@ purge = do
       createCheckpointAndClose
       (\acid -> update acid ReinitDB)
   pPrint r
+
+

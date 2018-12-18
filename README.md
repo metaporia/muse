@@ -76,21 +76,36 @@ appreciated.
 Note that this is merely (a potentially outdated version of) the CLI's help information.
 
 ```
-Usage: muse search [-w|--within REL_DATE] [-a|--author SUBSTR]
-                           [-t|--title SUBSTR] [-d|--definitions]
-                           [-q|--quotations] [-p|--phrases] [-l|--dialogues]
-
-  Search log entries by date, author, or title; extract definitions or
-  quotations.
+Usage: muse search [-a|--author ARG] [-t|--title ARG] [-d|--definitions]
+                   [-p|--phrases] [-q|--quotes]
+                   [--dia|--dial|--dialogues|--dias] [--cmts|--comments]
+                   [--dmps|--dumps] [-s|--since REL_DATE]
+                   [--def-headword|--dh ARG] [--def-meaning|--dm ARG]
+                   [--qb|--quote-body ARG] [-p|--phrases ARG]
+                   [--phr-meaning|--pm ARG] [--db|--dialogue-body ARG]
+                   [--cb|--comment-body ARG] [--db|--dump-body ARG]
+  Search log entries by date, author, title, or predicate on entry contents.
+  Inline definitions of headwords or phrases can be searched as well.
 
 Available options:
-  -w,--within REL_DATE     Lower bound of search filter range
-  -a,--author SUBSTR       Substring/affix of author
-  -t,--title SUBSTR        Affix of title
-  -d,--definitions         Collect only definitions
-  -q,--quotations          Collect only quotations
-  -p,--phrases             Collect only phrases
-  -l,--dialogues           Collect only dialogue
+  -a,--author ARG          Collect entries attributed to satisfactory authors.
+  -t,--title ARG           Collect entries attributed to satisfactory authors.
+  -d,--definitions         Collect definitions.
+  -p,--phrases             Collect phrases.
+  -q,--quotes              Collect quotes.
+  --dia,--dial,--dialogues,--dias
+                           Collect dialogues.
+  --cmts,--comments        Collect comments.
+  --dmps,--dumps           Collect dumps.
+  -s,--since REL_DATE      Lower bound of search filter range
+  --def-headword,--dh ARG  Collect defs that satisfy headword search.
+  --def-meaning,--dm ARG   Search for strings within meaning/definition.
+  --qb,--quote-body ARG    Collect satisfactory quotes.
+  -p,--phrases ARG         Collect only satisfactory phrases
+  --phr-meaning,--pm ARG   Search for strings within meaning/definition.
+  --db,--dialogue-body ARG Collect satisfactory dialogues.
+  --cb,--comment-body ARG  Collect satisfactory comments.
+  --db,--dump-body ARG     Collect satisfactory dumps.
   -h,--help                Show this help text
 ```
 
@@ -100,22 +115,14 @@ Available options:
 * Author and title search strings filter quotes--they're applied to quote
   attributions.
 
-* Author and title search strings can be prefixed by a space proceeding one of
-  the following search modes:
-   - 'p': prefix search
-   - 'i': infix search, the default
-   - 's': suffix search
-
-  For example, `--author 's Woolf'` searches for entries whose author
-  attribution ends with the string "Woolf"
-
 * A `REL_DATE` specifies day-month-year offset, e.g., "3d", "3d2m20y",
-  "2m5y", and "1d6y". Up to two of the three fields may be omited, but they
-  must remain in the correct order, namely, day-month-year. A relative date is
-  represented by a number of days, months, and years, each of which is
-  subtracted from the date of invocation to generate the lower bound of the
-  date range of searched entries.
+  "2m5y", and "1d6y". Up to two of the three fields may be omitted. The only
+  unsupported order/ommision combination is year-day.
 
+* Search flags, such as `--def-meaning` or  `--author`, may be followed by a
+  string for use in an infix search of the target field. Alternatively, many
+  such strings may be conjoined, e.g., `--author Edward^Aubyn` would return
+  all attributed by an author string matching both "Edward" and "Aubyn".
 
 ## Syntax Guidelines
 

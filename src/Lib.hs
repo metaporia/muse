@@ -578,8 +578,10 @@ main' = do
 
 dispatch' :: Opts' -> IO ()
 dispatch' opts@(Opts' color (Search' s)) = do
+  mc <- loadMuseConf
   bracket
-    (openLocalStateFrom "state/DB" initDB)
+    -- FIXME
+    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     createCheckpointAndClose
     (\acid -> do
        db <- query acid ViewDB
@@ -788,7 +790,7 @@ museInit quiet ignoreCache = do
       defConfPath' = T.unpack defConfPath
       defCacheDir = home <> "/.cache/muse/"
       -- FIXME
-      stateDir = home <> "/.muse/state"
+      stateDir = home <> "/.muse/state/DB"
       defLogDir = home <> "/.muse/entries/"
       defaults = MuseConf defLogDir defCacheDir home
   T.putStrLn $ "Expects configuration file at: " <> home <> defConfPath <> "\n"
@@ -984,7 +986,8 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
     then putStrLn "\nSuppressing entry parse error output"
     else return ()
   bracket
-    (openLocalStateFrom "state/DB" initDB)
+
+    (openLocalStateFrom ((T.unpack home) ++ "/.muse/state/DB" :: String) initDB)
     createCheckpointAndClose
     (\acid -> do
        utc <- getCurrentTime
@@ -1003,9 +1006,10 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
 
 colView :: IO ()
 colView = do
+  mc <- loadMuseConf
   r <-
     bracket
-      (openLocalStateFrom "state/DB" initDB)
+      (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
       createCheckpointAndClose
       (\acid -> query acid FromDB >>= colRender True)
   pPrint r

@@ -199,6 +199,15 @@ timestamp = do
   s <- twoDigit <* space <* char 'λ' <* char '.' <* space 
   return $ TimeStamp h m s
 
+-- | Collects timestamps but also fetches indentation info.
+timestamp' :: Parser (Int, TimeStamp)
+timestamp' = do
+  indent <- tabs
+  h <- twoDigit
+  m <- twoDigit
+  s <- twoDigit <* space <* char 'λ' <* char '.' <* space 
+  return (indent, TimeStamp h m s)
+
 data DefQuery
   = Defn (Maybe PgNum)
          [Headword]
@@ -296,6 +305,44 @@ untilPNoTs p = do
     untilP p
   return $ s ++ s'
 
+untilPNoTs' :: Parser p -> Parser String
+untilPNoTs' p = do
+  s <-
+    try (lookAhead (lpad timestamp) >> return "" <?> "ts") <|>
+    try (manyTill anyChar newline <* newline) <|>
+    (eof >> return "")
+  s' <-
+    try (lookAhead (lpad timestamp) >> return "") <|>
+    try (lookAhead (lpad p) >> return "") <|>
+    untilPNoTs' p
+  return $ s ++ s'
+
+notNewLine = many (satisfy (\c -> isSpace c && c /= '\n')) 
+
+-- | Collects one line, including newline, which does not contain a timestamp.
+-- Accepts EOF (after a line) for which an empty sting is returned.
+notTs :: Parser (Maybe String)
+notTs =
+  try (lookAhead (notNewLine *> timestamp >> return Nothing)) <|>
+  try (lookAhead (notNewLine *> (symbol "...") >> return Nothing)) <|>
+  Just <$> Parse.line
+
+
+linesNoTs :: Parser String
+linesNoTs = do
+  m <- notTs 
+  case m of
+    Just ln -> (ln ++) <$> (try linesNoTs <|> (eof >> return ""))
+    Nothing -> return ""
+
+
+line :: Parser String
+line = do 
+  x <- try ( (++"\n") <$> (some $ noneOf "\n") <* newline) <|> (return <$> newline) 
+  skipOptional eof
+  return x
+
+
 -- | Splits entries up by timestamp. From here we need to:
 --
 --  * parse entries into defs, quots, etc.
@@ -318,6 +365,9 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 quot :: Parser ()
 quot = void $ pad (char '"')
 
+quote :: Parser ()
+quote = void $ char '"'
+
 type Title = String
 
 type Author = String
@@ -330,6 +380,10 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 
 emptyLines :: Parser [String]
 emptyLines = some . try $ manyTill space newline
+
+-- | Runs parser and returns tuple of successfully parsed item and remainder
+pTup :: Parser a -> String -> Text.Trifecta.Result (a, String)
+pTup p = parse ((,) <$> p <*> many anyChar) 
 
 unused :: a
 unused = undefined

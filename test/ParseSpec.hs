@@ -25,6 +25,8 @@ import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import qualified Text.Trifecta.Result as Tri
 
+test = hspec spec
+
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
 spec :: Spec
@@ -86,6 +88,10 @@ spec = do
     it "parse logEntries tDialogue" $
       example $ do
         (toMaybe $ parse logEntries tDialogue) `shouldBe` (Just tDialogueOut)
+  describe "unattributed quotations don't consume proceeding indentation" $ do
+    it "parse logEntries autoAttr" $
+      example $ do 
+        (toMaybe $ parse logEntries autoAttr) `shouldBe` (Just autoAttrOut)
 
 tDialogue =
   [r|
@@ -649,6 +655,119 @@ drink gin 'n tonic (2 < shots)
 
 |]
 
+autoAttr = [r|
+
+12:32:18 λ. d offering, sacrifice, expiate, propitiate, gift
+13:32:17 λ. d expectorate, exsputory, exspuition
+13:36:14 λ. d exorate, exoration, entreaty
+
+13:38:51 λ. read "Pride and Prejudice" by Jane Austen
+    13:39:05 λ. d ductility, stricture, negative, archness, arch, celerity
+    13:41:46 λ. q
+
+        "Happiness in marriage is entirely a matter of chance."
+
+        In "Pride and Prejudice" by Jane Austen
+
+    13:42:08 λ. q
+
+        "Mary had neither genius nor taste; and though vanity had given her
+        application, it had likewise given her a pedantic air and a conceited
+        manner, which would have injured a higher degree of excellence than she
+        had reached."
+    13:43:38 λ. q
+        "Your humility must disarm reproof."
+
+    13:43:55 λ. q
+
+        "To yield without conviction is no compliment to the understanding of
+        either [party]."
+
+|]
+
+autoAttrOut = 
+  [ TabTsEntry
+      ( 0
+      , TimeStamp { hr = 12 , min = 32 , sec = 18 }
+      , Def
+          (Defn
+             Nothing
+             [ "offering" , "sacrifice" , "expiate" , "propitiate" , "gift" ])
+      )
+  , TabTsEntry
+      ( 0
+      , TimeStamp { hr = 13 , min = 32 , sec = 17 }
+      , Def (Defn Nothing [ "expectorate" , "exsputory" , "exspuition" ])
+      )
+  , TabTsEntry
+      ( 0
+      , TimeStamp { hr = 13 , min = 36 , sec = 14 }
+      , Def (Defn Nothing [ "exorate" , "exoration" , "entreaty" ])
+      )
+  , TabTsEntry
+      ( 0
+      , TimeStamp { hr = 13 , min = 38 , sec = 51 }
+      , Read "Pride and Prejudice" "Jane Austen"
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 13 , min = 39 , sec = 5 }
+      , Def
+          (Defn
+             Nothing
+             [ "ductility"
+             , "stricture"
+             , "negative"
+             , "archness"
+             , "arch"
+             , "celerity"
+             ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 13 , min = 41 , sec = 46 }
+      , Quotation
+          "Happiness in marriage is entirely a matter of chance."
+          "In \"Pride and Prejudice\" by Jane Austen"
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 13 , min = 42 , sec = 8 }
+      , Quotation
+          "Mary had neither genius nor taste; and though vanity had given her application, it had likewise given her a pedantic air and a conceited manner, which would have injured a higher degree of excellence than she had reached."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 13 , min = 43 , sec = 38 }
+      , Quotation "Your humility must disarm reproof." "" Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 13 , min = 43 , sec = 55 }
+      , Quotation
+          "To yield without conviction is no compliment to the understanding of either [party]."
+          ""
+          Nothing
+      )
+  ]
+
 p = parse logEntries
 
 pp = pPrint . parse logEntries
+
+broke = [r|
+
+        "Mary had neither genius nor taste; and though vanity had given her
+        application, it had likewise given her a pedantic air and a conceited
+        manner, which would have injured a higher degree of excellence than she
+        had reached."
+
+    13:43:38 λ. q
+
+        "Your humility must disarm reproof."
+|]
+
+ 

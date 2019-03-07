@@ -67,13 +67,13 @@ quotation = do
   _ <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
   pg <- optional digits
   skipOptional emptyLines
-  q <- between quot quot (some $ noneOf "\"")
+  q <- lpad $ between quote quote (some $ noneOf "\"")
+  -- FIXME see ~/sputum/muse/19.03.01 for example of valid log the breaks
+  -- auto-attribution logic.
   -- TODO discard post quote attribution when indent >= 1
-  titleAuthEtc <-
-    try (lookAhead (skipOptional emptyLines <* (void (lpad timestamp) <|> eof)) >> return "") <|>
-    entryBody
-  _ <- many newline
-  return $ Quotation (intercalate " " . fmap trim . lines $ q) titleAuthEtc pg
+  --titleAuthEtc <- untilPNoTs' $ try (void $ timestamp) <|> try (void $ symbol "...") <|> eof
+  titleAuthEtc <- linesNoTs <* skipOptional eof
+  return $ Quotation (intercalate " " . fmap trim . lines $ q) (trim titleAuthEtc) pg
 
 -- | Parse an commentary entry (body, without timestamp) of the form:
 --
@@ -158,23 +158,6 @@ instance ToJSON LogEntry where
 
 instance FromJSON LogEntry
 
-logEntry :: Parser LogEntry
-logEntry = do
-  _ <- skipOptional (try emptyLines)
-  let entry' = do
-        indent <- tabs
-        ts <- timestamp <?> "timestamp"
-        e <-
-          try book <|> try quotation <|> try commentary <|> try dialogue <|>
-          try def <|>
-          try page <|>
-          try phrase <|>
-          lpad nullE
-        return $ TabTsEntry (indent, ts, e)
-  e <- try dump <|> entry'
-  _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
-  return $ e
-
 entry :: Parser (Int, TimeStamp, Entry)
 entry = do
   indent <- skipOptional (try emptyLines) *> tabs
@@ -188,6 +171,23 @@ entry = do
 
 entries :: Parser [(Int, TimeStamp, Entry)]
 entries = some entry <* skipOptional newline
+
+logEntry :: Parser LogEntry
+logEntry = do
+  _ <- skipOptional (try emptyLines)
+  let entry' = do
+        (indent, ts) <- timestamp' <?> "timestamp"
+        e <-
+          try book <|> try quotation <|> try commentary <|> try dialogue <|>
+          try def <|>
+          try page <|>
+          try phrase <|>
+          lpad nullE
+        return $ TabTsEntry (indent, ts, e)
+  e <- try dump <|> entry'
+  _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
+  return $ e
+
 
 logEntries :: Parser [LogEntry]
 logEntries =

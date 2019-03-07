@@ -830,16 +830,17 @@ scratch = do
       --update acid $ InsertDump day "sayonara dump"
       -> do
        update acid ReinitDB
-       update acid $ UpdateComment day "comment body 1" Nothing
-       update acid $ UpdateComment day' "synthesis" Nothing
-       update acid $ UpdateComment day'' "comment body 2" Nothing
        
        let s = addDays (-182) $ utctDay day -- ~ six months
            e = utctDay day
            search =
              Search s e [] $
              BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
+--       update acid $ AddDay (utctDay day) (truncateUTC day) autoAttrOut 
        query acid FromDB >>= colRender True
        query acid ViewDB >>= \db -> pPrint db
     )
   return ()
+
+
+

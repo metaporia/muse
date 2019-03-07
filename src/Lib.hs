@@ -588,7 +588,7 @@ dispatch' opts@(Opts' color (Search' s)) = do
        putStrLn "searching...\n"
        runSearch' showDebug color s db
        return ())
-dispatch' (Opts' color (Lint')) = putStrLn "linting"
+dispatch' (Opts' color Lint') = putStrLn "linting"
 dispatch' (Opts' color (Init' quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
@@ -816,7 +816,7 @@ lsEntryCache = listDirectory . T.unpack . entryCache
 
 -- | Load contents at file paths.
 loadFiles :: [FilePath] -> IO [BL.ByteString]
-loadFiles = sequence . fmap BL.readFile
+loadFiles = traverse BL.readFile
 
 -- | Load cached files.
 loadCachedEntries :: MuseConf -> IO [BL.ByteString]

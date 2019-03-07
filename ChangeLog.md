@@ -2,6 +2,15 @@
 
 ## Unreleased changes
 
+## [0.1.5] - 2019-03-06
+### Added
+- `--version` switch
+- fix quotation parser bug which caused greedy whitespace consumption; now
+  indentation-based attribution tagging is (more) reliable
+- due to the above, auto-attribution of quotes is functional--it's no longer
+  necessary to manually attribute quotes that are children of an attributed
+  "read" entry 
+
 ## [0.1.4] - 2018-12-17
 ### Added
 - acid-state persistence

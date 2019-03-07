@@ -333,32 +333,34 @@ color =
 
 toplevel' :: Day -> Parser Opts'
 toplevel' today =
-  Opts' <$> color <*>
-  subparser
-    (command
-       "search"
-       (info
-          (Search' <$> search' today <**> helper)
-          (progDesc
-             "Search log entries by date, author, title, or predicate on entry contents.\
+  (infoOption "muse 0.1.5" $
+   long "version" <> short 'V' <> help "Display version information") <*>
+  (Opts' <$> color <*>
+   subparser
+     (command
+        "search"
+        (info
+           (Search' <$> search' today <**> helper)
+           (progDesc
+              "Search log entries by date, author, title, or predicate on entry contents.\
              \ Inline definitions of headwords or phrases can be searched as well.")) <>
-     command
-       "parse"
-       (info
-          (Parse' <$> parse' <**> helper)
-          (progDesc "Parse entries; a bare invocation runs 'parse --all'")) <>
-     command
-       "lint"
-       (info
-          (pure Lint')
-          (progDesc "TBD; for, e.g., author attribution validation")) <>
-     command
-       "init"
-       (info
-          (init' <**> helper)
-          (progDesc
-             "Initialize config file, cache directory, and entry log\
-             \ directory; parse all entries in 'log-dir'")))
+      command
+        "parse"
+        (info
+           (Parse' <$> parse' <**> helper)
+           (progDesc "Parse entries; a bare invocation runs 'parse --all'")) <>
+      command
+        "lint"
+        (info
+           (pure Lint')
+           (progDesc "TBD; for, e.g., author attribution validation")) <>
+      command
+        "init"
+        (info
+           (init' <**> helper)
+           (progDesc
+              "Initialize config file, cache directory, and entry log\
+             \ directory; parse all entries in 'log-dir'"))))
 
 data SubCommand'
   = Search' (Variants Store.Search)
@@ -577,7 +579,8 @@ main' = do
     dispatch'
 
 dispatch' :: Opts' -> IO ()
-dispatch' opts@(Opts' color (Search' s)) = do
+--dispatch' opts@(Opts' _ True _) = putStrLn "muse 0.1.5" -- VERSION
+dispatch' opts@(Opts' color  (Search' s)) = do
   mc <- loadMuseConf
   bracket
     -- FIXME
@@ -592,7 +595,7 @@ dispatch' (Opts' color Lint') = putStrLn "linting"
 dispatch' (Opts' color (Init' quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
-dispatch' (Opts' color (Parse' it)) = do
+dispatch' (Opts' color  (Parse' it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
   s <-

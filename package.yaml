@@ -1,5 +1,5 @@
 name:                muse
-version:             0.1.4
+version:             0.1.5
 license:             GPL-3
 git:                 https://gitlab.com/metaporia/muse
 author:              "Keane Yahn-Krafft"
@@ -46,7 +46,6 @@ dependencies:
 - containers
 - basic-prelude
 - optparse-applicative
-- yaml
 
 library:
   source-dirs: src

@@ -19,6 +19,8 @@
 -- □  create absolute paths to entries by appending log file name and entry
 --    timestamp; then store log of review times of entry ids, w type of entry;
 --    this will ease efficient review of quotes.
+-- □  replace --qb with --qt. We must forego a short option, but we may yet
+--    have an intuitive one.
 -----------------------------------------------------------------------------
 module Lib where
 
@@ -331,10 +333,11 @@ color :: Parser Bool
 color =
   switch (long "color" <> short 'c' <> help "Colorize output; off by default")
 
+  --(infoOption "muse 0.1.5" $
+  -- long "version" <> short 'V' <> help "Display version information") <*>
+
 toplevel' :: Day -> Parser Opts'
 toplevel' today =
-  (infoOption "muse 0.1.5" $
-   long "version" <> short 'V' <> help "Display version information") <*>
   (Opts' <$> color <*>
    subparser
      (command
@@ -362,6 +365,11 @@ toplevel' today =
               "Initialize config file, cache directory, and entry log\
              \ directory; parse all entries in 'log-dir'"))))
 
+
+toplevel'' d =
+  toplevel' d <|>
+  (infoOption "muse 0.1.5" (long "version" <> short 'V') <*> pure Bare)
+
 data SubCommand'
   = Search' (Variants Store.Search)
   | Parse' InputType
@@ -369,10 +377,7 @@ data SubCommand'
   | Init' Bool
           Bool
 
-data Opts' = Opts'
-  { colorize' :: Bool
-  , subcommand' :: SubCommand'
-  }
+data Opts' = Opts' { colorize' :: Bool , subcommand' :: SubCommand' } | Bare 
 
 toplevel :: Day -> Parser Opts
 toplevel today =
@@ -575,7 +580,7 @@ cli  = do dm <- defMeaning
 main' :: IO ()
 main' = do
   today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> toplevel' today) (fullDesc <> header "dispatch")) >>=
+  execParser (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch")) >>=
     dispatch'
 
 dispatch' :: Opts' -> IO ()

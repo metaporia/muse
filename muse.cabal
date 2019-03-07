@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 135fda14d76b8520ab98c80fdadac726d519e115f84681139ca9cd00bc29331a
+-- hash: abc1c385693fb6d0ac495572c6c7e8969c5a1eb86721f3493abd42bc561b8806
 
 name:           muse
-version:        0.1.4
+version:        0.1.5
 description:    Please see the README on GitHub at <https://gitlab.com/metaporia/muse#README.md>
 author:         Keane Yahn-Krafft
 maintainer:     kyahnkrafft@me.com

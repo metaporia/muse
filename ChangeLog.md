@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- new subcommand "lastRead" which pretty prints the most recent "Read" entry
+
 ## [0.1.5] - 2019-03-06
 ### Added
 - `--version` switch

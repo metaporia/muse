@@ -354,6 +354,11 @@ toplevel' today =
            (Parse' <$> parse' <**> helper)
            (progDesc "Parse entries; a bare invocation runs 'parse --all'")) <>
       command
+        "lastRead"
+        (info
+          (pure FetchLastRead' <**> helper)
+          (progDesc "Fetches most recent \"read\" entry.")) <>
+      command
         "lint"
         (info
            (pure Lint')
@@ -374,6 +379,7 @@ toplevel'' d =
 data SubCommand'
   = Search' (Variants Store.Search)
   | Parse' InputType
+  | FetchLastRead'
   | Lint'
   | Init' Bool
           Bool
@@ -602,6 +608,16 @@ dispatch' (Opts' color Lint') = putStrLn "linting"
 dispatch' (Opts' color (Init' quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
+dispatch' opts@(Opts' color FetchLastRead') = do
+  mc <- loadMuseConf
+  bracket
+    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
+    closeAcidState -- acceptable for read only access?
+    (\acid -> do
+      res <- query acid LastRead  
+      case res of
+        Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
+        Nothing -> exitFailure) 
 dispatch' (Opts' color  (Parse' it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
@@ -745,7 +761,7 @@ loadMuseConf = do
       -- lookup
       logDir = lookupDefault "log-dir" logDef config
       cacheDir = lookupDefault "cache-dir" cacheDef config
-  mapM_ T.putStrLn ["muse config: ", logDir, cacheDir]
+  --  mapM_ T.putStrLn ["muse config: ", logDir, cacheDir]
   return $ MuseConf logDir cacheDir home
 
 showMuseConf :: MuseConf -> String

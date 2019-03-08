@@ -3,6 +3,8 @@
 ## Unreleased changes
 
 - new subcommand "lastRead" which pretty prints the most recent "Read" entry
+- add option "lastRead --suppress-newline" to omit trailing newline for use in
+  vim script
 
 ## [0.1.5] - 2019-03-06
 ### Added

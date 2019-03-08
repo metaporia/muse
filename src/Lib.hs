@@ -356,7 +356,7 @@ toplevel' today =
       command
         "lastRead"
         (info
-          (pure FetchLastRead' <**> helper)
+          (FetchLastRead' <$> switch (long "suppress-newline" <> help "Suppress trailing newline") <**> helper)
           (progDesc "Fetches most recent \"read\" entry.")) <>
       command
         "lint"
@@ -379,7 +379,7 @@ toplevel'' d =
 data SubCommand'
   = Search' (Variants Store.Search)
   | Parse' InputType
-  | FetchLastRead'
+  | FetchLastRead' Bool -- toggles trailing newline suppression
   | Lint'
   | Init' Bool
           Bool
@@ -608,15 +608,18 @@ dispatch' (Opts' color Lint') = putStrLn "linting"
 dispatch' (Opts' color (Init' quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
-dispatch' opts@(Opts' color FetchLastRead') = do
+dispatch' opts@(Opts' color (FetchLastRead' suppressNewline)) = do
   mc <- loadMuseConf
   bracket
     (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     closeAcidState -- acceptable for read only access?
     (\acid -> do
+      let put = case suppressNewline of
+                  True -> T.putStr
+                  False -> T.putStrLn -- default
       res <- query acid LastRead  
       case res of
-        Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
+        Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
         Nothing -> exitFailure) 
 dispatch' (Opts' color  (Parse' it)) = do
   mc <- loadMuseConf

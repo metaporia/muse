@@ -40,3 +40,11 @@ incrMin UTCTime {..} = UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTi
 left :: Either a b -> Maybe a
 left = preview _Left
 
+incrDay :: Day -> Day
+incrDay = succ
+
+incrDayBy :: Int -> Day -> Day
+incrDayBy n d = iterate succ d !! n --succ $ incrDayBy (n-1) d
+
+incrUTC :: UTCTime -> UTCTime
+incrUTC (UTCTime day dt) = UTCTime (incrDay day) dt

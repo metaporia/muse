@@ -108,3 +108,10 @@ parse p = parseString p mempty
 
 show' :: Show a => a -> IO ()
 show' = pPrint
+
+
+-- | Safe head.
+head' :: [a] -> Maybe a
+head' [] = Nothing
+head' (x:_) = Just x
+

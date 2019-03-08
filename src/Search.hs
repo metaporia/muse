@@ -186,9 +186,6 @@ filterWith' input (x:xs)
       | searchSatisfies' input x = x : go xs
       | otherwise = go xs
 
-head' [] = Nothing
-head' (x:_) = Just x
-
 -- | Comparse auth, title strings of read entry
 compareRead :: (Title, Author) -> (Title, Author) -> Bool
 compareRead (t, a) (t', a') = t == t' && a' == a

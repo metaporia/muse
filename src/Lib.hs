@@ -63,6 +63,7 @@ import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
         listDirectory)
 import System.Environment (getEnv)
+import System.Exit (exitSuccess, exitFailure)
 import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
@@ -416,6 +417,7 @@ data Opts = Opts
 
 data SubCommand
   = Search Input
+  | FetchLastRead
   | Parse InputType
   | Lint
   | Init Bool -- ^ Suppress log parse errors
@@ -659,6 +661,17 @@ dispatch (Opts color (Lint)) = putStrLn "linting"
 dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
+dispatch opts@(Opts color FetchLastRead) = do
+  mc <- loadMuseConf
+  bracket
+    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
+    closeAcidState -- acceptable for read only access?
+    (\acid -> do
+      res <- query acid LastRead  
+      case res of
+        Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
+        Nothing -> exitFailure) 
+
 dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."

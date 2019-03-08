@@ -44,7 +44,7 @@ import Data.Time.Clock
 import Helpers
 import Parse
 import Parse.Entry
-import Prelude hiding (min)
+import Prelude hiding (min, reads)
 import Render
 import Search (pathToDay)
 import Store hiding (Null)
@@ -836,11 +836,47 @@ scratch = do
            search =
              Search s e [] $
              BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
---       update acid $ AddDay (utctDay day) (truncateUTC day) autoAttrOut 
-       query acid FromDB >>= colRender True
-       query acid ViewDB >>= \db -> pPrint db
+       update acid $ AddDay (utctDay day) (truncateUTC day) read2
+       update acid $ AddDay (incrDay $ utctDay day) (truncateUTC $ incrUTC day) read1
+       query acid LastRead >>= colRender True
+       --query acid FromDB >>= colRender True
+       --query acid ViewDB >>= \db -> pPrint db
     )
   return ()
 
+read2 = 
+  [ TabTsEntry
+      ( 0
+      , TimeStamp { hr = 12 , min = 38 , sec = 51 }
+      , Read "Sense and Sensibility" "Jane Austen"
+      )
 
+  ]
 
+read1 =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 13, min = 38, sec = 51}
+      , Read "Pride and Prejudice" "Jane Austen")
+  , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 13, min = 39, sec = 5}
+      , Def
+          (Defn
+             Nothing
+             [ "ductility"
+             , "stricture"
+             , "negative"
+             , "archness"
+             , "arch"
+             , "celerity"
+             ]))
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 17, min = 54, sec = 8}
+      , Read "Wuthering Heights" "Emily Bronte")
+  , TabTsEntry
+      ( 0
+      , TimeStamp {hr = 17, min = 53, sec = 21}
+      , Read "Catch 22" "Joseph Heller")
+  ]

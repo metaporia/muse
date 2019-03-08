@@ -821,6 +821,14 @@ viewLastUpdated = lastUpdated <$> ask
 reinitDB :: Update DB DB
 reinitDB = put initDB >> return initDB
 
+-- | Returns author attribution of most recent 'Read' entry.
+lastRead :: Query DB (Maybe (Store.Title, Store.Author))
+lastRead = do
+  db@DB {..} <- ask
+  return . fmap (val . tsIdx) . head' $
+    IxSet.toDescList (Proxy :: Proxy UTCTime) reads
+
+
 makeAcidic
   ''DB
   [ 'insertDump
@@ -836,6 +844,7 @@ makeAcidic
   , 'addDay
   , 'fromDB
   , 'viewLastUpdated
+  , 'lastRead
   ]
 
 insert :: IO ()

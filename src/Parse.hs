@@ -583,16 +583,47 @@ m = do
   m <- month
   return $ RelDur 0 m 0
 
+d = do
+  d <- day
+  return $ RelDur 0 0 d
+
+yd = do
+  y <- year
+  d <- day
+  return $ RelDur y 0 d
+
+dy = do
+  d <- day
+  y <- year
+  return $ RelDur y 0 d
+
+dm = do
+  d <- day
+  m <- month
+  return $ RelDur 0 m d
+
+--md = (\m d -> RelDur 0 m d) <$> y
+
 reldur :: Parser RelDur
 reldur =
   try dmy' 
+  -- 3
   <|> try ymd' 
   <|> try mdy
   <|> try myd
+  -- 2
   <|> try ym 
   <|> try my 
+
+  <|> try md
+  <|> try dm
+
+  <|> try yd
+  <|> try dy
+  -- 1
   <|> try y 
   <|> try m
+  <|> try d
   <|> (return $ RelDur 0 0 0)
 
 -- | Parse `RelDur`

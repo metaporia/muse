@@ -1,10 +1,14 @@
 # Changelog for muse
 
 ## Unreleased changes
-
+### Added
 - new subcommand "lastRead" which pretty prints the most recent "Read" entry
 - add option "lastRead --suppress-newline" to omit trailing newline for use in
   vim script
+
+### Fixed
+- `reldur` parser now takes all combinations and omissions of year, month, day;
+  e.g., '3d', '2y1d', and '3d2m' used not to succeed.
 
 ## [0.1.5] - 2019-03-06
 ### Added

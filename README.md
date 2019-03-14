@@ -26,7 +26,10 @@ git checkout <release-tag> # e.g., v0.1.0
 stack build --copy-bins --ghc-options -O2
 # or omit `--copy-bins` and link/copy yourself 
 
-muse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, 
+muse init # creates ~/.muse/{entries/,config.yaml}, ~/.cache/muse/parsedEntries/, ~/.muse/state/
+# N.B. the migration from manual filesystem-based log-caching is incomplete and
+# so both caches are currently in use: expect ~/.cach/muse/parsedEntries to be
+# deprecated soon
 ```
 
 ## Log
@@ -41,21 +44,40 @@ I use the following command to log (with nvim):
 nvim +:last -- ~/.muse/entries/{*,`today`}
 ```
 
-Additionally, I have the following bindings in my .vimrc/init.vim:
+Additionally, I recommend using the [muse-vim](https://gitlab/metaporia/muse-vim) plugin which provides the above with options to configure the log director and keymap prefix.
+
+If yet another plugin has no appeal to you, consider an adaptation of the following from my (former) .vimrc/[init.vim](https://gitlab.com/metaporia/dot/blob/0578fba492d6da37e2f5a97a325ead9715fe3072/nvim/init.vim):
+
 ```vim
-" create filetype trigger for bindings
-au BufEnter ~/.muse/entries/* setfiletype muse
-
-" generates a timestamp, e.g., '15:25:52 λ. '
-au FileType muse nnoremap <buffer> <leader>t Go<C-r>=strftime("%H:%M:%S λ. ")<CR>
-
-" inserts separator; see definition comparison. 
-au FileType muse nnoremap <buffer> <leader>v o<Esc>16i <Esc>a--- vs ---<Esc>o
+au BufEnter ~/sputum/muse/* setfiletype muse
 
 " sets errorformat (WIP) so muse errors can be viewed in vim's quickfix
 " window
-au FileType muse setlocal efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#,%+C>\ %.%#
+au BufEnter ~/sputum/muse/* set efm=%EFile:\ %f,%+C>\ (interactive):l:%c:%m,%+Z>\ %.%#,%+C>\ %.%#
+
+" generates a timestamp, e.g., '15:25:52 λ. '
+nnoremap <leader>t Go<C-r>=strftime("%H:%M:%S λ. ")<CR>
+
+" inserts separator; see definition comparison. 
+au BufEnter ~/sputum/muse/* nnoremap <buffer> <leader>v o<Esc>16i <Esc>a--- vs ---<Esc>o
+
+function! MuseLogEntry()
+    execute "normal Go\<C-r>=strftime(\"%H:%M:%S λ. \")\<CR>"
+    call feedkeys('A', ' ')
+endfunction
+
+function! MuseLastRead()
+    call MuseLogEntry()
+    call feedkeys(system("muse lastRead --suppress-newline") . "\<ESC>") 
+endfunction
+
+command! LogEntry :call LogEntry()
+command! LastRead call MuseLastRead()
+"continue reading
+nnoremap <leader>cr :LastRead<CR>
 ```
+
+Alternatively 
 
 ## Parse
 
@@ -69,6 +91,13 @@ More seriously, there are several parser combinators that silently fail--please
 report as bugs any such seemingly misguided decisions by the parser. Inclusion
 of both the input log and the JSON output and/or any error messages is
 appreciated.
+
+
+Note: I keep all my logs in a separate repository and sym-link them into
+~/.muse/entries lest they suffer from muse's jiggering in an undesirable
+fashion&mdash;which they almost certainly will not, but reason so little allays
+this superstitios conviction that I continue to do so.
+
 
 
 ## Search Syntax

@@ -374,7 +374,7 @@ toplevel' today =
 
 toplevel'' d =
   toplevel' d <|>
-  (infoOption "muse 0.1.5" (long "version" <> short 'V') <*> pure Bare)
+  (infoOption "muse 0.2.0" (long "version" <> short 'V') <*> pure Bare) -- VERSION
 
 data SubCommand'
   = Search' (Variants Store.Search)

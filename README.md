@@ -44,7 +44,7 @@ I use the following command to log (alter to match chosen log dir):
 nvim +:last -- ~/.muse/entries/{*,`today`}
 ```
 
-Additionally, I recommend using the [muse-vim](https://gitlab/metaporia/muse-vim) plugin which provides the above with options to configure the log director and keymap prefix.
+Additionally, I recommend using the [muse-vim](https://gitlab.com/metaporia/muse-vim) plugin which provides the above with options to configure the log director and keymap prefix.
 
 If yet another plugin has no appeal to you, consider an adaptation of the following from my (former) .vimrc/[init.vim](https://gitlab.com/metaporia/dot/blob/0578fba492d6da37e2f5a97a325ead9715fe3072/nvim/init.vim):
 

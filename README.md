@@ -38,7 +38,7 @@ Log files should be named with the current date, as 'YY.MM.DD'.
 
 For a correctly parsed log file see the [examples](./examples/18.11.24).
 
-I use the following command to log (with nvim):
+I use the following command to log (alter to match chosen log dir):
 ```bash
 #!/usr/bin/env bash
 nvim +:last -- ~/.muse/entries/{*,`today`}
@@ -76,8 +76,6 @@ command! LastRead call MuseLastRead()
 "continue reading
 nnoremap <leader>cr :LastRead<CR>
 ```
-
-Alternatively 
 
 ## Parse
 

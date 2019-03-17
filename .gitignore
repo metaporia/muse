@@ -3,7 +3,7 @@
 state/
 testState/
 \#*.hs\#
-logParse.cabal
+*.cabal
 errs
 TAGS
 ctags

@@ -16,6 +16,10 @@
 --
 -- TODO
 --
+-- □  switch to list identifying characteristics of entries, viz. full
+--    truncated UTCTime and entry variant
+-- □  fetch entry by timestamp & variant
+
 -- □  create absolute paths to entries by appending log file name and entry
 --    timestamp; then store log of review times of entry ids, w type of entry;
 --    this will ease efficient review of quotes.

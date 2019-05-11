@@ -38,9 +38,11 @@ import Data.Acid.Remote
 import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Char (toLower)
 import Data.Foldable (fold)
-import Data.List
-       (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
+import Data.IxSet (Indexable(..), IxSet(..), (@=), getOne, ixFun, ixSet, updateIx)
+import qualified Data.IxSet
+import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
 import Data.Maybe (catMaybes, fromJust, isJust)
 import Data.Monoid ((<>))
 import qualified Data.Monoid as M
@@ -50,8 +52,6 @@ import Data.Time
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
 import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
-import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
-import qualified Data.IxSet
 import Debug.Trace (trace)
 import Helpers
 import Options.Applicative
@@ -67,11 +67,10 @@ import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
         listDirectory)
 import System.Environment (getEnv)
-import System.Exit (exitSuccess, exitFailure)
+import System.Exit (exitFailure, exitSuccess)
 import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
-
 import Control.Exception (bracket)
 import Control.Monad ((>=>), join, void)
 import Control.Monad.State
@@ -239,15 +238,17 @@ search' today = do
   cmts <- switch $ long "comments" <> long "cmts" <> help "Collect comments."
   dmps <- switch $ long "dumps" <> long "dmps" <> help "Collect dumps."
 
+  -- case fix: all search strings are set to lower case (add switch to perform
+  -- case *sensitive* search? tbd)
   s <- (subRelDur today <$> since)
-  dhw <- (fmap . fmap) (isInfixOf) defHW
-  dm <- (fmap . fmap) (isInfixOf) defMeaning
-  q <- (fmap . fmap) (T.isInfixOf . T.pack) quoteBody
-  phw <- (fmap . fmap) isInfixOf phraseHW
-  pm <- (fmap . fmap) isInfixOf phraseMeaning
-  dias <- (fmap . fmap) (T.isInfixOf . T.pack) dialogueBody
-  comments <- (fmap . fmap) (T.isInfixOf . T.pack) commentBody
-  dumps <- (fmap . fmap) (T.isInfixOf . T.pack) dumpBody
+  dhw <- (fmap . fmap) (isInfixOf . fmap toLower) defHW
+  dm <- (fmap . fmap) (isInfixOf . fmap toLower ) defMeaning
+  q <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) quoteBody
+  phw <- (fmap . fmap) (isInfixOf . fmap toLower) phraseHW
+  pm <- (fmap . fmap) (isInfixOf . fmap toLower) phraseMeaning
+  dias <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dialogueBody
+  comments <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) commentBody
+  dumps <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dumpBody
   return $ Variants $ 
     (Store.Search
        s

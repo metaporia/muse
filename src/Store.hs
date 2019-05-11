@@ -39,6 +39,7 @@ import Data.Acid.Local (createCheckpointAndClose)
 import Data.Acid.Remote
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Char (toLower)
 import Data.Data (Data, Typeable)
 import Data.Foldable (foldl')
 import Data.IxSet
@@ -478,11 +479,12 @@ filterDumps (Search s e _ BucketList {dumpsPreds}) ixSet =
     [] -> DumpR <$> dumped'
     xs -> DumpR <$> filter satisfiesAll dumped'
   where
+    dumped' :: [Text]
     dumped' =
       (IxSet.toAscList (Proxy :: Proxy Day) $ ixSet @>=<= (s, e)) >>=
       Set.toList . getDumps
     -- TODO add pred for fold over boolean OR, that is, @Any@
-    satisfiesAll t = foldl' (&&) True $ dumpsPreds <*> [t]
+    satisfiesAll t = and $ dumpsPreds <*> [T.toLower t] -- case fix
 
 filterDefs :: DB -> Search -> IxSet (TsIdxTag DefQuery) -> [Result]
 filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
@@ -514,9 +516,10 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
     satisfiesAll hs _ (Defn _ hws) = 
       -- each pred is mapped over the headwords; then if any is a match for all
       -- preds the def entry is returned (as a match).
-      all id $ any id <$> ((\pred -> pred <$> hws) <$> hs)
-    satisfiesAll hs ms (InlineDef hw mn) =
-      foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
+      and $ or <$> ((\pred -> pred <$> (fmap toLower <$> hws)) <$> hs) -- case fix
+    satisfiesAll hs ms (InlineDef hw mn) = 
+      -- case fix 
+      and (hs <*> pure (toLower <$> hw)) && and (ms <*> pure (toLower <$> mn))
     satisfiesAll hs ms (DefVersus hw mn hw' mn') =
       satisfiesAll hs ms (InlineDef hw mn) || -- FIXME or for 'DefVersus'
       satisfiesAll hs ms (InlineDef hw' mn')
@@ -544,7 +547,8 @@ readSatisfies s e DB {reads} (TsIdxTag tsTag (Just attr)) ps
   -- grouped by day.
  =
   case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (attrId attr) of
-    Just (t, a) -> foldl' (&&) True $ ps <*> pure (Attribution t a)
+    -- case fix
+    Just (t, a) -> and $ ps <*> pure (Attribution (T.toLower t) (T.toLower a))
     Nothing -> False
 
 filterDialogues :: DB -> Search -> IxSet (TsIdx Text) -> [Result]
@@ -564,7 +568,8 @@ filterDialogues db (Search s e authPreds BucketList {dialoguesPreds}) ds
   where
     ds' = (IxSet.toAscList (Proxy :: Proxy Day) $ ds @>=<= (s, e))
     -- TODO add pred for fold over boolean OR, that is, @Any@
-    satisfiesAll t = foldl' (&&) True $ dialoguesPreds <*> [t]
+    -- case fix
+    satisfiesAll t = and $ dialoguesPreds <*> [T.toLower t]
 
 filterPhrases :: DB -> Search -> IxSet (TsIdxTag Phrase) -> [Result]
 filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
@@ -601,9 +606,10 @@ filterPhrases db (Search s e authPreds BucketList {phrasesPreds}) phrases
     phrases' = IxSet.toAscList (Proxy :: Proxy Day) $ phrases @>=<= (s, e)
     satisfiesAll [] [] _ = True
     satisfiesAll [] _ (Plural phrs) = False
-    satisfiesAll hs _ (Plural phrs) = foldl' (&&) True (hs <*> phrs)
+    satisfiesAll hs _ (Plural phrs) = and (hs <*> (fmap toLower <$> phrs)) -- case fix
     satisfiesAll hs ms (Defined hw mn) =
-      foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
+      -- case fix
+      and (hs <*> pure (toLower <$> hw)) && and (ms <*> pure (toLower <$> mn))
 
 -- FIXME text vs string
 filterComments :: DB -> Search -> IxSet (TsIdxTag Text) -> [Result]
@@ -635,7 +641,7 @@ filterComments db (Search s e authPreds BucketList {commentsPreds}) cmts
     cmts'' = val . tsTag <$> cmts'
     cmts' = IxSet.toAscList (Proxy :: Proxy Day) $ cmts @>=<= (s, e)
     satisfiesAll [] t = True
-    satisfiesAll preds t = foldl' (&&) True $ preds <*> [t]
+    satisfiesAll preds t = and $ preds <*> [T.toLower t] -- case fix
 
 -- TODO rewrite !!!!!
 -- Q: filter by manual attributions, or nesting?
@@ -655,7 +661,7 @@ filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
         filtermap 
           (\t -> 
             let (b, attr, mPg) = val $ tsTag t
-             in if foldl' (&&) True $ quotesPreds <*> [b]
+             in if satisfiesAll quotesPreds (b, attr, mPg)
                    then Just $ TsR (ts $ tsTag t) (Quotation (T.unpack b) (T.unpack attr) mPg)
                    else Nothing) 
                    quotes'
@@ -672,7 +678,7 @@ filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
     quotes'' = val . tsTag <$> quotes'
     quotes' = IxSet.toAscList (Proxy :: Proxy Day) $ quotes @>=<= (s, e)
     satisfiesAll :: [Text -> Bool] -> (Body, Attr, Maybe PgNum) -> Bool
-    satisfiesAll preds (b, _, _) = foldl' (&&) True (preds <*> [b])
+    satisfiesAll preds (b, _, _) = and (preds <*> [T.toLower b]) -- case fix
     readSatisfies' :: TsIdxTag (Body, Attr, Maybe PgNum) -> Bool
     readSatisfies' tag =
       case attr tag of
@@ -681,7 +687,7 @@ filterQuotes db (Search s e authPreds BucketList {quotesPreds}) quotes
         Nothing ->
           let (_, a, _) = val . tsTag $ tag
           -- FIXME puts whole attr in both title and auth slot.
-          in foldl' (&&) True (authPreds <*> [Attribution a a])
+          in and (authPreds <*> [Attribution (T.toLower a) (T.toLower a)]) -- case fix
 
 -- TODO cache attributions
 filterReads :: Search -> Query DB Results

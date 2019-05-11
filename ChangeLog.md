@@ -1,6 +1,10 @@
 # Changelog for muse
 
 ## Unreleased changes
+### Fixed 
+- correct application of headword predicates: now each predicate must be
+  satisified by at least one headword in order for the definition entry to
+  number amongst the search results.
 
 ## [0.2.0] - 2019-03-13
 ### Added

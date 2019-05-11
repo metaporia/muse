@@ -511,7 +511,10 @@ filterDefs db (Search s e authPreds BucketList {defsPreds}) defs
     defs' = IxSet.toAscList (Proxy :: Proxy Day) $ defs @>=<= (s, e)
     satisfiesAll [] [] _ = True -- allow all without any preds
     satisfiesAll [] _ (Defn _ hws) = False
-    satisfiesAll hs _ (Defn _ hws) = foldl' (&&) True (hs <*> hws)
+    satisfiesAll hs _ (Defn _ hws) = 
+      -- each pred is mapped over the headwords; then if any is a match for all
+      -- preds the def entry is returned (as a match).
+      all id $ any id <$> ((\pred -> pred <$> hws) <$> hs)
     satisfiesAll hs ms (InlineDef hw mn) =
       foldl' (&&) True (hs <*> pure hw) && foldl' (&&) True (ms <*> pure mn)
     satisfiesAll hs ms (DefVersus hw mn hw' mn') =

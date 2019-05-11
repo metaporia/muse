@@ -222,11 +222,11 @@ satisfies' input le
 
 -- | Applies variant predicates (to collect nested entries)
 variantSatisfies :: Input -> LogEntry -> Bool
-variantSatisfies input =
-  let preds = catMaybes (predicates input)
-  in if null preds
-       then const True -- TODO search bug ??
-       else \e -> foldr (||) False $ preds <*> [e]
+variantSatisfies input
+  | null preds = const True -- TODO search bug ??
+  | otherwise = \e -> foldr (||) False $ preds <*> [e]
+  where
+    preds = catMaybes (predicates input)
 
 -- | Applies only string search predicates.
 searchSatisfies :: Input -> LogEntry -> Bool
@@ -236,7 +236,7 @@ searchSatisfies (Input _ _ ap tp _) le
   where
     res = [ap <*> pure le, tp <*> pure le]
 
--- | Applies only string search predicates.
+-- | Applies only string search predicates to author, title.
 searchSatisfies' :: Input -> LogEntry -> Bool
 searchSatisfies' (Input _ _ ap tp _) le
   | null res = False

@@ -25,6 +25,9 @@ import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import qualified Text.Trifecta.Result as Tri
 
+tparse :: String -> Result [LogEntry]
+tparse = parse logEntries
+
 test = hspec spec
 
 --import Text.Trifecta.Result (Result(..))
@@ -37,8 +40,8 @@ spec = do
         (Just $ TimeStamp 00 11 22)
     -- testlog
   describe "Parse testlog" $ do
-    it "parse entries testlog" $
-      example $ do (toMaybe $ parse entries testlog) `shouldBe` (Just output)
+    it "parse logEntries testlog" $
+      example $ do (toMaybe $ parse logEntries testlog) `shouldBe` (Just output)
     -- testlog with dump
   describe "Parse testlog including dumps" $ do
     it "parse logEntries testlog" $
@@ -47,29 +50,29 @@ spec = do
           (Just testLogWithDumpOutput')
     -- commentary
   describe "Parse commentary entry variant 1" $ do
-    it "parse entries commentTs" $
+    it "parse logEntries commentTs" $
       example $ do
-        (toMaybe $ parse entries commentTs) `shouldBe` (Just commentTsOutput)
+        (toMaybe $ parse logEntries commentTs) `shouldBe` (Just commentTsOutput)
     -- commentary
   describe "Parse commentary entry variant 2" $ do
-    it "parse entries commentTs'" $
+    it "parse logEntries commentTs'" $
       example $ do
-        (toMaybe $ parse entries commentTs') `shouldBe` (Just commentTsOutput')
+        (toMaybe $ parse logEntries commentTs') `shouldBe` (Just commentTsOutput')
     -- pgNum
   describe "test pgNum: \"(s | e | p | f)<num>\"" $ do
-    it "parse entries testPgNum" $
+    it "parse logEntries testPgNum" $
       example $ do
-        (toMaybe $ parse entries testPgNum) `shouldBe` (Just testPgNumOutput)
+        (toMaybe $ parse logEntries testPgNum) `shouldBe` (Just testPgNumOutput)
     -- skip lonely spaces
   describe "skip lines containing only spaces" $ do
-    it "parse entries testLonelySpaces" $
+    it "parse logEntries testLonelySpaces" $
       example $ do
-        (toMaybe $ parse entries testLonelySpaces) `shouldBe`
+        (toMaybe $ parse logEntries testLonelySpaces) `shouldBe`
           (Just testLonelySpacesOutput)
-  describe "parse null entries (those w only timestamps)" $ do
-    it "parse entries testLonelySpaces" $
+  describe "parse null logEntries (those w only timestamps)" $ do
+    it "parse logEntries testNull" $
       example $ do
-        (toMaybe $ parse entries testNull) `shouldBe` (Just testNullOutput)
+        (toMaybe $ parse logEntries testNull) `shouldBe` (Just testNullOutput)
   describe "parse dump: \"...\n<multi-line-dump-body>\n...\"" $ do
     it "parse logEntries testDump" $
       example $ do
@@ -92,6 +95,14 @@ spec = do
     it "parse logEntries autoAttr" $
       example $ do 
         (toMaybe $ parse logEntries autoAttr) `shouldBe` (Just autoAttrOut)
+  describe "fail on entry without valid prefix" $ do
+    it "parse logEntry tNoValidPrefix" $
+      example $ do 
+        (toMaybe $ parse logEntries tNoValidPrefix) `shouldBe` Nothing
+
+tNoValidPrefix = [r|
+13:36:33 λ. not a prefix!
+|]
 
 tDialogue =
   [r|
@@ -268,36 +279,34 @@ testNull =
     12:10:01 λ. 
 |]
 
-testNullOutput :: [(Int, TimeStamp, Entry)]
-testNullOutput = [(1, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
+testNullOutput :: [LogEntry]
+testNullOutput = [TabTsEntry (0, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
 
 testLonelySpaces :: String
 testLonelySpaces =
   [r|
-    12:10:01 λ. d sylvan
     
 
 14:19:00 λ. read "Witches Abroad", by Terry Pratchett
  
 
+    12:10:01 λ. d sylvan
  
 |]
 
-testLonelySpacesOutput :: [(Int, TimeStamp, Entry)]
+testLonelySpacesOutput :: [LogEntry]
 testLonelySpacesOutput =
-  [ (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
-  , ( 0
-    , TimeStamp {hr = 14, min = 19, sec = 0}
-    , Read "Witches Abroad" "Terry Pratchett")
+  [ TabTsEntry ( 0 , TimeStamp {hr = 14, min = 19, sec = 0} , Read "Witches Abroad" "Terry Pratchett")
+  , TabTsEntry (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
   ]
 
 -- `parse entries teslog`
-output :: [(Int, TimeStamp, Entry)]
+output :: [LogEntry]
 output =
-  [ ( 0
+  [ TabTsEntry ( 0
     , TimeStamp {hr = 9, min = 55, sec = 6}
     , Read "To the Lighthouse" "Virginia Woolf")
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 9, min = 55, sec = 17}
     , Def
         (DefVersus
@@ -305,7 +314,7 @@ output =
            "kind; gracious; favorable;"
            "benign"
            "gentle, mild, or, medically, non-threatening"))
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 11, sec = 45}
     , Def
         (DefVersus
@@ -313,29 +322,29 @@ output =
            "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
            "malign"
            "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 17, sec = 40}
     , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 18, sec = 12}
     , Def (Defn (Just 38) ["sublime", "lintel"]))
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 24, sec = 2}
     , Quotation
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing)
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 25, sec = 27}
     , Quotation
         "Her simplicity fathomed what clever people falsified."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing)
-  , (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
-  , ( 1
+  , TabTsEntry (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 47, sec = 59}
     , Def (Defn Nothing ["cosmogony"]))
-  , ( 1
+  , TabTsEntry ( 1
     , TimeStamp {hr = 10, min = 49, sec = 58}
     , Quotation
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
@@ -355,9 +364,9 @@ hyper-management.
 
 |]
 
-commentTsOutput :: [(Int, TimeStamp, Entry)]
+commentTsOutput :: [LogEntry]
 commentTsOutput =
-  [ ( 0
+  [ TabTsEntry ( 0
     , TimeStamp {hr = 20, min = 30, sec = 0}
     , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
@@ -376,13 +385,13 @@ hyper-management.
 15:39:30 λ. d hello
 |]
 
-commentTsOutput' :: [(Int, TimeStamp, Entry)]
+commentTsOutput' :: [LogEntry]
 commentTsOutput' =
-  [ ( 0
+  [ TabTsEntry ( 0
     , TimeStamp {hr = 20, min = 30, sec = 0}
     , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
-  , (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
+  , TabTsEntry (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
   ]
 
 -- test data
@@ -412,13 +421,13 @@ testPgNum =
 08:38:20 λ. p  38
 |]
 
-testPgNumOutput :: [(Int, TimeStamp, Entry)]
+testPgNumOutput :: [LogEntry]
 testPgNumOutput =
-  [ (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
-  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PStart 38))
-  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PEnd 38))
-  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PFinish 38))
-  , (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
+  [ TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PStart 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PEnd 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PFinish 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
   ]
 
 testLog :: String
@@ -565,7 +574,7 @@ tDumpOut =
       "\ncoffee\nshit\nfuck with ssh-keygen (error: \"sign_and_send_pubkey: signing failed ...\")\nsolution: `ssh-add` (the local agent simply needed a heads-up!)."
   ]
 
-broken =
+broken' =
   [r|
 ...
 coffee
@@ -771,3 +780,378 @@ broke = [r|
 |]
 
  
+
+broken = [r|
+09:44:14 λ. read "Pride And Prejudice" by Jane Austen
+    09:44:45 λ. d repine, abseil
+    09:45:07 λ. d repute, dispute, compute, impute, putative
+    09:49:36 λ. d disoblige
+    09:51:08 λ. d perforce
+    09:51:15 λ. d manifold
+    09:52:32 λ. q
+
+        "Is not general incivility the very essence of love?"
+
+    09:54:11 λ. q
+
+        "There are few people whom I really love and fewer still of whom I
+        think well."
+
+    09:54:32 λ. q
+
+        "We must not be so ready to fancy ourselves intentionally injured."
+
+    09:54:53 λ. q
+    
+        "The stupidity with which he was favored by nature, must guard his
+        courtship from any charm that could make a woman wish for its
+        continuance."
+
+    10:11:00 λ. phr "as well by...as..."
+    10:11:22 λ. phr "despair of"
+    10:11:33 λ. phr "savors of"
+    10:13:40 λ. d insupportable
+    10:14:18 λ. d paling
+    10:27:13 λ. d trepidity, trepid
+    14:10:42 λ. d fortnight
+    14:20:14 λ. d politic, impolitic
+    14:21:21 λ. dvs celerity : rapidity of motion; swiftness
+                    --- vs ---
+                    alacrity : cheerful readiness; sprightliness; promptness
+                    
+    15:03:36 λ. d rencontre, rencounter
+    15:06:09 λ. d immure, durance, inure
+    15:10:55 λ. d tractable
+    15:11:31 λ. d officious
+    15:16:31 λ. d intimate
+    15:26:12 λ. d verdure
+    15:49:25 λ. d obeisance, obedience
+    15:53:15 λ. d derogate, derogation
+    15:57:40 λ. phr "hopeless of remedy"
+    15:57:56 λ. d upbraid
+    16:17:37 λ. q
+
+        "One may be continually abusive to a man without saying any thing just;
+        but one cannot be always laughing at a man without now and then
+        stumbling upon something witty."
+
+    16:18:34 λ. d ecstasy
+    16:31:17 λ. dvs reproof : expression of blame or censure; refutation,
+                    --- vs ---
+                    reproach: to blame, censure severely or contemptuously.
+                    ("reproach" seems the stronger term; reproof is orthogonal
+                    to civility, whereas reproach connotes a conveyance of
+                    contempt, disdain, or disgrace--not necessarily, but such
+                    are present in its definition.)
+
+    16:38:23 λ. dvs confute : to quell to silence, stillness, or surrender; to allay; 
+                    literally, to stop from boiling (both derive from "fuse" as "to melt")
+                    --- vs ---
+                    refute : to repel; to disprove by argument or evidence
+
+    16:52:03 λ. d rather, injunction
+    17:02:35 λ. phr "bent their steps thither"
+    17:06:35 λ. d ovate, obovate
+    17:15:53 λ. d coppice
+    17:22:38 λ. d occasion
+    17:59:26 λ. d diffidence
+    18:43:22 λ. d paddock
+    20:03:19 λ. d connubial
+    20:31:28 λ. d abominate
+    20:39:00 λ. d canvass
+    20:52:09 λ. q
+
+        "We all love to instruct, though we can teach only what is not worth
+        knowing."
+
+    21:57:56 λ. q
+
+        "But in such cases as these, a good memory is unpardonable. This is the
+        last time I shall ever remember it myself."
+
+
+    22:08:02 λ. q
+    
+        "How unlucky that you should have a reasonable answer to give, and that
+        I should be so reasonable as to admit it!"
+
+    22:08:52 λ. phr "their characters suffered no revolution"
+|]
+
+brokenOut =
+  [ TabTsEntry
+      ( 0
+      , TimeStamp { hr = 9 , min = 44 , sec = 14 }
+      , Read "Pride And Prejudice" "Jane Austen"
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 44 , sec = 45 }
+      , Def (Defn Nothing [ "repine" , "abseil" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 45 , sec = 7 }
+      , Def
+          (Defn
+             Nothing
+             [ "repute" , "dispute" , "compute" , "impute" , "putative" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 49 , sec = 36 }
+      , Def (Defn Nothing [ "disoblige" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 51 , sec = 8 }
+      , Def (Defn Nothing [ "perforce" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 51 , sec = 15 }
+      , Def (Defn Nothing [ "manifold" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 52 , sec = 32 }
+      , Quotation
+          "Is not general incivility the very essence of love?" "" Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 54 , sec = 11 }
+      , Quotation
+          "There are few people whom I really love and fewer still of whom I think well."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 54 , sec = 32 }
+      , Quotation
+          "We must not be so ready to fancy ourselves intentionally injured."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 9 , min = 54 , sec = 53 }
+      , Quotation
+          "The stupidity with which he was favored by nature, must guard his courtship from any charm that could make a woman wish for its continuance."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 11 , sec = 0 }
+      , Phr (Plural [ "\"as well by...as...\"" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 11 , sec = 22 }
+      , Phr (Plural [ "\"despair of\"" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 11 , sec = 33 }
+      , Phr (Plural [ "\"savors of\"" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 13 , sec = 40 }
+      , Def (Defn Nothing [ "insupportable" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 14 , sec = 18 }
+      , Def (Defn Nothing [ "paling" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 10 , min = 27 , sec = 13 }
+      , Def (Defn Nothing [ "trepidity" , "trepid" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 14 , min = 10 , sec = 42 }
+      , Def (Defn Nothing [ "fortnight" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 14 , min = 20 , sec = 14 }
+      , Def (Defn Nothing [ "politic" , "impolitic" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 14 , min = 21 , sec = 21 }
+      , Def
+          (DefVersus
+             "celerity"
+             "rapidity of motion; swiftness"
+             "alacrity"
+             "cheerful readiness; sprightliness; promptness")
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 3 , sec = 36 }
+      , Def (Defn Nothing [ "rencontre" , "rencounter" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 6 , sec = 9 }
+      , Def (Defn Nothing [ "immure" , "durance" , "inure" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 10 , sec = 55 }
+      , Def (Defn Nothing [ "tractable" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 11 , sec = 31 }
+      , Def (Defn Nothing [ "officious" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 16 , sec = 31 }
+      , Def (Defn Nothing [ "intimate" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 26 , sec = 12 }
+      , Def (Defn Nothing [ "verdure" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 49 , sec = 25 }
+      , Def (Defn Nothing [ "obeisance" , "obedience" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 53 , sec = 15 }
+      , Def (Defn Nothing [ "derogate" , "derogation" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 57 , sec = 40 }
+      , Phr (Plural [ "\"hopeless of remedy\"" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 15 , min = 57 , sec = 56 }
+      , Def (Defn Nothing [ "upbraid" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 16 , min = 17 , sec = 37 }
+      , Quotation
+          "One may be continually abusive to a man without saying any thing just; but one cannot be always laughing at a man without now and then stumbling upon something witty."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 16 , min = 18 , sec = 34 }
+      , Def (Defn Nothing [ "ecstasy" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 16 , min = 31 , sec = 17 }
+      , Def
+          (DefVersus
+             "reproof"
+             "expression of blame or censure; refutation,"
+             "reproach"
+             "to blame, censure severely or contemptuously. (\"reproach\" seems the stronger term; reproof is orthogonal to civility, whereas reproach connotes a conveyance of contempt, disdain, or disgrace--not necessarily, but such are present in its definition.)")
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 16 , min = 38 , sec = 23 }
+      , Def
+          (DefVersus
+             "confute"
+             "to quell to silence, stillness, or surrender; to allay; literally, to stop from boiling (both derive from \"fuse\" as \"to melt\")"
+             "refute"
+             "to repel; to disprove by argument or evidence")
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 16 , min = 52 , sec = 3 }
+      , Def (Defn Nothing [ "rather" , "injunction" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 17 , min = 2 , sec = 35 }
+      , Phr (Plural [ "\"bent their steps thither\"" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 17 , min = 6 , sec = 35 }
+      , Def (Defn Nothing [ "ovate" , "obovate" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 17 , min = 15 , sec = 53 }
+      , Def (Defn Nothing [ "coppice" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 17 , min = 22 , sec = 38 }
+      , Def (Defn Nothing [ "occasion" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 17 , min = 59 , sec = 26 }
+      , Def (Defn Nothing [ "diffidence" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 18 , min = 43 , sec = 22 }
+      , Def (Defn Nothing [ "paddock" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 3 , sec = 19 }
+      , Def (Defn Nothing [ "connubial" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 31 , sec = 28 }
+      , Def (Defn Nothing [ "abominate" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 39 , sec = 0 }
+      , Def (Defn Nothing [ "canvass" ])
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 20 , min = 52 , sec = 9 }
+      , Quotation
+          "We all love to instruct, though we can teach only what is not worth knowing."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 21 , min = 57 , sec = 56 }
+      , Quotation
+          "But in such cases as these, a good memory is unpardonable. This is the last time I shall ever remember it myself."
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 22 , min = 8 , sec = 2 }
+      , Quotation
+          "How unlucky that you should have a reasonable answer to give, and that I should be so reasonable as to admit it!"
+          ""
+          Nothing
+      )
+  , TabTsEntry
+      ( 1
+      , TimeStamp { hr = 22 , min = 8 , sec = 52 }
+      , Phr (Plural [ "\"their characters suffered no revolution\"" ])
+      )
+  ]

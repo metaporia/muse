@@ -98,6 +98,8 @@ import Text.Trifecta hiding (Rendering, Span)
 --    > <character>: <paragraph>
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
 --
+-- □  fail (per file) on an non-empty entry without a valid prefix
+--
 -- □  (!!) ignore trailing comma in 'Defn'
 --
 -- □  (!!) allow empty quote body
@@ -380,6 +382,9 @@ bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
 
 emptyLines :: Parser [String]
 emptyLines = some . try $ manyTill space newline
+
+spacesNotNewline :: Parser ()
+spacesNotNewline = void $ many $ oneOf ['\t', ' ']
 
 -- | Runs parser and returns tuple of successfully parsed item and remainder
 pTup :: Parser a -> String -> Text.Trifecta.Result (a, String)

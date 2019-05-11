@@ -145,8 +145,9 @@ dump =
 
 nullE :: Parser Entry
 nullE =
-  const Null <$>
-  void (skipOptional (many space *> (newline <?> "newline here")))
+  let --x :: _
+      x = skipOptional (many space *> (newline <?> "newline here"))
+  in const Null <$> x
 
 data LogEntry
   = Dump String
@@ -158,36 +159,29 @@ instance ToJSON LogEntry where
 
 instance FromJSON LogEntry
 
-entry :: Parser (Int, TimeStamp, Entry)
-entry = do
-  indent <- skipOptional (try emptyLines) *> tabs
-  ts <- timestamp <?> "timestamp"
-  e <-
-    (try book <|> try quotation <|> try commentary <|> try def <|> try page <|>
-     return Null -- <?> "found no valid prefix"
-     )
-  _ <- void (skipOptional emptyLines) <|> eof
-  return $ (indent, ts, e)
-
-entries :: Parser [(Int, TimeStamp, Entry)]
-entries = some entry <* skipOptional newline
-
 logEntry :: Parser LogEntry
 logEntry = do
   _ <- skipOptional (try emptyLines)
-  let entry' = do
+  let 
+      null =  do (indent, ts) <- timestamp'
+                 _ <- void (skipOptional spacesNotNewline *> newline) <|> eof
+                 return $ TabTsEntry (indent, ts, Null)
+      entry' = do
         (indent, ts) <- timestamp' <?> "timestamp"
         e <-
           try book <|> try quotation <|> try commentary <|> try dialogue <|>
           try def <|>
           try page <|>
-          try phrase <|>
-          lpad nullE
+          try phrase
         return $ TabTsEntry (indent, ts, e)
-  e <- try dump <|> entry'
+  e <- try dump <|> try null <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
   return $ e
 
+tmp = do 
+    x <- lpad nullE 
+    _ <- void (skipOptional emptyLines) <|> eof
+    return x
 
 logEntries :: Parser [LogEntry]
 logEntries =

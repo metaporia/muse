@@ -5,6 +5,7 @@
 - correct application of headword predicates: now each predicate must be
   satisified by at least one headword in order for the definition entry to
   number amongst the search results.
+- fail to parse entries without valid prefixes
 
 ## [0.2.0] - 2019-03-13
 ### Added

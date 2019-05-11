@@ -489,7 +489,7 @@ tDia =
         e = utctDay day
         mkSearch = Search s e []
         search =
-          mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "MARGO"]}
+          mkSearch initBucketList {dialoguesPreds = [T.isInfixOf $ T.toCaseFold "MARGO"]}
         search' = mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "mom"]}
         search'' = mkSearch initBucketList
     query acid ViewDB >>= \db@DB {dialogues}
@@ -550,7 +550,7 @@ tQuote =
     let s = addDays (-182) $ utctDay day -- ~ six months
         e = utctDay . incrMin . incrMin . incrMin $ day''
         byWilde (Attribution _ a) =
-          T.isInfixOf "Oscar" a && T.isInfixOf "Wilde" a
+          T.isInfixOf "oscar" a && T.isInfixOf "wilde" a
         search =
           Search s e [] initBucketList {quotesPreds = [T.isInfixOf "sarcasm"]}
         search' =
@@ -681,7 +681,7 @@ tDefs =
       -- no meaning preds
       filterDefs db search''' defs `shouldBe` [jonquil'', jonquil''']
       -- both
-      filterDefs db search'''' defs `shouldBe` [serry', jostle']
+      filterDefs db search'''' defs `shouldBe` [envy', serry', jostle' ]
       -- versus no meaning preds
       filterDefs db searchVs defs `shouldBe` [disen']
       -- versus no headword preds
@@ -718,22 +718,22 @@ tPhrases =
         tacit = Plural ["supercilious taciturnity"]
         arbiter =
           Defined
-            "ARBITER ELEGANTIARUM"
+            "arbiter elegantiarum"
             "a judge of artistic taste and etiquette."
         amour = Defined "AMOUR PROPRE" "self-love, -esteem"
         byWay =
-          Defined "WAY OF BEING" "via; in the condition of position of being"
+          Defined "way of being" "via; in the condition of position of being"
         sine =
           Defined
-            "BY SINE QUA NON"
+            "by sine qua non"
             "an essential condition; something necessary"
         irony = Plural ["prophylactic irony"]
         mezzo =
           Defined
-            "BY MEZZO DEL CAMMIN DI NOSTRA VITA"
-            "\"When I had journeyed half of our life's way\" -- \"Dante's Inferno\""
+            "by mezzo del cammin di nostra vita"
+            "\"when i had journeyed half of our life's way\" -- \"dante's inferno\""
         trompe =
-          Defined "TROMPE L'ŒIL" "of art having an illusory third dimension."
+          Defined "trompe l'œil" "of art having an illusory third dimension."
     update acid $ UpdatePhrase day' ever Nothing
     update acid $ UpdatePhrase day'' tacit Nothing
     update acid $ UpdatePhrase day''' arbiter Nothing
@@ -781,7 +781,7 @@ tPhrases =
       -- no meaning preds
       filterPhrases
         db
-        (Search s e [] initBucketList {phrasesPreds = ([isInfixOf "BY"], [])})
+        (Search s e [] initBucketList {phrasesPreds = ([isInfixOf "by"], [])})
         phrases `shouldBe`
         [sine', mezzo']
       -- both
@@ -792,7 +792,7 @@ tPhrases =
            e
            []
            initBucketList
-           {phrasesPreds = ([isInfixOf "TROMPE"], [isInfixOf "illusory third"])})
+           {phrasesPreds = ([isInfixOf "trompe"], [isInfixOf "illusory third"])})
         phrases `shouldBe`
         [trompe']
 

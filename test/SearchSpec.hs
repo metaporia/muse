@@ -39,7 +39,9 @@ showTest' s ap tp preds = flip filterWith' s <$> input ap tp preds >>= showAll
 
 test' ap tp preds = flip filterWith' sample <$> input ap tp preds
 
-test ap tp preds = flip filterWith' tDialogueFilter <$> input ap tp preds
+test'' ap tp preds = flip filterWith' tDialogueFilter <$> input ap tp preds
+
+test = hspec spec
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
@@ -121,7 +123,7 @@ spec
   describe "all type filters applied" $ do
     it "all" $
       example $ do
-        test
+        test''
           Nothing
           Nothing
           [Just isPhrase, Just isQuote, Just isDef, Just isDialogue] >>=
@@ -129,32 +131,41 @@ spec
   describe "dialogue quote filtration" $ do
     it "tGetDialogueOrQuote" $
       example $ do
-        test Nothing Nothing [Just isQuote, Just isDialogue] >>=
+        test'' Nothing Nothing [Just isQuote, Just isDialogue] >>=
           (`shouldBe` tGetDialogueOrQuoteOut)
   describe "dialogue filtration" $ do
     it "tGetDialogue" $
       example $ do
-        test Nothing Nothing [Just isDialogue] >>= (`shouldBe` tGetDialogueOut)
+        test'' Nothing Nothing [Just isDialogue] >>= (`shouldBe` tGetDialogueOut)
   describe "definition filtration" $ do
     it "tDefs" $
-      example $ do test Nothing Nothing [Just isDef] >>= (`shouldBe` tDefs)
+      example $ do test'' Nothing Nothing [Just isDef] >>= (`shouldBe` tDefs)
   describe "quote filtration" $ do
     it "tQuotes" $
-      example $ do test Nothing Nothing [Just isQuote] >>= (`shouldBe` tQuotes)
+      example $ do test'' Nothing Nothing [Just isQuote] >>= (`shouldBe` tQuotes)
   describe "phrases filtration" $ do
     it "tPhrases" $
       example $ do
-        test Nothing Nothing [Just isPhrase] >>= (`shouldBe` tPhrases)
+        test'' Nothing Nothing [Just isPhrase] >>= (`shouldBe` tPhrases)
   describe "author match (for this test data should return all)" $ do
     it "tAuthor" $
       example $ do
-        test (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
+        test'' (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
   -- auth & type 
   describe "-a Woolf -q" $ do
     it "tQuote" $
       example $ do
         test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote] >>=
           (`shouldBe` authAndQuote)
+  -- TODO headword search with multiple on Plural definition
+  describe "`--dh recusant` on plural defn" $ do 
+    it "tTitle" $
+      example $ do
+        True `shouldBe` True
+  -- TODO test headword, def body, quote body, phrase search (important to flag
+  -- regressions upon changes to search code)
+
+  --
   -- title 
   --describe "-t Lighthouse Woolf" $ do
   --  it "tQuote" $

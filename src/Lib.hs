@@ -16,6 +16,25 @@
 --
 -- TODO
 --
+-- ▣   PARSER BUG: '<ts> <unprefixed-word>'  silently fails and prevents parsing
+--    of the rest of the log file.
+--
+-- ▣  (!!!) SEARCH BUG: search ```muse -c search -s3y -d --dh obeisance```
+--    fails to yield the "obeisance, obedience" entry at 15:49:25 on 19.03.02;
+--    likewise for another plural definition entry containing "inure",
+--    "immure", and "durance" on the same day.
+--
+-- ▣  (!!) use case insensitive search
+--
+-- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files 
+--    and/or update parser to accomodate desirable aspects of the old syntax.
+--
+--    DIRECTIVE: fail loudly: WE DO NOT WANT HALF-PARSED FILES ANY MORE
+--
+--
+-- □  (convenience) CLI: add `search --all` option to include all entries in
+--    search.
+--
 -- □  switch to list identifying characteristics of entries, viz. full
 --    truncated UTCTime and entry variant
 -- □  fetch entry by timestamp & variant

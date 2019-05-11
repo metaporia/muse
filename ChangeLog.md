@@ -7,6 +7,9 @@
   number amongst the search results.
 - fail to parse entries without valid prefixes
 
+### Added
+- case-insensitive search (of all searchables)
+
 ## [0.2.0] - 2019-03-13
 ### Added
 - new subcommand "lastRead" which pretty prints the most recent "Read" entry

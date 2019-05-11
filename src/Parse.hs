@@ -98,7 +98,7 @@ import Text.Trifecta hiding (Rendering, Span)
 --    > <character>: <paragraph>
 --    (and so on; consume half of or arbitrarily many character-attributed lines)
 --
--- □  fail (per file) on an non-empty entry without a valid prefix
+-- □  fail (per file) on an entry without a valid prefix
 --
 -- □  (!!) ignore trailing comma in 'Defn'
 --

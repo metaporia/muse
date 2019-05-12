@@ -1,11 +1,15 @@
 # Changelog for muse
 
 ## Unreleased changes
+
+## [0.2.1] - 2019-05-12
 ### Fixed 
 - correct application of headword predicates: now each predicate must be
   satisified by at least one headword in order for the definition entry to
   number amongst the search results.
 - fail to parse entries without valid prefixes
+- fix CLI so that it doesn't break when invoked without a subcommand: it now
+  prints its version information.
 
 ### Added
 - case-insensitive search (of all searchables)

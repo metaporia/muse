@@ -21,7 +21,7 @@
 resolver: lts-9.21
 
 ghc-options:
-  "$locals" : -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns 
+  "$locals" : -fwarn-incomplete-patterns -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns 
   #  "$locals" : -Wall -Wredundant-constraints -Wunused-binds -Wunused-imports -Wincomplete-record-updates -Wincomplete-uni-patterns -Wcompat
   "$everything" : -O2
 

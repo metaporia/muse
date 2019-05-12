@@ -132,8 +132,8 @@ import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+version :: String
+versino = "muse 0.2.1"
 
 
 -- Questions:
@@ -398,7 +398,7 @@ toplevel' today =
 
 toplevel'' d =
   toplevel' d <|>
-  (infoOption "muse 0.2.0" (long "version" <> short 'V') <*> pure Bare) -- VERSION
+  (infoOption version(long "version" <> short 'V') <*> pure Bare) -- VERSION
 
 data SubCommand'
   = Search' (Variants Store.Search)
@@ -407,6 +407,7 @@ data SubCommand'
   | Lint'
   | Init' Bool
           Bool
+
 
 data Opts' = Opts' { colorize' :: Bool , subcommand' :: SubCommand' } | Bare 
 
@@ -616,7 +617,7 @@ main' = do
     dispatch'
 
 dispatch' :: Opts' -> IO ()
---dispatch' opts@(Opts' _ True _) = putStrLn "muse 0.1.5" -- VERSION
+dispatch' Bare = putStrLn  version
 dispatch' opts@(Opts' color  (Search' s)) = do
   mc <- loadMuseConf
   bracket

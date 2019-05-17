@@ -30,6 +30,10 @@
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
 --
+-- □  (!) fix phrase meaning rendering: newlines are not stripped, so what
+--    indentation suits the log file's plain text origin may not suit the
+--    CLI's prettified output.
+--
 -- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files 
 --    and/or update parser to accomodate desirable aspects of the old syntax.
 --

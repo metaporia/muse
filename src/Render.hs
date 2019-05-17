@@ -145,13 +145,12 @@ instance ColRender Phrase where
   colRender col (Plural ps) =
     colorize col blue $ colRender col (T.pack $ intercalate ", " ps) >> putStrLn ""
   colRender col (Defined p m) =
-    colorize col green (putStr $ upper p <> ": ") >> colRender col (T.pack m) >> putStrLn ""
+    colorize col green (putStr $ upper p <> ": ") >> colRender col (T.pack $ trim' m) >> putStrLn ""
 
 instance ColRender QuoteBody where
   colRender col =
     colorize col cyan .
-    putStr . 
-    T.unpack .
+    T.putStr .
     T.unlines .
     applyToRest ((T.replicate indentation " ") <>) .
     wrapTextToLines defaultWrapSettings 79 . T.pack . \(QuoteBody s) -> s
@@ -163,8 +162,7 @@ instance ColRender a => ColRender (Maybe a) where
 
 instance ColRender T.Text where
   colRender _ =
-    putStr .
-    T.unpack .
+    T.putStr .
     T.intercalate "\n" .
     applyToRest ((T.replicate indentation " ") <>) .
     wrapTextToLines defaultWrapSettings 79

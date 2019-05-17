@@ -26,13 +26,13 @@
 --
 -- ▣   use case insensitive search
 --
+-- ▣   fix phrase meaning rendering: newlines are not stripped, so what
+--    indentation suits the log file's plain text origin may not suit the
+--    CLI's prettified output.
+--
 -- □  (!!) fix change phrase search option to --ph; standing for "phrase head":
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
---
--- □  (!) fix phrase meaning rendering: newlines are not stripped, so what
---    indentation suits the log file's plain text origin may not suit the
---    CLI's prettified output.
 --
 -- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files 
 --    and/or update parser to accomodate desirable aspects of the old syntax.
@@ -141,7 +141,7 @@ import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 
 version :: String
-versino = "muse 0.2.1"
+version = "muse 0.2.1"
 
 
 -- Questions:

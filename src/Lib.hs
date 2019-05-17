@@ -19,12 +19,16 @@
 -- ▣   PARSER BUG: '<ts> <unprefixed-word>'  silently fails and prevents parsing
 --    of the rest of the log file.
 --
--- ▣  (!!!) SEARCH BUG: search ```muse -c search -s3y -d --dh obeisance```
+-- ▣   SEARCH BUG: search ```muse -c search -s3y -d --dh obeisance```
 --    fails to yield the "obeisance, obedience" entry at 15:49:25 on 19.03.02;
 --    likewise for another plural definition entry containing "inure",
 --    "immure", and "durance" on the same day.
 --
--- ▣  (!!) use case insensitive search
+-- ▣   use case insensitive search
+--
+-- □  (!!) fix change phrase search option to --ph; standing for "phrase head":
+--    as yet the --phrase is both a flag and an option, the latter having been
+--    shadowed by the former.
 --
 -- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files 
 --    and/or update parser to accomodate desirable aspects of the old syntax.

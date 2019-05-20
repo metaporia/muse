@@ -18,6 +18,8 @@
 --
 -- TODO
 --
+-- □   (!!) remove redundant 'toLower' calls form poorly executed
+--     case-insensitivity refactor.
 -- □  finish acid-state based storage/search implementation
 --    benchmark against old (expose two @main@s for first round; if it's hard to
 --    tell with the UNIX `time` CLI, use a hs benchmarking lib, like "criterion")

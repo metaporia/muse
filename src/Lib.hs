@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, ApplicativeDo, NamedFieldPuns, RecordWildCards #-}
+  OverloadedStrings, ApplicativeDo, NamedFieldPuns, RecordWildCards
+  #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
@@ -46,7 +47,6 @@
 -- □  switch to list identifying characteristics of entries, viz. full
 --    truncated UTCTime and entry variant
 -- □  fetch entry by timestamp & variant
-
 -- □  create absolute paths to entries by appending log file name and entry
 --    timestamp; then store log of review times of entry ids, w type of entry;
 --    this will ease efficient review of quotes.
@@ -56,93 +56,95 @@
 module Lib where
 
 import Control.Exception (bracket)
+import Control.Exception (bracket)
+import Control.Monad ((>=>), join, void)
 import Control.Monad ((>=>), join, void)
 import Control.Monad.State
+import Control.Monad.State
+import Data.Acid
 import Data.Acid
 import Data.Acid.Advanced (query', update')
+import Data.Acid.Advanced (query', update')
+import Data.Acid.Local (createCheckpointAndClose)
 import Data.Acid.Local (createCheckpointAndClose)
 import Data.Acid.Remote
+import Data.Acid.Remote
+import Data.Aeson hiding (Null)
 import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (toLower)
 import Data.Foldable (fold)
-import Data.IxSet (Indexable(..), IxSet(..), (@=), getOne, ixFun, ixSet, updateIx)
-import qualified Data.IxSet
-import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
-import Data.Maybe (catMaybes, fromJust, isJust)
-import Data.Monoid ((<>))
-import qualified Data.Monoid as M
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import Data.Time
-import Data.Time.Calendar
-import Data.Time.Clock (utctDay)
-import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
-import Debug.Trace (trace)
-import Helpers
-import Options.Applicative
-import Parse
-import Parse.Entry
-import Prelude hiding (init, log, lookup)
-import Render
-import Search
-import Store hiding (Author, Search, Search', Title, defs, quotes)
-import qualified Store
-import Store.Render
-import System.Directory
-       (createDirectoryIfMissing, doesFileExist, getModificationTime,
-        listDirectory)
-import System.Environment (getEnv)
-import System.Exit (exitFailure, exitSuccess)
-import Text.Show.Pretty (pPrint)
-import qualified Text.Trifecta as Tri
-import qualified Text.Trifecta.Result as Tri
-import Control.Exception (bracket)
-import Control.Monad ((>=>), join, void)
-import Control.Monad.State
-import Data.Acid
-import Data.Acid.Advanced (query', update')
-import Data.Acid.Local (createCheckpointAndClose)
-import Data.Acid.Remote
-import Data.Aeson hiding (Null)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import Data.Foldable (fold)
+import Data.IxSet
+       (Indexable(..), IxSet(..), (@=), getOne, ixFun, ixSet, updateIx)
+import qualified Data.IxSet
+import Data.IxSet
+       (Indexable(..), IxSet(..), (@=), getOne, ixFun, ixSet, updateIx)
+import qualified Data.IxSet
+import Data.List
+       (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
 import Data.List
        (intercalate, isInfixOf, isPrefixOf, isSuffixOf, sort)
 import Data.Maybe (catMaybes, fromJust, isJust)
+import Data.Maybe (catMaybes, fromJust, isJust)
+import Data.Monoid ((<>))
+import qualified Data.Monoid as M
 import Data.Monoid ((<>))
 import qualified Data.Monoid as M
 import qualified Data.Text as T
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import qualified Data.Text.IO as T
 import Data.Time
+import Data.Time
+import Data.Time.Calendar
 import Data.Time.Calendar
 import Data.Time.Clock (utctDay)
+import Data.Time.Clock (utctDay)
 import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
-import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
-import qualified Data.IxSet
+import Data.Yaml.Config (load, lookup, lookupDefault, subconfig)
+import Debug.Trace (trace)
+import Helpers
 import Helpers
 import Options.Applicative
+import Options.Applicative
+import Parse
 import Parse
 import Parse.Entry
+import Parse.Entry
+import Prelude hiding (init, log, lookup)
 import Prelude hiding (init, log, lookup)
 import Render
+import Render
+import Search
 import Search
 import Store hiding (Author, Search, Search', Title, defs, quotes)
 import qualified Store
+import Store hiding (Author, Search, Search', Title, defs, quotes)
+import qualified Store
+import Store.Render
 import Store.Render
 import System.Directory
        (createDirectoryIfMissing, doesFileExist, getModificationTime,
         listDirectory)
+import System.Directory
+       (createDirectoryIfMissing, doesFileExist, getModificationTime,
+        listDirectory)
 import System.Environment (getEnv)
+import System.Environment (getEnv)
+import System.Exit (exitFailure, exitSuccess)
+import Text.Show.Pretty (pPrint)
 import Text.Show.Pretty (pPrint)
 import qualified Text.Trifecta as Tri
+import qualified Text.Trifecta as Tri
+import qualified Text.Trifecta.Result as Tri
 import qualified Text.Trifecta.Result as Tri
 
 version :: String
 version = "muse 0.2.1"
-
 
 -- Questions:
 --
@@ -250,38 +252,55 @@ searchTmp today = do
   t <- fmap consumeSearchType <$> title
   pure (TmpInput w today a t [ds, qs, ps, dias])
 
-newtype Variants a = Variants (a, Bool, Bool, Bool, Bool, Bool, Bool)
+newtype Variants a =
+  Variants (a, Bool, Bool, Bool, Bool, Bool, Bool)
 
 search' :: Day -> Parser (Variants Store.Search)
 search' today = do
-  attrs <- fmap (<>) 
-          (fmap (\s (Attribution _ a) -> s `isInfixOf` (T.unpack a)) <$> authorS) 
-          <*> 
-          (fmap (\s (Attribution t _) -> s `isInfixOf` (T.unpack t)) <$> titleS) 
+  attrs <-
+    fmap
+      (<>)
+      (fmap
+         (\s (Attribution _ a) ->
+            (toLower <$> s) `isInfixOf` (T.unpack $ T.toLower a)) <$>
+       authorS) <*>
+    (fmap
+       (\s (Attribution t _) ->
+          (toLower <$> s) `isInfixOf` (T.unpack $ T.toLower t)) <$>
+     titleS)
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
   ps <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
   qs <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
-  dials <- switch $ long "dialogues" <> long "dias" <> long "dia" <> long "dial" <> help "Collect dialogues."
+  dials <-
+    switch $
+    long "dialogues" <> long "dias" <> long "dia" <> long "dial" <>
+    help "Collect dialogues."
   cmts <- switch $ long "comments" <> long "cmts" <> help "Collect comments."
   dmps <- switch $ long "dumps" <> long "dmps" <> help "Collect dumps."
-
   -- case fix: all search strings are set to lower case (add switch to perform
   -- case *sensitive* search? tbd)
-  s <- (subRelDur today <$> since)
+  s <- subRelDur today <$> (sinceAll <|> since)
   dhw <- (fmap . fmap) (isInfixOf . fmap toLower) defHW
-  dm <- (fmap . fmap) (isInfixOf . fmap toLower ) defMeaning
+  dm <- (fmap . fmap) (isInfixOf . fmap toLower) defMeaning
   q <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) quoteBody
   phw <- (fmap . fmap) (isInfixOf . fmap toLower) phraseHW
   pm <- (fmap . fmap) (isInfixOf . fmap toLower) phraseMeaning
   dias <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dialogueBody
   comments <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) commentBody
   dumps <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dumpBody
-  return $ Variants $ 
-    (Store.Search
-       s
-       today
-       attrs
-       (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments), ds, ps, qs, dials, cmts, dmps)
+  return $
+    Variants $
+    ( Store.Search
+        s
+        today
+        attrs
+        (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments)
+    , ds
+    , ps
+    , qs
+    , dials
+    , cmts
+    , dmps)
 
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) =
@@ -365,7 +384,6 @@ ignore =
 color :: Parser Bool
 color =
   switch (long "color" <> short 'c' <> help "Colorize output; off by default")
-
   --(infoOption "muse 0.1.5" $
   -- long "version" <> short 'V' <> help "Display version information") <*>
 
@@ -388,8 +406,10 @@ toplevel' today =
       command
         "lastRead"
         (info
-          (FetchLastRead' <$> switch (long "suppress-newline" <> help "Suppress trailing newline") <**> helper)
-          (progDesc "Fetches most recent \"read\" entry.")) <>
+           (FetchLastRead' <$>
+            switch (long "suppress-newline" <> help "Suppress trailing newline") <**>
+            helper)
+           (progDesc "Fetches most recent \"read\" entry.")) <>
       command
         "lint"
         (info
@@ -403,10 +423,9 @@ toplevel' today =
               "Initialize config file, cache directory, and entry log\
              \ directory; parse all entries in 'log-dir'"))))
 
-
 toplevel'' d =
   toplevel' d <|>
-  (infoOption version(long "version" <> short 'V') <*> pure Bare) -- VERSION
+  (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
 
 data SubCommand'
   = Search' (Variants Store.Search)
@@ -416,8 +435,10 @@ data SubCommand'
   | Init' Bool
           Bool
 
-
-data Opts' = Opts' { colorize' :: Bool , subcommand' :: SubCommand' } | Bare 
+data Opts'
+  = Opts' { colorize' :: Bool
+          , subcommand' :: SubCommand' }
+  | Bare
 
 toplevel :: Day -> Parser Opts
 toplevel today =
@@ -504,7 +525,8 @@ quoteBody :: Parser [String]
 quoteBody =
   fmap (either (const []) id . parsePreds) $
   option str $
-  long "quote-body" <> long "qb" <> value "" <> help "Collect satisfactory quotes."
+  long "quote-body" <> long "qb" <> value "" <>
+  help "Collect satisfactory quotes."
 
 -- variant flag
 dialogueBody :: Parser [String]
@@ -526,7 +548,9 @@ commentBody =
 dumpBody :: Parser [String]
 dumpBody =
   fmap (either (const []) id . parsePreds) $
-  option str $ long "dump-body" <> long "db" <> value [] <> help "Collect satisfactory dumps."
+  option str $
+  long "dump-body" <> long "db" <> value [] <>
+  help "Collect satisfactory dumps."
 
 -- end of rewrite
 authorS :: Parser [String]
@@ -592,6 +616,10 @@ within =
      short 'w' <>
      value (RelDur 0 6 0))
 
+-- | FIXME: cache date of first log file.
+sinceAll :: Parser RelDur
+sinceAll = flag' (RelDur 10 0 0) (short 'a' <> long "all")
+
 since :: Parser RelDur
 since =
   option
@@ -609,24 +637,25 @@ mainOld = do
   execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch")) >>=
     dispatch
 
-
 -- main = main'
 main = execParser (info cli (fullDesc <> header "none")) >>= pPrint
 
-cli  = do dm <- defMeaning
-          dh <- defHW
-          d <- switch (long "definitions" <> short 'd')  
-          return (dm, dh, d)
+cli = do
+  dm <- defMeaning
+  dh <- defHW
+  d <- switch (long "definitions" <> short 'd')
+  return (dm, dh, d)
 
 main' :: IO ()
 main' = do
   today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch")) >>=
+  execParser
+    (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch")) >>=
     dispatch'
 
 dispatch' :: Opts' -> IO ()
-dispatch' Bare = putStrLn  version
-dispatch' opts@(Opts' color  (Search' s)) = do
+dispatch' Bare = putStrLn version
+dispatch' opts@(Opts' color (Search' s)) = do
   mc <- loadMuseConf
   bracket
     -- FIXME
@@ -647,14 +676,15 @@ dispatch' opts@(Opts' color (FetchLastRead' suppressNewline)) = do
     (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     closeAcidState -- acceptable for read only access?
     (\acid -> do
-      let put = case suppressNewline of
-                  True -> T.putStr
-                  False -> T.putStrLn -- default
-      res <- query acid LastRead  
-      case res of
-        Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
-        Nothing -> exitFailure) 
-dispatch' (Opts' color  (Parse' it)) = do
+       let put =
+             case suppressNewline of
+               True -> T.putStr
+               False -> T.putStrLn -- default
+       res <- query acid LastRead
+       case res of
+         Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
+         Nothing -> exitFailure)
+dispatch' (Opts' color (Parse' it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
   s <-
@@ -719,11 +749,10 @@ dispatch opts@(Opts color FetchLastRead) = do
     (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     closeAcidState -- acceptable for read only access?
     (\acid -> do
-      res <- query acid LastRead  
-      case res of
-        Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
-        Nothing -> exitFailure) 
-
+       res <- query acid LastRead
+       case res of
+         Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
+         Nothing -> exitFailure)
 dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
@@ -1059,7 +1088,6 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
     then putStrLn "\nSuppressing entry parse error output"
     else return ()
   bracket
-
     (openLocalStateFrom ((T.unpack home) ++ "/.muse/state/DB" :: String) initDB)
     createCheckpointAndClose
     (\acid -> do
@@ -1088,4 +1116,5 @@ colView = do
   pPrint r
 
 exec p = execParserPure defaultPrefs (info p (fullDesc <> header "")) . words
+
 exec' p = execParserPure defaultPrefs (info p (fullDesc <> header "")) . words

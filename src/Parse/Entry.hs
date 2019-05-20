@@ -123,6 +123,10 @@ def = do
 page :: Parser Entry
 page = do
   _ <- skipOptional (many space)
+  -- FIXME parse prefix in same pass as digits: it induces a redundancy
+  -- but should avoid the inexhaustive case expression, which seems in poor
+  -- taste.
+  --
   p <-
     try (symbolic 'p') <|> try (symbolic 's') <|> try (symbolic 'e') <|>
     symbolic 'f'

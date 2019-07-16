@@ -28,6 +28,15 @@ import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import qualified Text.Trifecta.Result as Tri
 
+-- TODO BUG `muse -c search --all -d -t Warlock` does not yield the expected
+-- "concho" definition. Is this a LogEntry entry problem (i.e., incorrect
+-- attribute tagging) or a search issue?
+--
+--  So it's a tagging issue: there are three top-level Read entries in one
+--  day's log file, and though the indentation parsing succeeds, all the
+--  singly indented entries are attributed to the first Read entry, not the
+--  closest parent Read entry.
+
 -- □  test `--title` filters: 
 --    □  by themselves,
 --    □  with type preds,

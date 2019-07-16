@@ -31,6 +31,11 @@
 --    indentation suits the log file's plain text origin may not suit the
 --    CLI's prettified output.
 --
+-- □   (!!!) usablility: dispatch bucket filters so that a option for a given
+--     flag, say, `--qb <word>`, implies the presence of its associated bucket type 
+--     filter, in this
+--     case, `-q`.
+--
 -- □  (!!) fix change phrase search option to --ph; standing for "phrase head":
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
@@ -54,7 +59,6 @@
 --    have an intuitive one.
 -----------------------------------------------------------------------------
 module Lib where
-
 import Control.Exception (bracket)
 import Control.Exception (bracket)
 import Control.Monad ((>=>), join, void)

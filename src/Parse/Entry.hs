@@ -67,13 +67,35 @@ quotation = do
   _ <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
   pg <- optional digits
   skipOptional emptyLines
-  q <- lpad $ between quote quote (some $ noneOf "\"")
+  --q <- lpad $ between quote quote (some $ noneOf "\"")
+  q <- lpad $ quote'
   -- FIXME see ~/sputum/muse/19.03.01 for example of valid log the breaks
   -- auto-attribution logic.
   -- TODO discard post quote attribution when indent >= 1
   --titleAuthEtc <- untilPNoTs' $ try (void $ timestamp) <|> try (void $ symbol "...") <|> eof
   titleAuthEtc <- linesNoTs <* skipOptional eof
   return $ Quotation (intercalate " " . fmap trim . lines $ q) (trim titleAuthEtc) pg
+
+escape :: Parser String
+escape = do
+  d <- char '\\'
+  c <- oneOf "\\\"0rvtbf" -- ['\\', '"', ...]
+  return [d, c]
+
+nonEscape :: Parser Char
+nonEscape = noneOf "\\\"\0\r\t\b\f"
+
+character :: Parser String
+character = fmap return nonEscape <|> escape
+
+quote' :: Parser String
+quote' = do
+  char '"'
+  s <- many character
+  char '"'
+  return $ concat s
+
+
 
 -- | Parse an commentary entry (body, without timestamp) of the form:
 --

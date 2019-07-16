@@ -384,6 +384,9 @@ addDay day utc le =
         f x acc
           | isIndentedTo 1 x =
             acc >>= \les -> (addLogEntry day x tag >> return les)
+          -- FIXME this simply adds read entries as top level entries, but
+          -- then returns to tagging the rest of the singly indented entries
+          -- with the _first_ tag found, not the latest tag.
           | otherwise = (x :) <$> acc
 
 data Attribution =

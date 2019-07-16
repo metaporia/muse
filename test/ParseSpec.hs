@@ -18,11 +18,15 @@ import Data.Time
 import Helpers
 import Parse
 import Parse.Entry
+import Data.Maybe (fromJust)
+import Data.Text as T
+import Data.Text.IO as T
 import Prelude hiding (min)
 import Test.Hspec
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta
+import Control.Applicative 
 import qualified Text.Trifecta.Result as Tri
 
 tparse :: String -> Result [LogEntry]
@@ -767,6 +771,11 @@ p = parse logEntries
 
 pp = pPrint . parse logEntries
 
+br = [r|"Mary had neither genius nor taste; and though vanity had given her
+application, it had \"likewise\" given her a pedantic air and a conceited
+manner, which would have injured a higher degree of excellence than she
+had reached."|]
+
 broke = [r|
 
         "Mary had neither genius nor taste; and though vanity had given her
@@ -780,6 +789,47 @@ broke = [r|
 |]
 
  
+af = [r|
+00:12:45 λ. d hermetic
+00:20:34 λ. d bona fide
+01:55:20 λ. d fenestrate
+02:10:52 λ. d coventry
+02:56:42 λ. d reliquary
+
+17:46:19 λ. read "Wuthering Heights" by Emily Brontë
+    17:46:22 λ. q
+
+        "any guest that is safe from repeating his visit can generally be
+        made welcome."
+
+    17:47:16 λ. d stark, bevy
+    17:47:50 λ. d respire, inspire
+
+17:55:37 λ. begin to read "Warlock" by Oakley Hall
+    17:55:48 λ. d prefatory, skirl
+    18:10:04 λ. d pertinacious, pert, apert, impertinent, pertinent
+    18:11:25 λ. d obdurate, obstinate
+
+18:38:51 λ. d wherefore
+18:43:51 λ. d refraining, nephalism
+
+20:10:07 λ. read "Warlock" by Oakley Hall
+    20:12:29 λ. d frock
+    20:12:38 λ. d pasear: (spa.) to (take a) walk
+    20:16:04 λ. d concho: a silver, ornamented, convex ellipsoid; often
+                          found on the belts of the garish
+    20:23:10 λ. d cheroot, blowhard
+    20:27:15 λ. d disposition, dispose, dis-
+    20:31:39 λ. d phr "congealing silence"
+    20:31:45 λ. d louvre
+    20:44:36 λ. d snub (2)
+    20:51:25 λ. d suspirant: of sighs
+    20:51:30 λ. d mezzotint : metal engraving
+    20:54:18 λ. d daguerreotype: early photograph
+    20:54:28 λ. d lithograph: copy, ink-transfer of existing image; a print
+    20:57:43 λ. d olla, stricture
+23:53:05 λ. d gnostic
+|]
 
 broken = [r|
 09:44:14 λ. read "Pride And Prejudice" by Jane Austen

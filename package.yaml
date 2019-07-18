@@ -46,6 +46,10 @@ dependencies:
 - containers
 - basic-prelude
 - optparse-applicative
+- persistent
+- persistent-sqlite
+- persistent-template
+- path-pieces
 
 library:
   source-dirs: src
@@ -60,6 +64,8 @@ library:
     - Store
     - Store.Render
     - Store.Types
+    - Store.Sqlite
+    - Store.Sqlite.Types
     - Time
 
 executables:

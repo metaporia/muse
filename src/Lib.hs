@@ -78,6 +78,7 @@ import Data.Aeson hiding (Null)
 import qualified Data.ByteString as B
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Store.Sqlite as Sql
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (toLower)
 import Data.Foldable (fold)
@@ -146,6 +147,8 @@ import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 import qualified Text.Trifecta.Result as Tri
+
+x = Sql.main
 
 version :: String
 version = "muse 0.2.1"
@@ -1098,11 +1101,14 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
        utc <- getCurrentTime
        mod <- query acid ViewLastUpdated
        entryGroups <- selectModified' fps mod >>= parseAndShowErrs
+       -- TODO sqlite persistence
+       -- acid state persistence
        sequence $
          fmap (\(d, le) -> update acid $ AddDay d utc le) $
          catMaybes $
          fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups
       -- FIXME as yet writes to acid-state and file-system persistence solutions
+      -- file-based persistence
        sequence_ $
          fmap
            (\(fp, eg) ->

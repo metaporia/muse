@@ -60,6 +60,7 @@ import qualified Text.Trifecta as Tri
 import qualified Text.Trifecta.Result as Tri
 import Time
 import Lib (runSearch')
+import qualified Store.Sqlite as Sql 
 
 test = hspec spec
 

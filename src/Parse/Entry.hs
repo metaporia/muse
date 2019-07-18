@@ -150,17 +150,12 @@ page = do
   -- taste.
   --
   p <-
-    try (symbolic 'p') <|> try (symbolic 's') <|> try (symbolic 'e') <|>
-    symbolic 'f'
+    try (const Page <$> symbolic 'p') <|> try (const PStart <$> symbolic 's') <|> try (const PEnd <$> symbolic 'e') <|>
+    const PFinish <$> symbolic 'f'
   pg <- digits <?> "page digits"
   _ <- entryBody
   _ <- many newline
-  return . PN $
-    case p of
-      'p' -> Page pg
-      's' -> PStart pg
-      'e' -> PEnd pg
-      'f' -> PFinish pg
+  return $ PN $ p pg
 
 -- TODO add test case for ~/sputum/muse/17.10.17, parses only beginning of
 -- dump and discards rest of file

@@ -244,15 +244,30 @@ searchSatisfies' (Input _ _ ap tp _) le
   where
     res = [ap <*> pure le, tp <*> pure le]
 
--- | Checks whether a 'LogEntry' is indented; for 'Dump's returns @False@.
+-- | Checks whether a 'LogEntry' is indented at least as much as the given
+-- depth; for 'Dump's returns @False@ when depth >= 1.
 isIndentedTo :: Int -> LogEntry -> Bool
-isIndentedTo depth (Dump _) = False
+isIndentedTo depth (Dump _) = depth == 0
 isIndentedTo depth (TabTsEntry (indentation, _, _)) = indentation >= depth 
+
+-- | Checks whether a 'LogEntry' is indented _exactly_ to the given depth; 
+-- for 'Dump's returns @False@ unless the given depth is 0.
+isIndentedExactlyTo :: Int -> LogEntry -> Bool
+isIndentedExactlyTo depth (Dump _) = depth == 0 
+isIndentedExactlyTo depth (TabTsEntry (indentation, _, _)) = indentation == depth 
+
+-- | Checks whether a 'LogEntry' is not indented.
+-- 'Dumps' are considered to be top-level.
+isTopLevel :: LogEntry -> Bool
+isTopLevel (TabTsEntry (0, _,  _)) = True
+isTopLevel (Dump _) = True
+isTopLevel _  = False
 
 
 isDef :: LogEntry -> Bool
 isDef = isJust . projectDefQuery
 
+isRead :: LogEntry -> Bool
 isRead = isJust . projectRead
 
 isQuote :: LogEntry -> Bool

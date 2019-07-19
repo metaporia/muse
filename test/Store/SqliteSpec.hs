@@ -1,5 +1,5 @@
-{-# LANGUAGE QuasiQuotes, NamedFieldPuns, OverloadedStrings,
-  RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables, NamedFieldPuns,
+  OverloadedStrings, RecordWildCards #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -14,26 +14,25 @@
 -----------------------------------------------------------------------------
 module Store.SqliteSpec where
 
-import Database.Persist
-import Database.Persist.Sqlite
-import Test.Hspec
-import Store.Sqlite
-import Time
+import Text.Show.Pretty (pPrint, ppShow)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.List (isInfixOf)
+import Data.Maybe (isJust, isNothing)
 import Data.Time (UTCTime(..))
 import Data.Time.Clock (getCurrentTime)
-import Parse.Entry
+import Database.Persist
+import Database.Persist.Sqlite
 import Parse
-import Control.Monad.IO.Class (liftIO)
-
+import Parse.Entry
+import Store.Sqlite
+import Test.Hspec
+import Time
 
 spec :: Spec
-spec = 
-  describe "stub" $ do
-    it "satisfies hspec test runner" $
-      1 `shouldBe` 1
+spec = describe "stub" $ do it "satisfies hspec test runner" $ 1 `shouldBe` 1
 
 demo :: IO ()
-demo = 
+demo =
   runSqlite "sqliteSpec.db" $ do
     runMigration migrateAll
     today <- liftIO $ utctDay <$> getCurrentTime
@@ -42,21 +41,51 @@ demo =
     -- revision: tagging w/ 'writeDay'
     es <- writeDay today demoLogEntries
     liftIO $ sequence $ either putStrLn print <$> es
+    -- select all by author 
+    let attributionSatisfies ::
+             MonadIO m
+          => Maybe String
+          -> Maybe String
+          -> Key ReadEntry
+          -> DB m (Maybe Bool)
+        attributionSatisfies authorInfix titleInfix readKey = do
+          maybeReadEntry <- get readKey
+          return $ do
+            let andWhenBothPresent (Just p) (Just q) = p && q
+                andWhenBothPresent (Just p) Nothing = p
+                andWhenBothPresent Nothing (Just q) = q
+                andWhenBothPresent Nothing Nothing = True
+            ReadEntry {..} <- maybeReadEntry
+            return $
+              andWhenBothPresent
+                (isInfixOf <$> authorInfix <*> pure readEntryAuthor)
+                (isInfixOf <$> titleInfix <*> pure readEntryTitle)
+        defEntrySatisfies :: MonadIO m => Entity DefEntry -> DB m (Maybe Bool, Entity DefEntry)
+        defEntrySatisfies =
+          (\e@Entity {..} -> do
+             mSatisfies <-
+               maybe
+                 (pure $ Just True)
+                 (attributionSatisfies (Just "") (Just "Lighthouse"))
+                 (defEntryAttributionTag entityVal)
+             return (mSatisfies, e))
+    defs <- selectList ([] :: [Filter DefEntry]) []
+    satisfactoryDefs <- filter (maybe True id . fst)<$> traverse defEntrySatisfies defs
+    liftIO $ traverse pPrint satisfactoryDefs
 
     --clear
-
     return ()
 
 clear :: IO ()
-clear = runSqlite "sqliteSpec.db" $ do
-          runMigration migrateAll
-          deleteWhere ([] :: [Filter DefEntry])
-          deleteWhere ([] :: [Filter ReadEntry])
-          deleteWhere ([] :: [Filter QuoteEntry])
-          deleteWhere ([] :: [Filter CommentaryEntry])
-          deleteWhere ([] :: [Filter DialogueEntry])
-          deleteWhere ([] :: [Filter PageNumberEntry])
-
+clear =
+  runSqlite "sqliteSpec.db" $ do
+    runMigration migrateAll
+    deleteWhere ([] :: [Filter DefEntry])
+    deleteWhere ([] :: [Filter ReadEntry])
+    deleteWhere ([] :: [Filter QuoteEntry])
+    deleteWhere ([] :: [Filter CommentaryEntry])
+    deleteWhere ([] :: [Filter DialogueEntry])
+    deleteWhere ([] :: [Filter PageNumberEntry])
 
 demoLogEntries :: [LogEntry]
 demoLogEntries =
@@ -93,8 +122,7 @@ demoLogEntries =
   , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
-      , Read "To the Lighthouse" "Virginia Woolf")
-
+      , Read "Silas Marner" "George Eliot (Mary Ann Evans)")
   , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}
@@ -125,5 +153,3 @@ demoLogEntries =
           "In \"To the Lighthouse\", by Virginia Woolf"
           (Just 38))
   ]
-
-

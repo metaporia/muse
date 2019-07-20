@@ -14,22 +14,89 @@
 -----------------------------------------------------------------------------
 module Store.SqliteSpec where
 
-import Text.Show.Pretty (pPrint, ppShow)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.List (isInfixOf)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.Time (UTCTime(..))
 import Data.Time.Clock (getCurrentTime)
 import Database.Persist
 import Database.Persist.Sqlite
+import Helpers
 import Parse
 import Parse.Entry
 import Store.Sqlite
 import Test.Hspec
+import Text.Show.Pretty (pPrint, ppShow)
 import Time
 
 spec :: Spec
 spec = describe "stub" $ do it "satisfies hspec test runner" $ 1 `shouldBe` 1
+
+-- | Attribution filters: if the title and author infix lists are empty, these
+-- are skipped over, otherwise they are the first in the chain of filters.
+-- Eventually, we may refactor the filters into a single pass, should
+-- performance become an issue.
+--
+-- Each record type/table/entry type will have its own custom filtration
+-- pipeline: the first segment of each will be a switch to include or exclude
+-- that entry type in the final list of (filtered) entries.
+--
+-- For instance, 'DefEntry`s will pass through the following filters in order:
+--    1. entry type inclusion/exclusion;
+--    3. date filtration (based on query's date range);
+--    3. read attribution; and
+--    4. definition variant :
+--        * phrase | definition
+--        * headwords | inline | comparision (a.t.m. implies the definition
+--        filter).
+--
+--  More generally, the pipeline reduces to steps 1-3 as above and then some
+--  entry variant specific filtration based on its unique fields. Note that
+--  when we receive a query containing a predicate on a field not common to all
+--  entry variants, only variants that have the field will be included in the
+--  output.
+attributionSatisfies ::
+     MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
+attributionSatisfies authorPreds titlePreds readKey = do
+  maybeReadEntry <- get readKey
+  return $
+    -- if the entry has no read attribution and we are given author or
+    -- title predicates, then the entry is omitted from the filtered
+    -- output.
+    case maybeReadEntry of
+      Just ReadEntry {..} ->
+        and (isInfixOf <$> authorPreds <*> pure readEntryAuthor) &&
+        and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
+      Nothing -> False
+
+taggedEntrySatisfies ::
+     (MonadIO m, Tagged record)
+  => [String]
+  -> [String]
+  -> Entity record
+  -> DB m (Maybe (Entity record))
+taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
+  case getAttributionTag entityVal of
+    Just readKey -> do
+      satisfies <- attributionSatisfies authorPreds titlePreds readKey
+      return $
+        if satisfies
+          then Just entity
+          else Nothing
+    Nothing -> return Nothing
+
+---- FIXME too many passes
+-- | Title and author search predicates test whether the given search strings
+-- are all infixes of the title or author, respectively.
+filterDefEntries ::
+     (MonadIO m, Tagged record)
+  => [String] -- | Author predicates
+  -> [String]
+  -> [Entity record]
+  -> DB m [Entity record]
+filterDefEntries authorPreds titlePreds entities =
+  fmap catMaybes $
+  sequence $ taggedEntrySatisfies authorPreds titlePreds <$> entities
 
 demo :: IO ()
 demo =
@@ -42,38 +109,10 @@ demo =
     es <- writeDay today demoLogEntries
     liftIO $ sequence $ either putStrLn print <$> es
     -- select all by author 
-    let attributionSatisfies ::
-             MonadIO m
-          => Maybe String
-          -> Maybe String
-          -> Key ReadEntry
-          -> DB m (Maybe Bool)
-        attributionSatisfies authorInfix titleInfix readKey = do
-          maybeReadEntry <- get readKey
-          return $ do
-            let andWhenBothPresent (Just p) (Just q) = p && q
-                andWhenBothPresent (Just p) Nothing = p
-                andWhenBothPresent Nothing (Just q) = q
-                andWhenBothPresent Nothing Nothing = True
-            ReadEntry {..} <- maybeReadEntry
-            return $
-              andWhenBothPresent
-                (isInfixOf <$> authorInfix <*> pure readEntryAuthor)
-                (isInfixOf <$> titleInfix <*> pure readEntryTitle)
-        defEntrySatisfies :: MonadIO m => Entity DefEntry -> DB m (Maybe Bool, Entity DefEntry)
-        defEntrySatisfies =
-          (\e@Entity {..} -> do
-             mSatisfies <-
-               maybe
-                 (pure $ Just True)
-                 (attributionSatisfies (Just "") (Just "Lighthouse"))
-                 (defEntryAttributionTag entityVal)
-             return (mSatisfies, e))
-    defs <- selectList ([] :: [Filter DefEntry]) []
-    satisfactoryDefs <- filter (maybe True id . fst)<$> traverse defEntrySatisfies defs
+    satisfactoryDefs <-
+      selectList ([] :: [Filter DefEntry]) [] >>=
+      filterDefEntries ["Woolf"] ["Light"]
     liftIO $ traverse pPrint satisfactoryDefs
-
-    --clear
     return ()
 
 clear :: IO ()

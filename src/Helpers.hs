@@ -32,6 +32,8 @@ filtermap' p f = foldr (\a bs -> if p a then f a : bs else bs) []
 filtermap :: (a -> Maybe b) -> [a] -> [b]
 filtermap f = foldr (\a bs -> maybe bs (:bs) (f a)) []
 
+filterMap = filtermap
+
 
 
 eitherToMaybe :: Either a b -> Maybe b

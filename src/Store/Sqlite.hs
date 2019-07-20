@@ -88,6 +88,24 @@ DumpEntry
     dumps String
 |]
 
+class Tagged a where
+  getAttributionTag :: a -> Maybe (Key ReadEntry)
+
+instance Tagged DefEntry where
+  getAttributionTag = defEntryAttributionTag
+
+instance Tagged QuoteEntry where
+  getAttributionTag = quoteEntryAttributionTag
+
+instance Tagged CommentaryEntry where
+  getAttributionTag = commentaryEntryAttributionTag
+
+instance Tagged DialogueEntry where
+  getAttributionTag = dialogueEntryAttributionTag
+
+instance Tagged PageNumberEntry where
+  getAttributionTag = pageNumberEntryAttributionTag
+
 -- Note that `headswords` is JSON text containing either: 
 --  * a headword list: { "headwords" : [ <word>, .. ] }; or
 --  * an inline definition/comparison: 

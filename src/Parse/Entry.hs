@@ -25,6 +25,21 @@
 -- sequences are permitted but discouraged. Spaces are optional but permissible
 -- between entry variant prefix, page number, tag sequence and definition body.
 -- Note that the tags themselvel /must/ be non-empty.
+--
+--    This will be done (this is a description of coarse granulariy) as follows:
+--      
+--      1. Update the entry parser of each variant we mean to support tags with
+--      the 'tag' parser.
+--
+--      2. Add a tag list (@Maybe [String]@ or @[String]@?) to each entry
+--      variant.
+--
+--      3. Complete migration sqlite (write the damnable search function
+--      already) and then store tags in each variant's table.
+--
+--      4. Include CLI subcommand to collect, within a date range, naturally,
+--      entries with a certain tag. How to serialize or expose this entries is
+--      as yet undetermined.
 -- 
 -----------------------------------------------------------------------------
 module Parse.Entry where
@@ -117,6 +132,7 @@ quote' = do
 -- surrounding definitions, quotations, etc.
 --
 -- TODO: context awareness (see above todo)
+-- TODO support page-numbers and tags
 commentary :: Parser Entry
 commentary = do
   _ <- try (symbol "commentary") <|> symbol "synthesis"
@@ -124,6 +140,7 @@ commentary = do
   _ <- many newline
   return . Commentary . unlines . fmap trim . lines $ body
 
+-- TODO support tags??
 book :: Parser Entry
 book = do
   _ <- whiteSpace
@@ -139,22 +156,6 @@ book = do
   _ <- entryBody
   _ <- many newline
   return $ Read title author
-
--- | A tag may contain any (decimal) digit, any classical laten letter, that
--- is, one of [a-z], spaces, underscores, or hyphens. Unicode is /not/
--- supported.
-tagChar :: Parser Char
-tagChar = try alphaNum <|> oneOf "-_ "
-
--- | Parses zero or more comma-separated sequences of 'tagChar's within square
--- brackets, e.g., @[tag1,my-tag2,tag_3,some other tag]@. Note that although
--- white space is permitted /within/ tags, leading and trailing spaces are
--- removed.
-tags :: Parser [String]
-tags = fmap trimTrailing <$> brackets (commaSep (some tagChar))
-  where trimTrailing = dropWhileEnd isSpace
-      -- we trim after parsing to avoid look-ahead--idk whether it's faster,
-      -- but it's feels simlpler to me atm
 
 -- TODO handle "\n    \n" w/o parser fantods
 def :: Parser Entry
@@ -281,6 +282,7 @@ phrase :: Parser Entry
 phrase = do
   whiteSpace
   try (symbol "phrase") <|> symbol "phr"
+  tagList <- optional tags -- TODO tag refactor
   p <- try definedPhrase <|> pluralPhrase
   many newline
   return $ Phr p

@@ -259,8 +259,12 @@ toDefn = do
 -- > "d headword : meaning"- recent
 --
 inlineMeaning :: Parser DefQuery 
-inlineMeaning =
-  InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
+inlineMeaning = do 
+  _ <- symbolic 'd' 
+  tags <- optional $ brackets (many (noneOf "]"))
+  hw <- many (noneOf ":") <* symbol ": " 
+  meaning <- entryBody
+  return $ InlineDef hw meaning
 
 -- | Splits on delimiter. E.g.,
 --
@@ -269,14 +273,33 @@ inlineMeaning =
 -- >      headword2 : meaning"
 --
 toDefVersus :: Parser DefQuery
-toDefVersus =
-  collect <$> (symbol "dvs" *> p0 <* pad (string "--- vs ---")) <*> p1
-  where
-    collect (hw, m) (hw', m') = DefVersus hw m hw' m'
+toDefVersus = do
+  let collect (hw, m) (hw', m') = DefVersus hw m hw' m'
         -- it's important that this not parse greedily
-    p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
-    p1 = inlineMeaning' entryBody
-    inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
+      p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
+      p1 = inlineMeaning' entryBody
+      inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
+  mTagList <- symbol "dvs" *> optional tags
+  firstDef <- p0 <* pad (string "--- vs ---")
+  secondDef <- p1
+  return $ collect firstDef secondDef
+
+-- | A tag may contain any (decimal) digit, any classical laten letter, that
+-- is, one of [a-z], spaces, underscores, or hyphens. Unicode is /not/
+-- supported.
+tagChar :: Parser Char
+tagChar = try alphaNum <|> oneOf "-_ "
+
+-- | Parses zero or more comma-separated sequences of 'tagChar's within square
+-- brackets, e.g., @[tag1,my-tag2,tag_3,some other tag]@. Note that although
+-- white space is permitted /within/ tags, leading and trailing spaces are
+-- removed.
+tags :: Parser [String]
+tags = fmap trimTrailing <$> brackets (commaSep (some tagChar))
+  where trimTrailing = dropWhileEnd isSpace
+      -- we trim after parsing to avoid look-ahead--idk whether it's faster,
+      -- but it's feels simlpler to me atm
+
 
 -- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces,
 --  `tab' "       "` returns `pure 1`.

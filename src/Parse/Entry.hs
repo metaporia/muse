@@ -14,8 +14,33 @@
 -- This module provides parsers for `LogEntry` and its constituent types.
 --
 -- TODO
+--
 -- □  (!!) store quote as @Quotation Quote (Maybe Attr) (Maybe PgNum)@
+--
 -- □  add 'Poem' 'Entry' variant
+--
+-- □  Support entry tags. The proposed tags would be included inside square
+-- brackets, e.g., @d 34 [<tag0>, ..., <tagN>] headword : meaning@. A tag
+-- sequence should /follow/ the page number, if it's present. Empty tag
+-- sequences are permitted but discouraged. Spaces are optional but permissible
+-- between entry variant prefix, page number, tag sequence and definition body.
+-- Note that the tags themselvel /must/ be non-empty.
+--
+--    This will be done (this is a description of coarse granulariy) as follows:
+--      
+--      1. Update the entry parser of each variant we mean to support tags with
+--      the 'tag' parser.
+--
+--      2. Add a tag list (@Maybe [String]@ or @[String]@?) to each entry
+--      variant.
+--
+--      3. Complete migration sqlite (write the damnable search function
+--      already) and then store tags in each variant's table.
+--
+--      4. Include CLI subcommand to collect, within a date range, naturally,
+--      entries with a certain tag. How to serialize or expose this entries is
+--      as yet undetermined.
+-- 
 -----------------------------------------------------------------------------
 module Parse.Entry where
 
@@ -44,7 +69,7 @@ import Text.Trifecta hiding (Rendering, Span)
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
---  > "quotation
+--  > "quotation [<page-number>]
 --  >
 --  >  <quotation-content>
 --  >
@@ -107,6 +132,7 @@ quote' = do
 -- surrounding definitions, quotations, etc.
 --
 -- TODO: context awareness (see above todo)
+-- TODO support page-numbers and tags
 commentary :: Parser Entry
 commentary = do
   _ <- try (symbol "commentary") <|> symbol "synthesis"
@@ -114,6 +140,7 @@ commentary = do
   _ <- many newline
   return . Commentary . unlines . fmap trim . lines $ body
 
+-- TODO support tags??
 book :: Parser Entry
 book = do
   _ <- whiteSpace
@@ -250,6 +277,7 @@ phrase :: Parser Entry
 phrase = do
   whiteSpace
   try (symbol "phrase") <|> symbol "phr"
+  tagList <- optional tags -- TODO tag refactor
   p <- try definedPhrase <|> pluralPhrase
   many newline
   return $ Phr p

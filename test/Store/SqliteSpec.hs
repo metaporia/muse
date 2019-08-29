@@ -14,23 +14,32 @@
 -----------------------------------------------------------------------------
 module Store.SqliteSpec where
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.List (isInfixOf)
-import Data.Maybe (catMaybes, isJust, isNothing)
-import Data.Time (UTCTime(..))
-import Data.Time.Clock (getCurrentTime)
-import Database.Persist
-import Database.Persist.Sqlite
-import Helpers
-import Parse
-import Parse.Entry
-import Store.Sqlite
-import Test.Hspec
-import Text.Show.Pretty (pPrint, ppShow)
-import Time
+import           Control.Monad.IO.Class         ( MonadIO
+                                                , liftIO
+                                                )
+import           Data.List                      ( isInfixOf )
+import           Data.Maybe                     ( catMaybes
+                                                , isJust
+                                                , isNothing
+                                                )
+import           Data.Time                      ( UTCTime(..) )
+import           Data.Time.Clock                ( getCurrentTime )
+import           Database.Persist
+import           Database.Persist.Sqlite
+import           Helpers
+import           Parse
+import           Parse.Entry
+import           Store.Sqlite
+import           Test.Hspec
+import           Text.Show.Pretty               ( pPrint
+                                                , ppShow
+                                                )
+import           Time
 
 spec :: Spec
-spec = describe "stub" $ do it "satisfies hspec test runner" $ 1 `shouldBe` 1
+spec = do
+  describe "stub" $ do
+    it "satisfies hspec test runner" $ 1 `shouldBe` 1
 
 -- | Attribution filters: if the title and author infix lists are empty, these
 -- are skipped over, otherwise they are the first in the chain of filters.
@@ -57,22 +66,24 @@ spec = describe "stub" $ do it "satisfies hspec test runner" $ 1 `shouldBe` 1
 --  output (however in the first pass we should imitate the current
 --  functionality as a kind of regression testing to see whether the new
 --  pipeline has all the functionality of the old).
-attributionSatisfies ::
-     MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
+attributionSatisfies
+  :: MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
 attributionSatisfies authorPreds titlePreds readKey = do
   maybeReadEntry <- get readKey
   return $
     -- if the entry has no read attribution and we are given author or
     -- title predicates, then the entry is omitted from the filtered
     -- output.
-    case maybeReadEntry of
-      Just ReadEntry {..} ->
-        and (isInfixOf <$> authorPreds <*> pure readEntryAuthor) &&
-        and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
-      Nothing -> False
+           case maybeReadEntry of
+    Just ReadEntry {..} ->
+      and (isInfixOf <$> authorPreds <*> pure readEntryAuthor)
+        && and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
+    Nothing -> False
 
-taggedEntrySatisfies ::
-     (MonadIO m, Tagged record)
+-- | Checks whether a single 'Entry'\'s title/author attribution satisfies the
+-- given search strings.
+taggedEntrySatisfies
+  :: (MonadIO m, Tagged record)
   => [String]
   -> [String]
   -> Entity record
@@ -81,116 +92,125 @@ taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
   case getAttributionTag entityVal of
     Just readKey -> do
       satisfies <- attributionSatisfies authorPreds titlePreds readKey
-      return $
-        if satisfies
-          then Just entity
-          else Nothing
+      return $ if satisfies then Just entity else Nothing
     Nothing -> return Nothing
 
----- FIXME too many passes
 -- | Title and author search predicates test whether the given search strings
 -- are all infixes of the title or author, respectively.
-filterDefEntries ::
-     (MonadIO m, Tagged record)
+--
+---- FIXME too many passes
+filterDefEntries
+  :: (MonadIO m, Tagged record)
   => [String] -- | Author predicates
   -> [String]
   -> [Entity record]
   -> DB m [Entity record]
 filterDefEntries authorPreds titlePreds entities =
-  fmap catMaybes $
-  sequence $ taggedEntrySatisfies authorPreds titlePreds <$> entities
+  fmap catMaybes
+    $   sequence
+    $   taggedEntrySatisfies authorPreds titlePreds
+    <$> entities
 
 demo :: IO ()
-demo =
-  runSqlite "sqliteSpec.db" $ do
-    runMigration migrateAll
-    today <- liftIO $ utctDay <$> getCurrentTime
-    -- write 'demoLogEntries'
-    -- sequence_ $ fmap (\logEntry -> writeLogEntry today logEntry Nothing) demoLogEntries
-    -- revision: tagging w/ 'writeDay'
-    es <- writeDay today demoLogEntries
-    liftIO $ sequence $ either putStrLn print <$> es
-    -- select all by author 
-    satisfactoryDefs <-
-      selectList ([] :: [Filter DefEntry]) [] >>=
-      filterDefEntries ["Woolf"] ["Light"]
-    liftIO $ traverse pPrint satisfactoryDefs
-    return ()
+demo = runSqlite "sqliteSpec.db" $ do
+  runMigration migrateAll
+  today <- liftIO $ utctDay <$> getCurrentTime
+  -- write 'demoLogEntries'
+  -- sequence_ $ fmap (\logEntry -> writeLogEntry today logEntry Nothing) demoLogEntries
+  -- revision: tagging w/ 'writeDay'
+  es    <- writeDay today demoLogEntries
+  liftIO $ sequence $ either putStrLn print <$> es
+  -- select all by author 
+  satisfactoryDefs <-
+    selectList ([] :: [Filter DefEntry]) []
+      >>= filterDefEntries ["Woolf"] ["Light"]
+  liftIO $ traverse pPrint satisfactoryDefs
+  return ()
 
 clear :: IO ()
-clear =
-  runSqlite "sqliteSpec.db" $ do
-    runMigration migrateAll
-    deleteWhere ([] :: [Filter DefEntry])
-    deleteWhere ([] :: [Filter ReadEntry])
-    deleteWhere ([] :: [Filter QuoteEntry])
-    deleteWhere ([] :: [Filter CommentaryEntry])
-    deleteWhere ([] :: [Filter DialogueEntry])
-    deleteWhere ([] :: [Filter PageNumberEntry])
+clear = runSqlite "sqliteSpec.db" $ do
+  runMigration migrateAll
+  deleteWhere ([] :: [Filter DefEntry])
+  deleteWhere ([] :: [Filter ReadEntry])
+  deleteWhere ([] :: [Filter QuoteEntry])
+  deleteWhere ([] :: [Filter CommentaryEntry])
+  deleteWhere ([] :: [Filter DialogueEntry])
+  deleteWhere ([] :: [Filter PageNumberEntry])
 
 demoLogEntries :: [LogEntry]
-demoLogEntries =
-  [ TabTsEntry
+demoLogEntries
+  = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
-      , Read "To the Lighthouse" "Virginia Woolf")
-  , TabTsEntry
+      , Read "To the Lighthouse" "Virginia Woolf"
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 55, sec = 17}
       , Def
-          (DefVersus
-             "benignant"
-             "kind; gracious; favorable;"
-             "benign"
-             "gentle, mild, or, medically, non-threatening"))
-  , TabTsEntry
+        (DefVersus "benignant"
+                   "kind; gracious; favorable;"
+                   "benign"
+                   "gentle, mild, or, medically, non-threatening"
+        )
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 45}
       , Def
-          (DefVersus
-             "malignant"
-             "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
-             "malign"
-             "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
-  , TabTsEntry
+        (DefVersus
+          "malignant"
+          "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+          "malign"
+          "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
+        )
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
-      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
-  , TabTsEntry
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
-      , Def (Defn (Just 38) ["sublime", "lintel"]))
-  , TabTsEntry
+      , Def (Defn (Just 38) ["sublime", "lintel"])
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
-      , Read "Silas Marner" "George Eliot (Mary Ann Evans)")
-  , TabTsEntry
+      , Read "Silas Marner" "George Eliot (Mary Ann Evans)"
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}
       , Quotation
-          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          Nothing)
-  , TabTsEntry
+        "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        Nothing
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 25, sec = 27}
-      , Quotation
-          "Her simplicity fathomed what clever people falsified."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          Nothing)
-  , TabTsEntry
+      , Quotation "Her simplicity fathomed what clever people falsified."
+                  "In \"To the Lighthouse\", by Virginia Woolf"
+                  Nothing
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
-      , Def (Defn Nothing ["plover"]))
-  , TabTsEntry
+      , Def (Defn Nothing ["plover"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
-      , Def (Defn Nothing ["cosmogony"]))
-  , TabTsEntry
+      , Def (Defn Nothing ["cosmogony"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 49, sec = 58}
       , Quotation
-          "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          (Just 38))
-  ]
+        "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        (Just 38)
+      )
+    ]

@@ -17,18 +17,23 @@ module Store.SqliteSpec where
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
+import           Control.Exception              ( bracket )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , isJust
                                                 , isNothing
+                                                , fromJust
                                                 )
+import qualified Data.Text as T
 import           Data.Time                      ( UTCTime(..) )
 import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Persist
 import           Database.Persist.Sqlite
+import           Debug.Trace
 import           Helpers
 import           Parse
 import           Parse.Entry
+import           Data.Semigroup                 ( (<>) )
 import           Store.Sqlite
 import           Test.Hspec
 import           Text.Show.Pretty               ( pPrint
@@ -36,10 +41,55 @@ import           Text.Show.Pretty               ( pPrint
                                                 )
 import           Time
 
+
+asIO :: IO a -> IO a
+asIO a = a
+
+test :: IO ()
+test = hspec spec
+
 spec :: Spec
 spec = do
-  describe "stub" $ do
-    it "satisfies hspec test runner" $ 1 `shouldBe` 1
+  describe "quote filtration" $ do
+    it
+        "manually attributed nested quotes are filtered as though they have two attributions (see Woolf in Eliot)"
+      $ asIO
+      $ runSqlInMem -- since it runs in mem, no pre/post clear is necessary
+      $ do
+          cmdList <- runMigrationSilent migrateAll
+          today            <- liftIO $ utctDay <$> getCurrentTime
+          es               <- writeDay today demoLogEntries
+          satisfactoryDefs <-
+            selectList ([] :: [Filter QuoteEntry]) []
+              >>= applyReadPreds ["Woolf"] ["Light"]
+          liftIO $ length satisfactoryDefs `shouldBe` 3
+    it "TODO"
+      $ asIO
+      $ runSqlInMem
+      $ do
+          cmdList <- runMigrationSilent migrateAll
+          today            <- liftIO $ utctDay <$> getCurrentTime
+          writeDay today demoLogEntries
+          qs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"] 
+          liftIO (length qs `shouldBe` 3)
+
+
+runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
+
+--dbTest :: Spec
+--dbTest = do
+--  before clear $ do
+--    describe "demo" $ do
+--      it "it" $ (do runSqlite "sqliteSpec.db" $ do return 1 ) `shouldReturn` 1
+
+--runWithDB :: MonadIO m => T.Text -> DB m a -> IO a
+--runWithDB db action = runSqlite db $ do
+--  runMigration migrateAll
+--  today <- liftIO $ utctDay <$> getCurrentTime
+--  es    <- writeDay today demoLogEntries
+--  action 
+
+
 
 -- | Attribution filters: if the title and author infix lists are empty, these
 -- are skipped over, otherwise they are the first in the chain of filters.
@@ -80,6 +130,16 @@ attributionSatisfies authorPreds titlePreds readKey = do
         && and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
     Nothing -> False
 
+-- | Applies auth/title predicates to a quote's manual attribution. If no
+-- manual attribution is present, @Nothing@ is returned.
+manualAttributionSatisfies :: [String] -> [String] -> QuoteEntry -> Maybe Bool
+manualAttributionSatisfies authorPreds titlePreds QuoteEntry { quoteEntryManualAttribution }
+  = do
+    attr <- quoteEntryManualAttribution
+    return $ and (isInfixOf <$> authorPreds <*> pure attr) && and (isInfixOf <$> titlePreds <*> pure attr)
+
+
+
 -- | Checks whether a single 'Entry'\'s title/author attribution satisfies the
 -- given search strings.
 taggedEntrySatisfies
@@ -91,25 +151,34 @@ taggedEntrySatisfies
 taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
   case getAttributionTag entityVal of
     Just readKey -> do
+
+      -- FIXME when an entry has an inferred attribution, by indentation, /and/
+      -- a manual attribution, it satisfies the search--that is, it becomes a
+      -- result--if the search predicates succeed for either attribution.
+
       satisfies <- attributionSatisfies authorPreds titlePreds readKey
-      return $ if satisfies then Just entity else Nothing
+      let manualSatisfies =
+            maybe True id
+              $   getQuoteEntry entityVal
+              >>= manualAttributionSatisfies authorPreds titlePreds
+      return $ if satisfies || manualSatisfies then Just entity else Nothing
     Nothing -> return Nothing
 
 -- | Title and author search predicates test whether the given search strings
 -- are all infixes of the title or author, respectively.
 --
 ---- FIXME too many passes
-filterDefEntries
+applyReadPreds
   :: (MonadIO m, Tagged record)
   => [String] -- | Author predicates
   -> [String]
   -> [Entity record]
   -> DB m [Entity record]
-filterDefEntries authorPreds titlePreds entities =
+applyReadPreds authorPreds titlePreds entities =
   fmap catMaybes
-    $   sequence
-    $   taggedEntrySatisfies authorPreds titlePreds
-    <$> entities
+    $ sequence
+    $ let x = taggedEntrySatisfies authorPreds titlePreds <$> entities
+      in  trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) x
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do
@@ -121,9 +190,27 @@ demo = runSqlite "sqliteSpec.db" $ do
   es    <- writeDay today demoLogEntries
   liftIO $ sequence $ either putStrLn print <$> es
   -- select all by author 
-  satisfactoryDefs <-
-    selectList ([] :: [Filter DefEntry]) []
-      >>= filterDefEntries ["Woolf"] ["Light"]
+
+  -- test attribution of 'QuoteEntry'
+  -- 1. get quoteEntry
+  qe :: Entity QuoteEntry <- head <$> selectList ([] :: [Filter QuoteEntry]) []
+  satisfies               <- taggedEntrySatisfies [] [] qe
+  let readKey = fromJust $ do
+        entity <- satisfies
+        getAttributionTag $ entityVal entity
+
+  --liftIO $ pPrint readKey
+  --liftIO
+  --  $  putStrLn
+  --  $  "satisfies: "
+  --  <> show (isJust satisfies)
+  --  <> "\nentry: "
+  --  <> ppShow satisfies
+  readEntry <- get readKey
+  --liftIO $ putStrLn  $ "readEntry: " <> ppShow readEntry
+  attrSatisfies <- attributionSatisfies ["Woolf"] [] readKey 
+  --liftIO $ putStrLn $ "attrSatisfies: " <> show attrSatisfies
+  satisfactoryDefs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"]
   liftIO $ traverse pPrint satisfactoryDefs
   return ()
 
@@ -136,6 +223,16 @@ clear = runSqlite "sqliteSpec.db" $ do
   deleteWhere ([] :: [Filter CommentaryEntry])
   deleteWhere ([] :: [Filter DialogueEntry])
   deleteWhere ([] :: [Filter PageNumberEntry])
+
+clear' :: MonadIO m => DB m ()
+clear' = do 
+  deleteWhere ([] :: [Filter DefEntry])
+  deleteWhere ([] :: [Filter ReadEntry])
+  deleteWhere ([] :: [Filter QuoteEntry])
+  deleteWhere ([] :: [Filter CommentaryEntry])
+  deleteWhere ([] :: [Filter DialogueEntry])
+  deleteWhere ([] :: [Filter PageNumberEntry])
+
 
 demoLogEntries :: [LogEntry]
 demoLogEntries
@@ -178,8 +275,12 @@ demoLogEntries
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
-      , Read "Silas Marner" "George Eliot (Mary Ann Evans)"
+      , Read "Silas Marner" "George Eliot (Mary Ann Evans)" 
+
       )
+      -- N.B. this read block is here to ensure that manually attributed (indented)
+      -- entries are treated by search predicates as belonging to both.
+
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}

@@ -90,21 +90,27 @@ DumpEntry
 
 class Tagged a where
   getAttributionTag :: a -> Maybe (Key ReadEntry)
+  getQuoteEntry :: a -> Maybe QuoteEntry
 
 instance Tagged DefEntry where
   getAttributionTag = defEntryAttributionTag
+  getQuoteEntry _ = Nothing
 
 instance Tagged QuoteEntry where
   getAttributionTag = quoteEntryAttributionTag
+  getQuoteEntry = return 
 
 instance Tagged CommentaryEntry where
   getAttributionTag = commentaryEntryAttributionTag
+  getQuoteEntry _ = Nothing
 
 instance Tagged DialogueEntry where
   getAttributionTag = dialogueEntryAttributionTag
+  getQuoteEntry _ = Nothing
 
 instance Tagged PageNumberEntry where
   getAttributionTag = pageNumberEntryAttributionTag
+  getQuoteEntry _ = Nothing
 
 -- Note that `headswords` is JSON text containing either: 
 --  * a headword list: { "headwords" : [ <word>, .. ] }; or

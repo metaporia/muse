@@ -28,13 +28,13 @@
 --
 --    This will be done (this is a description of coarse granulariy) as follows:
 --      
---      1. Update the entry parser of each variant we mean to support tags with
+--      1. (DONE) Update the entry parser of each variant we mean to support tags with
 --      the 'tag' parser.
 --
---      2. Add a tag list (@Maybe [String]@ or @[String]@?) to each entry
+--      2. (DONE) Add a tag list (@Maybe [String]@ or @[String]@?) to each entry
 --      variant.
 --
---      3. Complete migration sqlite (write the damnable search function
+--      3. (YOU ARE HERE) Complete migration sqlite (write the damnable search function
 --      already) and then store tags in each variant's table.
 --
 --      4. Include CLI subcommand to collect, within a date range, naturally,

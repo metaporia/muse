@@ -54,7 +54,9 @@ spec = describe "stub" $ do it "satisfies hspec test runner" $ 1 `shouldBe` 1
 --  entry variant specific filtration based on its unique fields. Note that
 --  when we receive a query containing a predicate on a field not common to all
 --  entry variants, only variants that have the field will be included in the
---  output.
+--  output (however in the first pass we should imitate the current
+--  functionality as a kind of regression testing to see whether the new
+--  pipeline has all the functionality of the old).
 attributionSatisfies ::
      MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
 attributionSatisfies authorPreds titlePreds readKey = do

@@ -259,8 +259,12 @@ toDefn = do
 -- > "d headword : meaning"- recent
 --
 inlineMeaning :: Parser DefQuery 
-inlineMeaning =
-  InlineDef <$> (symbol "d" *> many (noneOf ":") <* symbol ": ") <*> entryBody
+inlineMeaning = do 
+  _ <- symbolic 'd' 
+  tags <- brackets (many (noneOf "]"))
+  hw <- many (noneOf ":") <* symbol ": " 
+  meaning <- entryBody
+  return $ InlineDef hw meaning
 
 -- | Splits on delimiter. E.g.,
 --

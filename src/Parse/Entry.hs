@@ -14,8 +14,18 @@
 -- This module provides parsers for `LogEntry` and its constituent types.
 --
 -- TODO
+--
 -- □  (!!) store quote as @Quotation Quote (Maybe Attr) (Maybe PgNum)@
+--
 -- □  add 'Poem' 'Entry' variant
+--
+-- □  Support entry tags. The proposed tags would be included inside square
+-- brackets, e.g., @d 34 [<tag0>, ..., <tagN>] headword : meaning@. A tag
+-- sequence should /follow/ the page number, if it's present. Empty tag
+-- sequences are permitted but discouraged. Spaces are optional but permissible
+-- between entry variant prefix, page number, tag sequence and definition body.
+-- Note that the tags themselvel /must/ be non-empty.
+-- 
 -----------------------------------------------------------------------------
 module Parse.Entry where
 
@@ -44,7 +54,7 @@ import Text.Trifecta hiding (Rendering, Span)
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
---  > "quotation
+--  > "quotation [<page-number>]
 --  >
 --  >  <quotation-content>
 --  >
@@ -129,6 +139,22 @@ book = do
   _ <- entryBody
   _ <- many newline
   return $ Read title author
+
+-- | A tag may contain any (decimal) digit, any classical laten letter, that
+-- is, one of [a-z], spaces, underscores, or hyphens. Unicode is /not/
+-- supported.
+tagChar :: Parser Char
+tagChar = try alphaNum <|> oneOf "-_ "
+
+-- | Parses zero or more comma-separated sequences of 'tagChar's within square
+-- brackets, e.g., @[tag1,my-tag2,tag_3,some other tag]@. Note that although
+-- white space is permitted /within/ tags, leading and trailing spaces are
+-- removed.
+tags :: Parser [String]
+tags = fmap trimTrailing <$> brackets (commaSep (some tagChar))
+  where trimTrailing = dropWhileEnd isSpace
+      -- we trim after parsing to avoid look-ahead--idk whether it's faster,
+      -- but it's feels simlpler to me atm
 
 -- TODO handle "\n    \n" w/o parser fantods
 def :: Parser Entry

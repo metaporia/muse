@@ -88,6 +88,9 @@ DumpEntry
     dumps String
 |]
 
+
+data EntryType = ERead | EQuote | EDef | ECommentary | EDialogue | EPageNumber | EDump deriving (Eq, Show)
+
 class Tagged a where
   getAttributionTag :: a -> Maybe (Key ReadEntry)
   getQuoteEntry :: a -> Maybe QuoteEntry

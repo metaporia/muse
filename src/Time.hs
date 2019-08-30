@@ -20,6 +20,11 @@ import Data.Time
 import Parse (TimeStamp(..))
 import Control.Lens (preview, _Left, _Right)
 
+-- | Makes 'UTCTime' from a 'Day' by adding a 'DiffTime' of zero, that is, a
+-- time representing midnight on the given day.
+dayToUTC :: Day -> UTCTime
+dayToUTC day = UTCTime day (secondsToDiffTime 0)
+
 -- TODO 
 -- □  use locale to convert timezone to correct UTC offset (see
 -- 'getCurrentTimeZone')

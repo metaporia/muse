@@ -259,8 +259,20 @@ searchTmp today = do
   t <- fmap consumeSearchType <$> title
   pure (TmpInput w today a t [ds, qs, ps, dias])
 
+-- | Parameterized around the CLI's option struct, 'Variants' indicates for
+-- each bucket/table whether to apply the specified search predicates to its
+-- entries (and so whether entries of that type are allowable in the final
+-- output).
 newtype Variants a =
-  Variants (a, Bool, Bool, Bool, Bool, Bool, Bool)
+  Variants
+    ( a
+    , Bool -- | defs
+    , Bool -- | phrases
+    , Bool -- | quotes
+    , Bool -- | dialogues
+    , Bool -- | comments
+    , Bool -- | dumps
+    )
 
 search' :: Day -> Parser (Variants Store.Search)
 search' today = do
@@ -710,6 +722,8 @@ ifNotNull l true false =
 -- | Pretty print output of bucket filters.
 runSearch' :: Bool -> Bool -> Variants Store.Search -> DB -> IO ()
 runSearch' debug color (Variants (search, ds, ps, qs, dials, cmts, dmps)) db@(DB dmp def rd qt dia phr cmt _ _) = do
+  -- if no entry-variants have been specified to the exclusion of others--that
+  -- is, apply filters to all variants 
   if all (== False) [ds, ps, qs, dials, cmts, dmps]
     then (colRender color $
           join

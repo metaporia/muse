@@ -1,5 +1,6 @@
 {-# LANGUAGE QuasiQuotes, ScopedTypeVariables, NamedFieldPuns,
   OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances, TypeFamilies, FlexibleContexts #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -24,9 +25,10 @@ import           Data.Maybe                     ( catMaybes
                                                 , isNothing
                                                 , fromJust
                                                 )
-import qualified Data.Text as T
+import qualified Data.Text                     as T
 import           Data.Time                      ( UTCTime(..) )
 import           Data.Time.Clock                ( getCurrentTime )
+import           Data.Time.Calendar             ( Day )
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Debug.Trace
@@ -101,13 +103,16 @@ runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
 -- that entry type in the final list of (filtered) entries.
 --
 -- For instance, 'DefEntry`s will pass through the following filters in order:
---    1. entry type inclusion/exclusion;
---    3. date filtration (based on query's date range);
---    3. read attribution; and
+--    1. entry type inclusion/exclusion--this dispatch takes in the CLI options
+--    and dispatches the requested entry-variant filters; 
+--    3. date filtration (based on query's date range)--see 'withinDateRange';
+--    3. read attribution--see 'applyReadPreds'; and
 --    4. definition variant :
---        * phrase | definition
---        * headwords | inline | comparision (a.t.m. implies the definition
---        filter).
+--        i. run 'withinDateRange' then 'applyReadPreds'
+--        ii. apply entry-variant specific filters, e.g.,
+--          * phrase | definition
+--          * headwords | inline | comparision (a.t.m. implies the definition
+--          filter).
 --
 --  More generally, the pipeline reduces to steps 1-3 as above and then some
 --  entry variant specific filtration based on its unique fields. Note that
@@ -167,7 +172,7 @@ taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
 -- | Title and author search predicates test whether the given search strings
 -- are all infixes of the title or author, respectively.
 --
----- FIXME too many passes
+---- FIXME too many passes (Q: how to know whether fusion has been applied?  Check core?)
 applyReadPreds
   :: (MonadIO m, Tagged record)
   => [String] -- | Author predicates
@@ -179,6 +184,28 @@ applyReadPreds authorPreds titlePreds entities =
     $ sequence
     $ let x = taggedEntrySatisfies authorPreds titlePreds <$> entities
       in  trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) x
+
+-- | Collects entries of from a single variant's table that were entered within
+-- the given inlusive date range. This amounts to a select query with
+-- constraints on the primary key.
+--
+-- Having determined which entry variants are desired by the user, this filter
+-- is the first segment in each variant-specific pipeline. It's passed the
+-- 'EntryType' associated with the variant table it's to select from.
+withinDateRange
+  :: (MonadIO m, PersistEntityBackend record ~ SqlBackend, PersistEntity record)
+  => EntityField record (Key record)
+  -> (UTCTime -> Key record)
+  -> Day
+  -> Day
+  -> DB m [Entity record]
+withinDateRange entryIdType keyWrapper sinceDay beforeDay =
+  let
+    since  = dayToUTC sinceDay
+    before = dayToUTC beforeDay
+    dateConstraints =
+      [entryIdType >=. (keyWrapper since), entryIdType <=. (keyWrapper before)]
+  in selectList dateConstraints []
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do

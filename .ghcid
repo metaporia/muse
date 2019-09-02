@@ -1,0 +1,1 @@
+--command "stack ghci src/Lib.hs test/Store/SqliteSpec.hs --ghci-options=-fobject-code"

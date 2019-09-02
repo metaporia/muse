@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards, BangPatterns, NamedFieldPuns,
   StandaloneDeriving, DeriveDataTypeable, TemplateHaskell,
   TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -243,6 +244,21 @@ getUTC (TsR utc _) = Just utc
 fromLogEntry :: Day -> LogEntry -> Result
 fromLogEntry _ (Dump s) = DumpR (T.pack s)
 fromLogEntry day (TabTsEntry (_, ts, e)) = fromEntry (toUTC day ts) e
+
+class ToResult ctx a where
+  toResult :: ctx -> a -> Result
+
+instance ToResult  UTCTime Entry where
+  toResult = fromEntry
+
+newtype DumpWrapper = DumpWrapper { unDumpWrapper :: String } deriving (Eq, Show)
+
+-- dump handling is weird bc we have a list of dumps when we parse the sql
+-- row (json, presumably). So what we'll do is map @toResult . DumpWrapper@
+-- over the list of dumps, each of which will constitute a result.
+instance ToResult ctx DumpWrapper where
+  toResult _ = DumpR . T.pack . unDumpWrapper
+
 
 fromEntry :: UTCTime -> Entry -> Result
 fromEntry utc entry = TsR utc entry

@@ -35,6 +35,7 @@ import           Debug.Trace
 import           Helpers
 import           Parse
 import           Parse.Entry
+import qualified Parse.Entry as P
 import           Data.Semigroup                 ( (<>) )
 import           Store.Sqlite
 import           Test.Hspec
@@ -42,6 +43,7 @@ import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
                                                 )
 import           Time
+import qualified Parse as P
 
 
 asIO :: IO a -> IO a
@@ -92,120 +94,25 @@ runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
 --  action 
 
 
+-- infix
+quoteSearch:: MonadIO m => T.Text -> DB m [Entity QuoteEntry]
+quoteSearch searchTerm = rawSql
+  (  "select ?? from quote_entry where manual_attribution like '%"
+  <> searchTerm
+  <> "%'"
+  )
+  []
 
--- | Attribution filters: if the title and author infix lists are empty, these
--- are skipped over, otherwise they are the first in the chain of filters.
--- Eventually, we may refactor the filters into a single pass, should
--- performance become an issue.
---
--- Each record type/table/entry type will have its own custom filtration
--- pipeline: the first segment of each will be a switch to include or exclude
--- that entry type in the final list of (filtered) entries.
---
--- For instance, 'DefEntry`s will pass through the following filters in order:
---    1. entry type inclusion/exclusion--this dispatch takes in the CLI options
---    and dispatches the requested entry-variant filters; 
---    3. date filtration (based on query's date range)--see 'withinDateRange';
---    3. read attribution--see 'applyReadPreds'; and
---    4. definition variant :
---        i. run 'withinDateRange' then 'applyReadPreds'
---        ii. apply entry-variant specific filters, e.g.,
---          * phrase | definition
---          * headwords | inline | comparision (a.t.m. implies the definition
---          filter).
---
---  More generally, the pipeline reduces to steps 1-3 as above and then some
---  entry variant specific filtration based on its unique fields. Note that
---  when we receive a query containing a predicate on a field not common to all
---  entry variants, only variants that have the field will be included in the
---  output (however in the first pass we should imitate the current
---  functionality as a kind of regression testing to see whether the new
---  pipeline has all the functionality of the old).
-attributionSatisfies
-  :: MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
-attributionSatisfies authorPreds titlePreds readKey = do
-  maybeReadEntry <- get readKey
-  return $
-    -- if the entry has no read attribution and we are given author or
-    -- title predicates, then the entry is omitted from the filtered
-    -- output.
-           case maybeReadEntry of
-    Just ReadEntry {..} ->
-      and (isInfixOf <$> authorPreds <*> pure readEntryAuthor)
-        && and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
-    Nothing -> False
-
--- | Applies auth/title predicates to a quote's manual attribution. If no
--- manual attribution is present, @Nothing@ is returned.
-manualAttributionSatisfies :: [String] -> [String] -> QuoteEntry -> Maybe Bool
-manualAttributionSatisfies authorPreds titlePreds QuoteEntry { quoteEntryManualAttribution }
-  = do
-    attr <- quoteEntryManualAttribution
-    return $ and (isInfixOf <$> authorPreds <*> pure attr) && and (isInfixOf <$> titlePreds <*> pure attr)
+-- infix
+quoteSearch2 :: MonadIO m => T.Text -> T.Text -> DB m [Entity QuoteEntry]
+quoteSearch2 attr body = rawSql
+  (  "select ?? from quote_entry where manual_attribution like '%"
+  <> attr
+  <> "%' and body like '%" <> body <> "%'"
+  )
+  []
 
 
-
--- | Checks whether a single 'Entry'\'s title/author attribution satisfies the
--- given search strings.
-taggedEntrySatisfies
-  :: (MonadIO m, Tagged record)
-  => [String]
-  -> [String]
-  -> Entity record
-  -> DB m (Maybe (Entity record))
-taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
-  case getAttributionTag entityVal of
-    Just readKey -> do
-
-      -- FIXME when an entry has an inferred attribution, by indentation, /and/
-      -- a manual attribution, it satisfies the search--that is, it becomes a
-      -- result--if the search predicates succeed for either attribution.
-
-      satisfies <- attributionSatisfies authorPreds titlePreds readKey
-      let manualSatisfies =
-            maybe True id
-              $   getQuoteEntry entityVal
-              >>= manualAttributionSatisfies authorPreds titlePreds
-      return $ if satisfies || manualSatisfies then Just entity else Nothing
-    Nothing -> return Nothing
-
--- | Title and author search predicates test whether the given search strings
--- are all infixes of the title or author, respectively.
---
----- FIXME too many passes (Q: how to know whether fusion has been applied?  Check core?)
-applyReadPreds
-  :: (MonadIO m, Tagged record)
-  => [String] -- | Author predicates
-  -> [String]
-  -> [Entity record]
-  -> DB m [Entity record]
-applyReadPreds authorPreds titlePreds entities =
-  fmap catMaybes
-    $ sequence
-    $ let x = taggedEntrySatisfies authorPreds titlePreds <$> entities
-      in  trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) x
-
--- | Collects entries of from a single variant's table that were entered within
--- the given inlusive date range. This amounts to a select query with
--- constraints on the primary key.
---
--- Having determined which entry variants are desired by the user, this filter
--- is the first segment in each variant-specific pipeline. It's passed the
--- 'EntryType' associated with the variant table it's to select from.
-withinDateRange
-  :: (MonadIO m, PersistEntityBackend record ~ SqlBackend, PersistEntity record)
-  => EntityField record (Key record)
-  -> (UTCTime -> Key record)
-  -> Day
-  -> Day
-  -> DB m [Entity record]
-withinDateRange entryIdType keyWrapper sinceDay beforeDay =
-  let
-    since  = dayToUTC sinceDay
-    before = dayToUTC beforeDay
-    dateConstraints =
-      [entryIdType >=. (keyWrapper since), entryIdType <=. (keyWrapper before)]
-  in selectList dateConstraints []
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do
@@ -238,7 +145,8 @@ demo = runSqlite "sqliteSpec.db" $ do
   attrSatisfies <- attributionSatisfies ["Woolf"] [] readKey 
   --liftIO $ putStrLn $ "attrSatisfies: " <> show attrSatisfies
   satisfactoryDefs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"]
-  liftIO $ traverse pPrint satisfactoryDefs
+  matchingQuotes <- quoteSearch2 "Woolf" "simplicity"
+  liftIO $ traverse pPrint matchingQuotes -- -- satisfactoryDefs
   return ()
 
 clear :: IO ()

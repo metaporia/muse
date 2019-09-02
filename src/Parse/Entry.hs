@@ -262,6 +262,26 @@ isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _ _) = True
 isQuotation _ = False
 
+data DefQueryVariant = Phrase' | Defn' | InlineDef' | DefVersus' deriving (Eq, Show)
+
+-- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
+-- are unified under a single type with a tag list (the tags refactor will
+-- allow this), the below jank will treat defined phrases as inline
+-- definititions.
+defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
+defHasType InlineDef' (Left (Defined _ _)) = True 
+defHasType  variant dq = variant == defQueryVariant dq
+
+defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant
+defQueryVariant (Right (Defn _ _)) = Defn'
+defQueryVariant (Right (InlineDef _ _)) = InlineDef'
+defQueryVariant (Right (DefVersus _ _ _ _)) = DefVersus'
+defQueryVariant (Left _) = Phrase'
+
+isDefn :: DefQuery -> Bool
+isDefn (Defn _ _) = True
+isDefn _ = False
+
 data Phrase
   = Plural [Headword]
   | Defined Headword

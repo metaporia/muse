@@ -234,6 +234,16 @@ trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
 trimDefQuery (DefVersus hw m h' m') =
   DefVersus (trim hw) (trim' m) (trim h') (trim' m')
 
+
+isInlineDef :: DefQuery -> Bool
+isInlineDef (InlineDef _ _) = True
+isInlineDef _ = False
+
+isDefVersus :: DefQuery -> Bool
+isDefVersus (DefVersus _ _ _ _) = True
+isDefVersus _ = False
+
+
 trim' :: String -> [Char]
 trim' = intercalate " " . fmap trim . lines
 

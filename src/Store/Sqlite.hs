@@ -11,36 +11,57 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Store.Sqlite where
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.Reader (ReaderT(..))
-import Data.Aeson
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as BLC
-import Data.Either
-import qualified Data.Text as T
-import Data.Text (Text)
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
-import Data.Time (Day, UTCTime(..), toGregorian)
-import Data.Time.Clock (getCurrentTime)
-import Database.Persist
-import Database.Persist.Sqlite
-import Database.Persist.TH
-import Debug.Trace (trace)
-import GHC.Generics
-import qualified Parse as P
-import Parse.Entry
-import Search
-import Store.Sqlite.Types
-import Store.Types (AttrTag(..))
-import Text.Show.Pretty (pPrint, ppShow)
-import Time (toUTC)
-import Web.PathPieces (PathPiece(..))
+import           Control.Monad.IO.Class         ( MonadIO
+                                                , liftIO
+                                                )
+import           Control.Monad.Trans.Reader     ( ReaderT(..) )
+import           Data.Aeson hiding (Result)
+import qualified Data.ByteString               as B
+import qualified Data.ByteString.Lazy          as BL
+import qualified Data.ByteString.Lazy.Char8    as BLC
+import           Data.Either
+import           Data.Function                  ( (&) )
+import           Data.List                      ( isInfixOf )
+import           Data.Maybe                     ( catMaybes )
+import           Data.Semigroup                 ( (<>) )
+import qualified Data.Text                     as T
+import           Data.Text                      ( Text )
+import qualified Data.Text.Encoding            as T
+import qualified Data.Text.Lazy                as TL
+import qualified Data.Text.Lazy.Encoding       as TL
+import           Data.Time                      ( Day
+                                                , UTCTime(..)
+                                                , toGregorian
+                                                )
+import           Data.Time.Clock                ( getCurrentTime )
+import           Database.Persist
+import           Database.Persist.Sqlite
+import           Database.Persist.TH
+import           Debug.Trace                    ( trace )
+import           GHC.Generics
+import qualified Parse                         as P
+import           Parse.Entry             hiding ( DefQueryVariant(..) )
+import qualified Parse.Entry                   as P
+import qualified Parse.Entry             hiding ( DefQueryVariant(..) )
+import           Search
+import           Store                          ( Result(..) )
+import           Store.Sqlite.Types
+import           Store.Types                    ( AttrTag(..) )
+import           Text.Show.Pretty               ( pPrint
+                                                , ppShow
+                                                )
+import           Time
+import           Time                           ( toUTC )
+import           Web.PathPieces                 ( PathPiece(..) )
+
+
+---------------
+--- STORAGE ---
+---------------
 
 -- newtype TS = TS UTCTime deriving Show
 instance PathPiece UTCTime where
@@ -510,23 +531,300 @@ phraseToDefEntry mAttrTag phrase =
         Nothing
         Nothing
 
---instance FromEntry ReadEntry () String where fromEntry _ 
+--------------
+--- SEARCH ---
+--------------
+
+-- | TODO
 --
--- | Search methods to support, topmost should be more readily accessible:
---   (this seems fairly simple)
---  ▣  filter by entry type (each has its own table, so this is already sorted out).
---     use something like:
---     > (results :: [Entity EntryVariant]) <- selectList [] [])
---     to select all of a single entry
---  ▣  filter by date: primary keys are `UTCTime`s
---     use
---     > (results :: [Entity EntryVariant]) <- selectList [EntryId >.  startDate, EntryId <. endDate] [])
---     to filter by date
+-- □  replace strings with text wherever possible--I have in mind the search
+-- strings.
 --
---  □  definitions: filter out inline defs, comparisions, and headwords lists.
---     use 
---     > (results :: [Entity EntryVariant]) <- selectList [DefDefinitionTag ==. Inline'] [])
---
---  □  (low priority) return chronologically sorted results (with --chrono flag)
---      
 searchTodo = undefined
+
+type Author = String
+type Title  = String
+
+-- | Search preferences (extracted from command line arguments).
+--
+-- Each @check*@ field signals whether the corresponding entry variant is to be
+-- included in the final output.
+--
+-- The @*Search@ fields contain variant specific search configuration. As yet,
+-- all but 'DefSearch' are type aliases for @[String -> Bool]@.
+-- 
+data SearchConfig = SearchConfig
+  { since :: Day
+  , before :: Day
+  , checkDumps :: Bool
+  , checkPhrases :: Bool
+  , checkQuotes :: Bool
+  , checkDialogues :: Bool
+  , checkComments :: Bool
+  , checkDefinitions :: Bool
+  , attributionPreds :: [Title -> Author -> Bool]
+  , definitionSearch :: DefSearch
+  , quoteSearch :: QuotationSearch
+  , commentarySearch :: CommentarySearch
+  , dialogueSearch :: DialogueSearch
+  , dumpSearch :: DumpSearch
+  }
+
+
+-- | Dispatch search.
+dispatchSearch :: MonadIO m => SearchConfig -> DB m [Result]
+dispatchSearch SearchConfig {..} =
+  let withinRange = undefined
+      -- x :: Int
+      x = 
+        [ -- if checkDumps
+        ]
+   in  undefined
+
+
+-- | Attribution filters: if the title and author infix lists are empty, these
+-- are skipped over, otherwise they are the first in the chain of filters.
+-- Eventually, we may refactor the filters into a single pass, should
+-- performance become an issue.
+--
+-- Each record type/table/entry type will have its own custom filtration
+-- pipeline: the first segment of each will be a switch to include or exclude
+-- that entry type in the final list of (filtered) entries.
+--
+-- For instance, 'DefEntry`s will pass through the following filters in order:
+--    1. entry type inclusion/exclusion--this dispatch takes in the CLI options
+--    and dispatches the requested entry-variant filters; 
+--    3. date filtration (based on query's date range)--see 'withinDateRange';
+--    3. read attribution--see 'applyReadPreds'; and
+--    4. definition variant :
+--        i. run 'withinDateRange' then 'applyReadPreds'
+--        ii. apply entry-variant specific filters, e.g.,
+--          * phrase | definition
+--          * headwords | inline | comparision (a.t.m. implies the definition
+--          filter).
+--
+--  More generally, the pipeline reduces to steps 1-3 as above and then some
+--  entry variant specific filtration based on its unique fields. Note that
+--  when we receive a query containing a predicate on a field not common to all
+--  entry variants, only variants that have the field will be included in the
+--  output (however in the first pass we should imitate the current
+--  functionality as a kind of regression testing to see whether the new
+--  pipeline has all the functionality of the old).
+attributionSatisfies
+  :: MonadIO m => [String] -> [String] -> Key ReadEntry -> DB m Bool
+attributionSatisfies authorPreds titlePreds readKey = do
+  maybeReadEntry <- get readKey
+  return $
+    -- if the entry has no read attribution and we are given author or
+    -- title predicates, then the entry is omitted from the filtered
+    -- output.
+           case maybeReadEntry of
+    Just ReadEntry {..} ->
+      and (isInfixOf <$> authorPreds <*> pure readEntryAuthor)
+        && and (isInfixOf <$> titlePreds <*> pure readEntryTitle)
+    Nothing -> False
+
+-- | Applies auth/title predicates to a quote's manual attribution. If no
+-- manual attribution is present, @Nothing@ is returned.
+manualAttributionSatisfies :: [String] -> [String] -> QuoteEntry -> Maybe Bool
+manualAttributionSatisfies authorPreds titlePreds QuoteEntry { quoteEntryManualAttribution }
+  = do
+    attr <- quoteEntryManualAttribution
+    return $ and (isInfixOf <$> authorPreds <*> pure attr) && and
+      (isInfixOf <$> titlePreds <*> pure attr)
+
+-- | Checks whether a single 'Entry'\'s title/author attribution satisfies the
+-- given search strings.
+taggedEntrySatisfies
+  :: (MonadIO m, Tagged record)
+  => [String]
+  -> [String]
+  -> Entity record
+  -> DB m (Maybe (Entity record))
+taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
+  case getAttributionTag entityVal of
+    Just readKey -> do
+
+      -- FIXME when an entry has an inferred attribution, by indentation, /and/
+      -- a manual attribution, it satisfies the search--that is, it becomes a
+      -- result--if the search predicates succeed for either attribution.
+
+      satisfies <- attributionSatisfies authorPreds titlePreds readKey
+      let manualSatisfies =
+            maybe True id
+              $   getQuoteEntry entityVal
+              >>= manualAttributionSatisfies authorPreds titlePreds
+      return $ if satisfies || manualSatisfies then Just entity else Nothing
+    Nothing -> return Nothing
+
+-- | Title and author search predicates test whether the given search strings
+-- are all infixes of the title or author, respectively.
+--
+---- FIXME too many passes (Q: how to know whether fusion has been applied?  Check core?)
+applyReadPreds
+  :: (MonadIO m, Tagged record)
+  => [String] -- | Author predicates
+  -> [String]
+  -> [Entity record]
+  -> DB m [Entity record]
+applyReadPreds authorPreds titlePreds entities =
+  fmap catMaybes
+    $ sequence
+    $ let x = taggedEntrySatisfies authorPreds titlePreds <$> entities
+      in  trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) x
+
+-- | Collects entries of from a single variant's table that were entered within
+-- the given inlusive date range. This amounts to a select query with
+-- constraints on the primary key.
+--
+-- Having determined which entry variants are desired by the user, this filter
+-- is the first segment in each variant-specific pipeline. It's passed the
+-- 'EntryType' associated with the variant table it's to select from.
+withinDateRange
+  :: (MonadIO m, PersistEntityBackend record ~ SqlBackend, PersistEntity record)
+  => EntityField record (Key record)
+  -> (UTCTime -> Key record)
+  -> Day
+  -> Day
+  -> DB m [Entity record]
+withinDateRange entryIdType keyWrapper sinceDay beforeDay =
+  let
+    since  = dayToUTC sinceDay
+    before = dayToUTC beforeDay
+    dateConstraints =
+      [entryIdType >=. (keyWrapper since), entryIdType <=. (keyWrapper before)]
+  in
+    selectList dateConstraints []
+
+
+--- DEFINITION SEARCH 
+
+-- | Search predicates specifically for definitions. See 'filterDef'\'s
+-- documentation for more details.
+data DefSearch = DefSearch
+  { defVariants :: [P.DefQueryVariant]
+  , headwordPreds :: [String -> Bool]
+  , meaningPreds :: [String -> Bool] }
+
+
+-- | Definition filter. 
+--
+-- This function converts the @Entity DefEntry' into a 'DefQuery' before
+-- applying any predicates.
+--
+--
+-- Supports for all definition types the following
+-- predicates:
+--
+--  * headword infix search; and 
+--  * meaning infix search.
+--
+--  Additionally, definition subtype filters allow for the selection
+--  specifically of:
+--
+--  * phrases;
+--  * inline definitions; and
+--  * comparisions.
+--
+--  By default, passing the @--phrases@ or @--phr@ flag will exclude not only
+--  other entry variants but other definition variants as well. However, should
+--  the user pass two definition variant flags in a single invocation, both
+--  variants will be included in the search results.
+--
+--  Note that since comparisons consist of two inline definitions, the flag
+--  @--inline@ will return both 'InlineDef's and 'DefVersus's. To request /only/
+--  inline definitions, and not comparisions, pass the @--only-inline@ flag
+--  instead.
+--
+--  Note as well that this function should only be applied to entries that have
+--  satisfied the given date range and author/title predicates, as those tests
+--  are sufficiently general to have been factored out--this function relies
+--  only on a 'DefQuery' specific search configuration, 'DefSearch' specified below.
+--
+--
+--  TODO This could be vastly simplified by the tag refactor enabled
+--  unification of 'Phrase' and 'DefEntry'. Further, the common aspects of all
+--  of the search functions might be easily factored out into one generic
+--  function.
+--
+filterDef :: DefSearch -> Entity DefEntry -> Either String Bool
+filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal }
+  = do
+    let variantSatisfies
+          :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
+        variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
+    entry <- (toEntry entityVal :: Either String Entry)
+    case entry of
+      Def x@(P.Defn mPg hws) ->
+        Right $ variantSatisfies defVariants (Right x) && and
+          (headwordPreds <*> hws)
+      Def x@(P.InlineDef hw mn) ->
+        Right
+          $  variantSatisfies defVariants (Right x)
+          && and (headwordPreds <*> pure hw)
+          && and (meaningPreds <*> pure mn)
+      Def x@(P.DefVersus hw mn hw' mn') ->
+        Right
+          $ -- only one of the two compared definitions need satisfy
+             variantSatisfies defVariants (Right x)
+          && (  (  and (headwordPreds <*> pure hw)
+                && and (meaningPreds <*> pure mn)
+                )
+             || (  and (headwordPreds <*> pure hw')
+                && and (meaningPreds <*> pure mn')
+                )
+             )
+      Phr x@(Plural hws) ->
+        Right $ variantSatisfies defVariants (Left x) && and
+          (headwordPreds <*> hws)
+      Phr x@(Defined hw mn) ->
+        Right
+          $  variantSatisfies defVariants (Left x)
+          && and (headwordPreds <*> pure hw)
+          && and (meaningPreds <*> pure mn)
+      _ ->
+        Left
+          "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\
+                     \           but found another 'Entry' variant."
+
+
+--- DUMP SEARCH
+
+-- | Search predicates applied in infix fashion to dump strings--I've never
+-- actually used this functionality through the old interface.
+type DumpSearch = [String -> Bool]
+
+
+-- | Apply predicates to a dump.
+filterDump :: DumpSearch -> Entity DumpEntry -> Bool
+filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
+  and ((dumps &) <$> dumpPreds)
+
+
+--- DIALOGUE SEARCH
+
+type DialogueSearch = [String -> Bool]
+
+-- | Apply predicates to a dialogue.
+filterDialogue :: DialogueSearch -> Entity DialogueEntry -> Bool
+filterDialogue dialoguePreds (Entity _ (DialogueEntry body _)) =
+  and ((body &) <$> dialoguePreds)
+
+
+--- COMMENTARY SEARCH
+
+type CommentarySearch = [String -> Bool]
+
+-- | Apply predicates to a commentary.
+filterCommentary :: CommentarySearch -> Entity CommentaryEntry -> Bool
+filterCommentary commentPreds (Entity _ (CommentaryEntry body _)) =
+  and ((body &) <$> commentPreds)
+
+
+--- QUOTATION SEARCH
+
+type QuotationSearch = [String -> Bool]
+
+filterQuote :: QuotationSearch -> Entity QuoteEntry -> Bool
+filterQuote quotePreds (Entity _ (QuoteEntry body _ _)) =
+  and ((body &) <$> quotePreds)

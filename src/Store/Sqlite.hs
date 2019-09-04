@@ -12,14 +12,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# OPTIONS_HADDOCK prune #-}
 
 module Store.Sqlite where
 
+import Control.Exception (catch, SomeException)
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
 import           Control.Monad.Trans.Reader     ( ReaderT(..) )
-import           Data.Aeson hiding (Result)
+import           Data.Aeson              hiding ( Result
+                                                , Value
+                                                )
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Char8    as BLC
@@ -38,15 +42,26 @@ import           Data.Time                      ( Day
                                                 , toGregorian
                                                 )
 import           Data.Time.Clock                ( getCurrentTime )
-import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Esqueleto
+import qualified Database.Persist              as P
+import qualified Database.Persist.Sqlite       as P
+import           Database.Persist.Sqlite        ( Key(..)
+                                                , SqlBackend
+                                                , Entity(..)
+                                                , insertKey
+                                                , runSqlite
+                                                , BaseBackend
+                                                , runMigration
+                                                , selectList
+                                                , deleteWhere
+                                                , get
+                                                )
 import           Database.Persist.TH
 import           Debug.Trace                    ( trace )
-import           GHC.Generics
+import           GHC.Generics            hiding ( from )
 import qualified Parse                         as P
 import           Parse.Entry             hiding ( DefQueryVariant(..) )
 import qualified Parse.Entry                   as P
-import qualified Parse.Entry             hiding ( DefQueryVariant(..) )
 import           Search
 import           Store                          ( Result(..) )
 import           Store.Sqlite.Types
@@ -194,8 +209,16 @@ fromAttrTag = ReadEntryKey . attrId
 
 -- | Writes and tags a 'Day'\'s 'LogEntry's to the database. A singly indented
 -- entry is tagged with the id of the top-level parent the least lines above
--- it; if no such parent exists the entry is left untagged and a (TODO) warning is
--- logged.
+-- it; if no such parent exists the entry is left untagged and a (TODO) warning
+-- is logged.
+--
+-- TODO (!!!!) protect against (accidental) duplicate timestamps--they result
+-- in a primary key collision. !! Primary key collisions are a fatal error. The
+-- only issue within this function (and 'writeLogEntry') is that the error
+-- message is vague. As such, we will catch the exception here, inspect the
+-- primary keys, and return a more informative error message. However, this
+-- should /never/ happen again, as the parser is wholly responsible for
+-- squawking at ill-formed input. Fix the damn parser.
 --
 -- TODO works in 'demo': convert back to  @[LogEntry]@ to test that
 -- @(writeEntry .  readRead) == id@ is true for any entry and that attributions
@@ -274,7 +297,7 @@ writeLogEntry ::
   -> Maybe AttrTag
   -> DB m (Either String UTCTime)
 writeLogEntry day logEntry mAttrTag =
-  trace ("writeLgEntry: " ++ show mAttrTag) $
+  trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $
   case logEntry of
     Dump dumpContents ->
       return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
@@ -306,7 +329,7 @@ writeLogEntry day logEntry mAttrTag =
               CommentaryEntry commentBody $ fromAttrTag <$> mAttrTag
             PN pageNum ->
               let (pageTag, pgNum) = fromPageNum pageNum
-              in insertKey (PageNumberEntryKey utc) $
+              in trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $ insertKey (PageNumberEntryKey utc) $
                  PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
             Phr phrase ->
               insertKey (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
@@ -363,8 +386,8 @@ main
       in rights xs
     liftIO $ pPrint $ fmap entityVal allReads
     -- clean up 
-    deleteWhere [DefEntryId ==. defEntryId]
-    deleteWhere [ReadEntryId ==. wutheringHeightsId]
+    deleteWhere [DefEntryId P.==. defEntryId]
+    deleteWhere [ReadEntryId P.==. wutheringHeightsId]
     --oneJohnPost <- selectList [BlogPostAuthorId ==. johnId] [LimitTo 1]
     --liftIO $ print (oneJohnPost :: [Entitygggg BlogPost])
     --john <- get johnId
@@ -562,7 +585,7 @@ data SearchConfig = SearchConfig
   , checkDialogues :: Bool
   , checkComments :: Bool
   , checkDefinitions :: Bool
-  , attributionPreds :: [Title -> Author -> Bool]
+  , attributionPreds :: ([String], [String]) -- tuple of search author, title search strings
   , definitionSearch :: DefSearch
   , quoteSearch :: QuotationSearch
   , commentarySearch :: CommentarySearch
@@ -692,7 +715,7 @@ withinDateRange entryIdType keyWrapper sinceDay beforeDay =
     since  = dayToUTC sinceDay
     before = dayToUTC beforeDay
     dateConstraints =
-      [entryIdType >=. (keyWrapper since), entryIdType <=. (keyWrapper before)]
+      [entryIdType P.>=. (keyWrapper since), entryIdType P.<=. (keyWrapper before)]
   in
     selectList dateConstraints []
 
@@ -821,10 +844,118 @@ filterCommentary commentPreds (Entity _ (CommentaryEntry body _)) =
   and ((body &) <$> commentPreds)
 
 
+
+-- | Esqueleto constraint to select entries within a given date range.
+dateRangeConstraint
+  :: (Esqueleto query expr backend, PersistEntity record)
+  => EntityField record (Key record)
+  -> (UTCTime -> Key record)
+  -> expr (Entity record)
+  -> Day
+  -> Day
+  -> expr (Value Bool)
+dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
+  let since  = dayToUTC sinceDay
+      before = dayToUTC beforeDay
+  in  (entityUTC ^. idType >=. (val (keyWrapper since)))
+        &&. (entityUTC ^. idType <=. (val (keyWrapper before)))
+
+
+-- | An esqueleto constraint that checks whether a string is @LIKE@ all of a
+-- list of search strings, the syntax for which is specified by the Sqlite docs
+-- for @LIKE@.
+attributionConstraint
+  :: Esqueleto query expr backend
+  => expr (Value (Maybe String))
+  -> [String]
+  -> expr (Value Bool)
+attributionConstraint bodyStr attrSearchStrings = foldr
+  (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
+  (val True)
+  attrSearchStrings
+
 --- QUOTATION SEARCH
 
-type QuotationSearch = [String -> Bool]
+type QuotationSearch = [String]
 
-filterQuote :: QuotationSearch -> Entity QuoteEntry -> Bool
-filterQuote quotePreds (Entity _ (QuoteEntry body _ _)) =
-  and ((body &) <$> quotePreds)
+quoteBodySearchConstraint
+  :: Esqueleto query expr backend
+  => expr (Value String)
+  -> [String]
+  -> expr (Value Bool)
+quoteBodySearchConstraint quoteBody bodySearchStrings = foldr
+  (\searchStr rest -> (quoteBody `like` (val searchStr)) &&. rest)
+  (val True)
+  bodySearchStrings
+
+-- | 
+--  We want to produce sql that is a generalization of the below: 
+--
+--  @ 
+--  select re.id, title, author, manual_attribution, qe.body 
+--    from read_entry re, quote_entry qe 
+--    where qe.attribution_tag == re.id 
+--      and (author like "%Woolf%" or manual_attribution like "%Woolf%") 
+--      and qe.body like "%simplicity%";
+--
+-- @
+-- or 
+--
+-- @ 
+-- select title, author, manual_attribution, body 
+--    from quote_entry  left join read_entry on read_entry.id=quote_entry.attribution_tag; 
+-- @
+--
+filterQuotes
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> [String]
+  -> DB m [Entity QuoteEntry]
+filterQuotes since before authPreds titlePreds bodyStrs =
+  select
+    $ from
+    $ \(quoteEntry `LeftOuterJoin` readEntry) -> do
+        on
+          (quoteEntry ^. QuoteEntryAttributionTag ==. just
+            (readEntry ^. ReadEntryId)
+          )
+        where_
+          (
+           -- satisfies title/auth preds if present
+              (
+              -- manual attr satsifies
+               (   (attributionConstraint
+                     (quoteEntry ^. QuoteEntryManualAttribution)
+                     authPreds
+                   )
+               &&. (attributionConstraint
+                     (quoteEntry ^. QuoteEntryManualAttribution)
+                     titlePreds
+                   )
+               )
+              ||.
+            -- tagged attr satsfies
+                  ((attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
+                                          authPreds
+                   )
+                  &&. (attributionConstraint
+                        (just $ readEntry ^. ReadEntryTitle)
+                        titlePreds
+                      )
+                  )
+              )
+          &&. -- satisfies quoteBody preds
+              (quoteBodySearchConstraint (quoteEntry ^. QuoteEntryBody)
+                                         bodyStrs
+              )
+          &&. (dateRangeConstraint QuoteEntryId
+                                   QuoteEntryKey
+                                   quoteEntry
+                                   since
+                                   before
+              )
+          )
+        return quoteEntry

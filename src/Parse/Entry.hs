@@ -50,11 +50,14 @@ import Control.Lens.TH (makePrisms)
 --import Control.Lens (makeLenses, preview, review)
 --import Control.Lens.Tuple
 import Control.Monad (void)
+import Debug.Trace (trace)
 import Data.Aeson hiding (Null)
+import Control.Monad.Trans.State
+import Data.Bifunctor (bimap)
 import Data.Char (isSpace)
 import Data.List (dropWhile, dropWhileEnd, intercalate)
 import Data.List.Split (splitOn)
-
+import Data.Semigroup ((<>))
 --import Data.Maybe (fromJust)
 import Data.Time
 import GHC.Generics hiding (Infix, Prefix)
@@ -66,6 +69,7 @@ import Text.Parser.LookAhead
 import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta hiding (Rendering, Span)
+import qualified Text.PrettyPrint.ANSI.Leijen as Leijen 
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
@@ -151,6 +155,7 @@ book = do
   title <- between quot quot (some $ noneOf "\"")
   _ <- optional $ symbol "," -- 
   _ <- symbol "by" <?> "expected attribution"
+  -- what is this "canonical" business?
   isCanonical <- option False $ symbol "canonical" *> return True
   author <- some (noneOf "\n")
   _ <- entryBody
@@ -177,25 +182,25 @@ page = do
   -- taste.
   --
   p <-
-    try (const Page <$> symbolic 'p') <|> try (const PStart <$> symbolic 's') <|> try (const PEnd <$> symbolic 'e') <|>
-    const PFinish <$> symbolic 'f'
+    try (const Page <$> symbolic 'p')
+    <|> try (const PStart <$> symbolic 's')
+    <|> try (const PEnd <$> symbolic 'e')
+    <|> const PFinish
+    <$> symbolic 'f'
   pg <- digits <?> "page digits"
-  _ <- entryBody
-  _ <- many newline
+  _  <- entryBody
+  _  <- many newline
   return $ PN $ p pg
 
 -- TODO add test case for ~/sputum/muse/17.10.17, parses only beginning of
 -- dump and discards rest of file
 dump :: Parser LogEntry
-dump =
-  let el = string "..."
-  in Dump <$> (many space *> el *> manyTill anyChar (try $ newline <* el))
+dump = Dump <$> (many space *> el *> manyTill anyChar (try $ newline <* el))
+  where el = string "..."
 
 nullE :: Parser Entry
 nullE =
-  let --x :: _
-      x = skipOptional (many space *> (newline <?> "newline here"))
-  in const Null <$> x
+  const Null <$> skipOptional (many space *> (newline <?> "newline here"))
 
 data LogEntry
   = Dump String
@@ -210,17 +215,20 @@ instance FromJSON LogEntry
 logEntry :: Parser LogEntry
 logEntry = do
   _ <- skipOptional (try emptyLines)
-  let 
-      null =  do (indent, ts) <- timestamp'
-                 _ <- void (skipOptional spacesNotNewline *> newline) <|> eof
-                 return $ TabTsEntry (indent, ts, Null)
+  let null = do
+        (indent, ts) <- timestamp'
+        _            <- void (skipOptional spacesNotNewline *> newline) <|> eof
+        return $ TabTsEntry (indent, ts, Null)
       entry' = do
         (indent, ts) <- timestamp' <?> "timestamp"
-        e <-
-          try book <|> try quotation <|> try commentary <|> try dialogue <|>
-          try def <|>
-          try page <|>
-          try phrase
+        e            <-
+          try book
+          <|> try quotation
+          <|> try commentary
+          <|> try dialogue
+          <|> try def
+          <|> try page
+          <|> try phrase
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> try null <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
@@ -233,9 +241,126 @@ tmp = do
 
 logEntries :: Parser [LogEntry]
 logEntries =
-  const [] <$>
-  (try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof") *>
+  const []
+    <$> (   try (void $ many space)
+        <|> try (void emptyLines)
+        <|> try eof
+        <?> "eat eof"
+        )
+    *>  some logEntry
+
+-- | Like 'logEntry' but this parser will enforce that no two timestamps are
+-- duplicate by requiring each to be greater than and not equal to its
+-- predecessor.
+--
+-- If the timestamp of an entry is found to be less than or equal to that which
+-- came before it, some helpful error message should be constructed with the
+-- location of the issue, and, ideally, some directions--or better yet, an
+-- interactive timestamp editing interface--as to how they might correct the
+-- issue so that the day in question's 'LogEntry' may parse successfully.
+logEntry' :: Maybe TimeStamp -> Parser (LogEntry, Maybe TimeStamp)
+logEntry' Nothing = do
+  -- No timestamp means its the first entry in the day or a dump.  If a dump
+  -- occurs at the start of the file, the parser will proceed without a
+  -- timestamp and treat the first non-dump entry is the start of the file
+  -- (that is, w.r.t. the timestamp passing logic). Should a dump be situated
+  -- in the middle of a series of timestamped entries, the dump will be parsed
+  -- normally and the last timestamp parsed will be passed through for
+  -- comparision with the very next timestamp to be encountered.
+  le <- logEntry
+  -- No lookahead required as it's the first timestamp in the day's log.  As
+  -- such, this branch cannot fail due to duplicate or unordered timestamps.
+  return $ case le of
+    Dump       _          -> (le, Nothing)
+    TabTsEntry (_, ts, _) -> (le, Just ts)
+logEntry' (Just previousTimeStamp) = do
+  le <- lookAhead logEntry
+  -- 'lookAhead' places the error caret at the end of well-formed input, in
+  -- this case on the character of the malformed timestamp or its preceding
+  -- whitespace.
+  case le of
+    Dump _ -> return (le, Just previousTimeStamp)
+    TabTsEntry (_, currentTimeStamp, _) ->
+      if previousTimeStamp < currentTimeStamp
+        then return (le, Just currentTimeStamp)
+        else raiseErr $ Err
+          ( return
+          $ Leijen.vcat
+          $ (Leijen.text "Unordered or duplicate timestamps:" :)
+          -- $ (Leijen.line :)
+          $ fmap Leijen.text
+          $ (wordSensitiveLineWrap 55
+           (  "Found current timestamp, t1 = "
+            <> show currentTimeStamp
+            <> ", and previous timestamp, t0  = "
+            <> show previousTimeStamp
+            <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
+            ))
+          )
+          mempty
+          mempty
+          mempty
+
+wordSensitiveLineWrap :: Int -> String -> [String]
+wordSensitiveLineWrap n s = 
+  let takeNCharsWorth _ []      = ([], [])
+      takeNCharsWorth n (h : t) = if length h < n
+          then bimap (h :) id $ takeNCharsWorth (n - length h) t
+          else ([], h : t)
+      go ws = 
+        let (ln, rest) = takeNCharsWorth 80 ws 
+         in if not (null rest) then unwords ln : go rest
+                               else unwords ln : [unwords rest]
+  in go (words s)
+
+
+-- | Apply the parser to the initial state. If it fails, return @[]@.
+-- Otherwise, recurse with the new state. 
+--
+-- This should, for example, be able to parse a list of digits and rather
+-- efficiently ensure that they are ascending.
+many' :: s -> (s -> Parser (a, s)) -> Parser [a]
+many' s p = do
+  mx <- try (Just <$> p s) <|> return Nothing
+  case mx of
+    Just (a, s') -> (a :) <$> many' s' p
+    Nothing      -> return []
+
+many'' :: s -> (s -> Parser (a, s)) -> Parser [a]
+many'' s p = do
+  (a, s') <- p s 
+  (a:) <$> many'' s' p
+  
+
+
+ascendingDigits :: Int -> Parser (Int, Int)
+ascendingDigits previous = do
+  current <- (read . return) <$> digit
+  skipOptional (many space *> char ',' <* many space)
+  if previous < current
+    then return (current, current)
+    else unexpected "expected ascending comma-separated digits"
+
+
+-- | Pass in comma-separated digits that /don't/ ascend to see what error
+-- message our dear user(s) will find upon trying to parse a log file with
+-- duplicate timestamps.
+validatedInputExample input = parse (many'' 0 ascendingDigits <* (eof <?> "digits must ascend")) -- "1,2,3" 
+
+logEntries' :: Parser [LogEntry]
+logEntries' = do
+  try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof"
   some logEntry
+    where  go p = do mLe <- try (Just <$> p) <|> return Nothing
+                     case mLe of 
+                       Just le -> (le:) <$> go p
+                       Nothing -> return []
+
+
+--some' :: Maybe s -> (Maybe s -> Parser (a, Maybe s)) -> Parser [a]
+--some' initialState parser = do (a, ms) <- parser initialState
+--                               (a:) <$> many' ms parser
+--
 
 -- TODO add N.B. field to as many variants as possible (poss. by adding (N.B |
 -- n.b. | nota bene) parser to `untilP` in entryBody
@@ -252,7 +377,6 @@ data Entry
   | Dialogue String
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
-
 instance ToJSON Entry where
   toEncoding = genericToEncoding defaultOptions
 
@@ -260,9 +384,14 @@ instance FromJSON Entry
 
 isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _ _) = True
-isQuotation _ = False
+isQuotation _                 = False
 
-data DefQueryVariant = Phrase' | Defn' | InlineDef' | DefVersus' deriving (Eq, Show)
+data DefQueryVariant
+  = Phrase'
+  | Defn'
+  | InlineDef'
+  | DefVersus'
+  deriving (Eq, Show)
 
 -- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
 -- are unified under a single type with a tag list (the tags refactor will

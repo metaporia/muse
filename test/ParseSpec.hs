@@ -27,6 +27,7 @@ import Text.RawString.QQ
 import Text.Show.Pretty (pPrint)
 import Text.Trifecta
 import Control.Applicative 
+import Store.Sqlite
 import qualified Text.Trifecta.Result as Tri
 
 tparse :: String -> Result [LogEntry]

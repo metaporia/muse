@@ -177,7 +177,7 @@ data TimeStamp = TimeStamp
   { hr :: Int
   , min :: Int
   , sec :: Int
-  } deriving (Eq, Generic, Show)
+  } deriving (Eq, Generic, Ord, Show)
 
 instance ToJSON TimeStamp where
   toEncoding = genericToEncoding defaultOptions

@@ -20,36 +20,39 @@ extra-source-files:
 description: Please see the README on GitHub at <https://gitlab.com/metaporia/muse#README.md>
 
 dependencies:
-- base >= 4.7 && < 5
-- text
-- trifecta
-- pretty-show
-- mtl >= 2.2.2
-- raw-strings-qq
-- hspec
-- QuickCheck
-- split
-- parsers
-- time
-- yaml-config
-- aeson
-- directory
-- bytestring
-- text-metrics
-- word-wrap
-- lens
-- transformers
-- ansi-terminal
+
 - acid-state
-- safecopy
-- ixset
-- containers
+- ansi-wl-pprint
+- aeson
+- ansi-terminal
+- base >= 4.7 && < 5
 - basic-prelude
+- bytestring
+- containers
+- directory
+- esqueleto
+- hspec
+- ixset
+- lens
+- mtl >= 2.2.2
 - optparse-applicative
+- parsers
+- path-pieces
 - persistent
 - persistent-sqlite
 - persistent-template
-- path-pieces
+- pretty-show
+- QuickCheck
+- raw-strings-qq
+- safecopy
+- split
+- text
+- text-metrics
+- time
+- transformers
+- trifecta
+- word-wrap
+- yaml-config
 
 library:
   source-dirs: src

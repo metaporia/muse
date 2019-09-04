@@ -80,6 +80,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Store.Sqlite as Sql
 import qualified Data.ByteString.Lazy as BL
+import Database.Persist.Sqlite (runSqlite, runMigration)
 import Data.Char (toLower)
 import Data.Foldable (fold)
 import Data.Foldable (fold)
@@ -1127,6 +1128,93 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
            (\(fp, eg) ->
               BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
            entryGroups)
+
+-- | Parse all entries into sqlite database.
+parseAllEntries'' :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home)
+  -- read in log file names; parse 'em
+  --putStrLn $ show mc
+ = do
+  fps <- sort <$> lsEntrySource mc
+  -- 
+      --  TODO rewrite this for sqlite
+      -- 
+      --
+      -- 
+      -- Check, if for a given log file a parsed file has been cached, 
+      -- whether the log's modification date is greater than the that of the 
+      -- cached json.
+      --   
+      --   1. if using cache, collect keys of modified entries from 'lastUpdated', otherwise use all
+      --      * for each log source, fetch last modification time. if there is
+      --        none, then add to list, otherwise compare the times: include only
+      --        if the source file's modification date is more recent than that
+      --        of 'lastUpdated`.
+      --   2. convert to list
+  let selectModified' fps lastUpdated = undefined -- TODO
+        --let lastModified :: Day -> Maybe ModRec
+        --    lastModified day = getOne $ lastUpdated @= (day :: Day)
+        --    compare :: FilePath -> ModRec -> IO (Maybe FilePath)
+        --    compare fp ModRec {..} = do
+        --      logMd <- getModificationTime $ T.unpack (entrySource mc) ++ fp
+        --      if logMd > modified
+        --        then return $ Just fp
+        --        else return Nothing
+        --    f :: FilePath -> IO (Maybe FilePath)
+        --    f fp =
+        --      case pathToDay fp >>= lastModified of
+        --        Just mr -> compare fp mr
+        --        Nothing -> return $ Just fp
+        --in foldr
+        --     (\a bs -> f a >>= maybe bs (\x -> fmap (x :) bs))
+        --     (return [] :: IO [FilePath])
+        --     fps
+        --filtermap pathToDay fps
+
+      -- TODO (!!!!!) exclude days with duplicate primary keys!
+      parse :: String -> IO (String, Either String [LogEntry])
+      parse fp =
+        (,) <$> pure fp <*>
+        (showErr . Tri.parseByteString logEntries mempty <$>
+         B.readFile (T.unpack (entrySource mc) ++ "/" ++ fp))
+      invert :: (fp, Maybe e) -> Maybe (fp, e)
+      invert (fp, me) =
+        case me of
+          Just e -> Just (fp, e)
+          Nothing -> Nothing
+      -- TODO group `logEntry`s by day for use with 'addDay'
+      parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
+      parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
+      showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
+      showOrCollect =
+        let sideBar = unlines . fmap ("> " ++) . lines
+        in foldr
+             (\(fp, e) rest ->
+                case e -- render errros w filename, `ErrInfo`
+                      of
+                  Left err ->
+                    if quiet
+                      then rest
+                      else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >>
+                           rest
+                  Right res -> do
+                    if showDebug
+                      then putStrLn $ "Success: " ++ fp
+                      else return ()
+                    ((fp, res) :) <$> rest)
+             (return [])
+  if quiet
+    then putStrLn "\nSuppressing entry parse error output"
+    else return ()
+  runSqlite ( home <>  "/.muse/state/sqlite.db") $ do
+    runMigration Sql.migrateAll
+    let allFiles = return fps
+    entriesByDay <- liftIO $ allFiles >>= parseAndShowErrs
+
+    sequence . fmap (uncurry Sql.writeDay) . catMaybes $  fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entriesByDay
+  return ()
+
+
 
 colView :: IO ()
 colView = do

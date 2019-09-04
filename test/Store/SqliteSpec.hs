@@ -15,36 +15,46 @@
 -----------------------------------------------------------------------------
 module Store.SqliteSpec where
 
+
+
+import           Control.Exception              ( bracket )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
-import           Control.Exception              ( bracket )
+import           Data.Bifunctor                 ( bimap )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , isJust
                                                 , isNothing
                                                 , fromJust
                                                 )
-import qualified Data.Text                     as T
-import           Data.Time                      ( UTCTime(..) )
-import           Data.Time.Clock                ( getCurrentTime )
+import           Data.Semigroup                 ( (<>) )
+import           Data.Time                      ( UTCTime(..), addDays )
 import           Data.Time.Calendar             ( Day )
+import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Persist.Sqlite 
 import           Debug.Trace
 import           Helpers
 import           Parse
 import           Parse.Entry
-import qualified Parse.Entry as P
-import           Data.Semigroup                 ( (<>) )
 import           Store.Sqlite
 import           Test.Hspec
 import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
                                                 )
 import           Time
-import qualified Parse as P
-
+import qualified Database.Esqueleto            as E
+import           Database.Esqueleto             ( (^.)
+                                                , like
+                                                , where_
+                                                , from
+                                                )
+import qualified Data.Text                     as T
+import qualified Parse                         as P
+import qualified Parse.Entry                   as P
+import Text.RawString.QQ
+import Store.Sqlite 
 
 asIO :: IO a -> IO a
 asIO a = a
@@ -54,65 +64,43 @@ test = hspec spec
 
 spec :: Spec
 spec = do
+  let filterQuotesSetup =
+        runMigrationSilent migrateAll
+          >>  liftIO (utctDay <$> getCurrentTime)
+          >>= flip writeDay demoLogEntries
   describe "quote filtration" $ do
     it
         "manually attributed nested quotes are filtered as though they have two attributions (see Woolf in Eliot)"
       $ asIO
       $ runSqlInMem -- since it runs in mem, no pre/post clear is necessary
       $ do
-          cmdList <- runMigrationSilent migrateAll
-          today            <- liftIO $ utctDay <$> getCurrentTime
-          es               <- writeDay today demoLogEntries
+          filterQuotesSetup
           satisfactoryDefs <-
             selectList ([] :: [Filter QuoteEntry]) []
               >>= applyReadPreds ["Woolf"] ["Light"]
           liftIO $ length satisfactoryDefs `shouldBe` 3
-    it "TODO"
-      $ asIO
-      $ runSqlInMem
-      $ do
-          cmdList <- runMigrationSilent migrateAll
-          today            <- liftIO $ utctDay <$> getCurrentTime
-          writeDay today demoLogEntries
-          qs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"] 
-          liftIO (length qs `shouldBe` 3)
+    it "filterQuotes" $ asIO $ runSqlInMem $ do
+      filterQuotesSetup
+      before <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
+      since <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
+      matchingQuotes <- filterQuotes since
+                                     before
+                                     ["%Woolf%", "%Virginia%"]
+                                     []
+                                     ["%simplicity%"]
+      liftIO
+        $          (quoteEntryBody . entityVal)
+        <$>        matchingQuotes
+        `shouldBe` ["Her simplicity fathomed what clever people falsified."]
+      noMatches <- filterQuotes since
+                                before
+                                ["%Woolf%", "%Thomas Moore%"]
+                                []
+                                ["%simplicity%"]
+      liftIO $ (quoteEntryBody . entityVal) <$> noMatches `shouldBe` []
 
 
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
-
---dbTest :: Spec
---dbTest = do
---  before clear $ do
---    describe "demo" $ do
---      it "it" $ (do runSqlite "sqliteSpec.db" $ do return 1 ) `shouldReturn` 1
-
---runWithDB :: MonadIO m => T.Text -> DB m a -> IO a
---runWithDB db action = runSqlite db $ do
---  runMigration migrateAll
---  today <- liftIO $ utctDay <$> getCurrentTime
---  es    <- writeDay today demoLogEntries
---  action 
-
-
--- infix
-quoteSearch:: MonadIO m => T.Text -> DB m [Entity QuoteEntry]
-quoteSearch searchTerm = rawSql
-  (  "select ?? from quote_entry where manual_attribution like '%"
-  <> searchTerm
-  <> "%'"
-  )
-  []
-
--- infix
-quoteSearch2 :: MonadIO m => T.Text -> T.Text -> DB m [Entity QuoteEntry]
-quoteSearch2 attr body = rawSql
-  (  "select ?? from quote_entry where manual_attribution like '%"
-  <> attr
-  <> "%' and body like '%" <> body <> "%'"
-  )
-  []
-
-
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do
@@ -145,12 +133,24 @@ demo = runSqlite "sqliteSpec.db" $ do
   attrSatisfies <- attributionSatisfies ["Woolf"] [] readKey 
   --liftIO $ putStrLn $ "attrSatisfies: " <> show attrSatisfies
   satisfactoryDefs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"]
-  matchingQuotes <- quoteSearch2 "Woolf" "simplicity"
-  liftIO $ traverse pPrint matchingQuotes -- -- satisfactoryDefs
+  before <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
+  since <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
+  matchingQuotes <- filterQuotes since before ["%Woolf%"] ["%Lighthouse%"] ["%simplicity%"] 
+  liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
   return ()
 
 clear :: IO ()
 clear = runSqlite "sqliteSpec.db" $ do
+  runMigration migrateAll
+  deleteWhere ([] :: [Filter DefEntry])
+  deleteWhere ([] :: [Filter ReadEntry])
+  deleteWhere ([] :: [Filter QuoteEntry])
+  deleteWhere ([] :: [Filter CommentaryEntry])
+  deleteWhere ([] :: [Filter DialogueEntry])
+  deleteWhere ([] :: [Filter PageNumberEntry])
+
+clearDb :: T.Text -> IO ()
+clearDb db = runSqlite db $ do
   runMigration migrateAll
   deleteWhere ([] :: [Filter DefEntry])
   deleteWhere ([] :: [Filter ReadEntry])
@@ -250,3 +250,58 @@ demoLogEntries
         (Just 38)
       )
     ]
+
+
+curr :: IO ()
+curr = runSqlite "test1.db" $ do 
+  runMigration migrateAll
+  today <- liftIO $ utctDay <$> getCurrentTime
+  writeDay today $  fromJust $ toMaybe $ parse logEntries  reallyBroken
+  return ()
+
+reallyBroken = [r|
+09:20:55 λ. read "Dead Souls", by Gogol
+    09:21:02 λ. s32
+    09:27:13 λ. e34
+09:27:16 λ. read "Infinite Jest", by David Foster Wallace
+    09:27:25 λ. s87
+    09:36:38 λ. d89 chapeau
+    09:46:04 λ. d91 specular
+    09:48:02 λ. d91 pendentive
+    09:49:37 λ. d91 auteur
+    09:55:19 λ. d92 sobriquet
+    09:58:17 λ. d92 fulvous: dull yellow w/ mixture of gray/brown.
+    09:59:45 λ. d92 teratogenic
+    10:13:32 λ. d eponymous, eponym
+    10:16:47 λ. d97 quiescent
+    10:17:45 λ. d 97 digitate
+    10:21:39 λ. d98 ephebe: a (ancient Gr.) young man, 18-20, in military training.
+    10:28:20 λ. d101 semion
+    10:29:51 λ. d101 zygomatic
+    10:41:00 λ. e105
+    10:41:00 λ. s105
+    10:50:05 λ. d coruscate
+    10:52:57 λ. d105 torpid
+    11:02:52 λ. d108 lume
+    11:11:30 λ. df304 cant, escutcheon
+    11:25:53 λ. df308 interdict
+    11:28:09 λ. df038 solipsism
+    11:29:21 λ. df308 ken
+    11:37:36 λ. df308 episcopate
+    11:40:20 λ. df308 flange, numinous, vulgate
+    11:50:48 λ. df308 rostrum
+    11:54:24 λ. d109 gibbous
+    11:54:51 λ. e109
+    12:05:24 λ. s109
+    12:11:27 λ. d111 adenoid
+    13:15:12 λ. e135
+13:48:10 λ. read "Dead Souls", by Gogol
+    13:48:18 λ. s34
+    14:15:38 λ. e45
+    20:38:14 λ. s87
+    20:38:37 λ. d adze
+    20:38:55 λ. d kaftan
+    20:39:13 λ. d empyrean
+    20:39:35 λ. d lathe, faience, hummock, vittles, victuals, aureate, gilt
+    20:43:05 λ. d veriest, circumspect
+|]

@@ -85,8 +85,6 @@ type PgNum = Integer
 
 deriving instance Read TimeStamp
 
-deriving instance Ord TimeStamp
-
 deriving instance Data TimeStamp
 
 deriveSafeCopy 0 'base ''TimeStamp

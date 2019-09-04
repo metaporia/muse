@@ -266,12 +266,12 @@ searchTmp today = do
 newtype Variants a =
   Variants
     ( a
-    , Bool -- | defs
-    , Bool -- | phrases
-    , Bool -- | quotes
-    , Bool -- | dialogues
-    , Bool -- | comments
-    , Bool -- | dumps
+    , Bool --  defs
+    , Bool --  phrases
+    , Bool --  quotes
+    , Bool --  dialogues
+    , Bool --  comments
+    , Bool --  dumps
     )
 
 search' :: Day -> Parser (Variants Store.Search)
@@ -347,9 +347,9 @@ consumeSearchType s =
 data InputType
   = File FilePath
   | StdIn String
-  | All -- ^ Parse all entries in `entrySource`
-     Bool -- ^ Silence errors?
-     Bool -- ^ Ignore parsed entry cache?
+  | All Bool Bool --  Parse all entries in `entrySource`
+     --  Silence errors?
+     --  Ignore parsed entry cache?
   deriving (Eq, Show)
 
 -- | A bare invocation will default to `parse --all --ignore-cache`, which
@@ -499,8 +499,7 @@ data SubCommand
   | FetchLastRead
   | Parse InputType
   | Lint
-  | Init Bool -- ^ Suppress log parse errors
-         Bool -- ^ Reparse cached entries
+  | Init Bool Bool --  ^ [0] Suppress log parse errors; [1] reparse cached entries 
 
 -- TODO add to `search'`
 defs :: Parser (Maybe (LogEntry -> Bool))
@@ -1044,7 +1043,7 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home)
  = do
   fps <- sort <$> lsEntrySource mc
   -- 
-      -- | Check, if for a given log file a parsed file has been cached, 
+      --  Check, if for a given log file a parsed file has been cached, 
       --   whether the log's modification date is greater than the that of the 
       --   cached json.
       --   

@@ -663,7 +663,7 @@ taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
 ---- FIXME too many passes (Q: how to know whether fusion has been applied?  Check core?)
 applyReadPreds
   :: (MonadIO m, Tagged record)
-  => [String] -- | Author predicates
+  => [String] --  Author predicates
   -> [String]
   -> [Entity record]
   -> DB m [Entity record]

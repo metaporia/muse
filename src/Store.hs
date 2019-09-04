@@ -430,10 +430,10 @@ data VariantSearch'
 
 data Search where
   Search
-    :: Day -- ^ Start date
-    -> Day -- ^ End date
-    -> [Attribution -> Bool] -- ^ title/auth preds
-    -> BucketList -- ^ bucket specific predicates
+    :: Day --  Start date
+    -> Day --  End date
+    -> [Attribution -> Bool] --  title/auth preds
+    -> BucketList --  bucket specific predicates
     -> Search
 
 bucketList (Search _ _ _ bl) = bl

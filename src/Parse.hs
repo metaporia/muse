@@ -17,25 +17,30 @@
 -----------------------------------------------------------------------------
 module Parse where
 
-import Control.Applicative
-import Control.Lens.TH (makePrisms)
-
---import Control.Lens (makeLenses, preview, review)
---import Control.Lens.Tuple
-import Control.Monad (void)
-import Data.Aeson hiding (Null)
-import Data.Char (isSpace)
-import Data.List (dropWhile, dropWhileEnd, intercalate, foldl')
-
---import Data.Maybe (fromJust)
-import Data.Time
-import GHC.Generics hiding (Infix, Prefix)
-import Helpers
-import Prelude hiding (min, quot)
-import Text.Parser.LookAhead
-import Text.RawString.QQ
-import Text.Show.Pretty (pPrint)
-import Text.Trifecta hiding (Rendering, Span)
+import           Control.Applicative
+import           Control.Lens.TH                ( makePrisms )
+import           Control.Monad                  ( void )
+import           Data.Aeson              hiding ( Null )
+import           Data.Char                      ( isSpace )
+import           Data.List                      ( dropWhile
+                                                , dropWhileEnd
+                                                , foldl'
+                                                , intercalate
+                                                )
+import           Data.Time
+import           GHC.Generics            hiding ( Infix
+                                                , Prefix
+                                                )
+import           Helpers
+import           Prelude                 hiding ( min
+                                                , quot
+                                                )
+import           Text.Parser.LookAhead
+import           Text.RawString.QQ
+import           Text.Show.Pretty               ( pPrint )
+import           Text.Trifecta           hiding ( Rendering
+                                                , Span
+                                                )
 
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 -- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
@@ -198,16 +203,16 @@ timestamp :: Parser TimeStamp
 timestamp = do
   h <- lpad twoDigit
   m <- twoDigit
-  s <- twoDigit <* space <* char 'λ' <* char '.' <* space 
+  s <- twoDigit <* space <* char 'λ' <* char '.' <* space
   return $ TimeStamp h m s
 
 -- | Collects timestamps but also fetches indentation info.
 timestamp' :: Parser (Int, TimeStamp)
 timestamp' = do
   indent <- tabs
-  h <- twoDigit
-  m <- twoDigit
-  s <- twoDigit <* space <* char 'λ' <* char '.' <* space 
+  h      <- twoDigit
+  m      <- twoDigit
+  s      <- twoDigit <* space <* char 'λ' <* char '.' <* space
   return (indent, TimeStamp h m s)
 
 data DefQuery
@@ -229,7 +234,7 @@ instance FromJSON DefQuery
 type PgNum = Integer
 
 trimDefQuery :: DefQuery -> DefQuery
-trimDefQuery (Defn pg hws) = Defn pg (fmap trim hws)
+trimDefQuery (Defn      pg hws    ) = Defn pg (fmap trim hws)
 trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
 trimDefQuery (DefVersus hw m h' m') =
   DefVersus (trim hw) (trim' m) (trim h') (trim' m')
@@ -237,11 +242,11 @@ trimDefQuery (DefVersus hw m h' m') =
 
 isInlineDef :: DefQuery -> Bool
 isInlineDef (InlineDef _ _) = True
-isInlineDef _ = False
+isInlineDef _               = False
 
 isDefVersus :: DefQuery -> Bool
 isDefVersus (DefVersus _ _ _ _) = True
-isDefVersus _ = False
+isDefVersus _                   = False
 
 
 trim' :: String -> [Char]
@@ -259,8 +264,8 @@ trim' = intercalate " " . fmap trim . lines
 -- line.
 toDefn :: Parser DefQuery
 toDefn = do
-  _ <- symbolic 'd'
-  pg <- optional digits
+  _         <- symbolic 'd'
+  pg        <- optional digits
   headwords <- sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
   return $ Defn pg headwords
 
@@ -268,11 +273,11 @@ toDefn = do
 --
 -- > "d headword : meaning"- recent
 --
-inlineMeaning :: Parser DefQuery 
-inlineMeaning = do 
-  _ <- symbolic 'd' 
-  tags <- optional $ brackets (many (noneOf "]"))
-  hw <- many (noneOf ":") <* symbol ": " 
+inlineMeaning :: Parser DefQuery
+inlineMeaning = do
+  _       <- symbolic 'd'
+  tags    <- optional $ brackets (many (noneOf "]"))
+  hw      <- many (noneOf ":") <* symbol ": "
   meaning <- entryBody
   return $ InlineDef hw meaning
 
@@ -289,8 +294,8 @@ toDefVersus = do
       p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
       p1 = inlineMeaning' entryBody
       inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
-  mTagList <- symbol "dvs" *> optional tags
-  firstDef <- p0 <* pad (string "--- vs ---")
+  mTagList  <- symbol "dvs" *> optional tags
+  firstDef  <- p0 <* pad (string "--- vs ---")
   secondDef <- p1
   return $ collect firstDef secondDef
 
@@ -325,7 +330,7 @@ tabs = length <$> many (try $ count 4 space)
 -- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
 untilP :: Parser p -> Parser String
 untilP p = do
-  s <- some (noneOf "\n") <|> (many newline)
+  s  <- some (noneOf "\n") <|> (many newline)
               --nls <- many newline
               --hasNewline <- try (const True <$> newline) <|> (const False <$> eof)
   s' <- try (lookAhead (many space *> p) >> return "") <|> untilP p
@@ -333,47 +338,49 @@ untilP p = do
 
 untilPNoTs :: Parser p -> Parser String
 untilPNoTs p = do
-  s <- some (noneOf "\n") <|> return <$> newline
+  s  <- some (noneOf "\n") <|> return <$> newline
   s' <-
-    try (lookAhead (lpad timestamp) >> return "") <|>
-    try (lookAhead (lpad p) >> return "") <|>
-    untilP p
+    try (lookAhead (lpad timestamp) >> return "")
+    <|> try (lookAhead (lpad p) >> return "")
+    <|> untilP p
   return $ s ++ s'
 
 untilPNoTs' :: Parser p -> Parser String
 untilPNoTs' p = do
   s <-
-    try (lookAhead (lpad timestamp) >> return "" <?> "ts") <|>
-    try (manyTill anyChar newline <* newline) <|>
-    (eof >> return "")
+    try (lookAhead (lpad timestamp) >> return "" <?> "ts")
+    <|> try (manyTill anyChar newline <* newline)
+    <|> (eof >> return "")
   s' <-
-    try (lookAhead (lpad timestamp) >> return "") <|>
-    try (lookAhead (lpad p) >> return "") <|>
-    untilPNoTs' p
+    try (lookAhead (lpad timestamp) >> return "")
+    <|> try (lookAhead (lpad p) >> return "")
+    <|> untilPNoTs' p
   return $ s ++ s'
 
-notNewLine = many (satisfy (\c -> isSpace c && c /= '\n')) 
+notNewLine = many (satisfy (\c -> isSpace c && c /= '\n'))
 
 -- | Collects one line, including newline, which does not contain a timestamp.
 -- Accepts EOF (after a line) for which an empty sting is returned.
 notTs :: Parser (Maybe String)
 notTs =
-  try (lookAhead (notNewLine *> timestamp >> return Nothing)) <|>
-  try (lookAhead (notNewLine *> (symbol "...") >> return Nothing)) <|>
-  Just <$> Parse.line
+  try (lookAhead (notNewLine *> timestamp >> return Nothing))
+    <|> try (lookAhead (notNewLine *> (symbol "...") >> return Nothing))
+    <|> Just
+    <$> Parse.line
 
 
 linesNoTs :: Parser String
 linesNoTs = do
-  m <- notTs 
+  m <- notTs
   case m of
     Just ln -> (ln ++) <$> (try linesNoTs <|> (eof >> return ""))
     Nothing -> return ""
 
 
 line :: Parser String
-line = do 
-  x <- try ( (++"\n") <$> (some $ noneOf "\n") <* newline) <|> (return <$> newline) 
+line = do
+  x <-
+    try ((++ "\n") <$> (some $ noneOf "\n") <* newline) <|> (return <$> newline)
   skipOptional eof
   return x
 
@@ -421,13 +428,13 @@ spacesNotNewline = void $ many $ oneOf ['\t', ' ']
 
 -- | Runs parser and returns tuple of successfully parsed item and remainder
 pTup :: Parser a -> String -> Text.Trifecta.Result (a, String)
-pTup p = parse ((,) <$> p <*> many anyChar) 
+pTup p = parse ((,) <$> p <*> many anyChar)
 
 unused :: a
 unused = undefined
-  where
-    _ = hr >> min >> sec >> pPrint
-    _ = bookTs >> bookTs' >> testLog'
+ where
+  _ = hr >> min >> sec >> pPrint
+  _ = bookTs >> bookTs' >> testLog'
 
 type Quote = String
 
@@ -540,9 +547,7 @@ data RelDur = RelDur
   } deriving (Eq, Show)
 
 index :: [a] -> [(Int, a)]
-index xs = zip [len,len - 1 .. 0] xs
-  where
-    len = length xs - 1
+index xs = zip [len, len - 1 .. 0] xs where len = length xs - 1
 
 toInteger :: [Integer] -> Integer
 toInteger = foldl' (\res (pow, el) -> (10 ^ pow) * el + res) 0 . index
@@ -581,7 +586,7 @@ ymd = do
 ymd' = RelDur <$> year <*> month <*> day
 
 dmy' = do
-  d <- day 
+  d <- day
   m <- month
   y <- year
   return $ RelDur y m d
@@ -644,25 +649,25 @@ dm = do
 
 reldur :: Parser RelDur
 reldur =
-  try dmy' 
+  try dmy'
   -- 3
-  <|> try ymd' 
-  <|> try mdy
-  <|> try myd
+    <|> try ymd'
+    <|> try mdy
+    <|> try myd
   -- 2
-  <|> try ym 
-  <|> try my 
+    <|> try ym
+    <|> try my
 
-  <|> try md
-  <|> try dm
+    <|> try md
+    <|> try dm
 
-  <|> try yd
-  <|> try dy
+    <|> try yd
+    <|> try dy
   -- 1
-  <|> try y 
-  <|> try m
-  <|> try d
-  <|> (return $ RelDur 0 0 0)
+    <|> try y
+    <|> try m
+    <|> try d
+    <|> (return $ RelDur 0 0 0)
 
 -- | Parse `RelDur`
 relDur :: Parser RelDur
@@ -678,8 +683,12 @@ searchType :: Parser SearchType
 searchType = do
   skipOptional space
   st <-
-    const Prefix <$> try (char 'p') <|> const Infix <$> try (char 'i') <|>
-    const Suffix <$> char 's'
+    const Prefix
+    <$> try (char 'p')
+    <|> const Infix
+    <$> try (char 'i')
+    <|> const Suffix
+    <$> char 's'
   space
   return st
 

@@ -16,7 +16,7 @@
 -- Exports smart constructors for 'TsIdx' and 'TsIdxTup' to guarantee 'UTCTime'
 -- pico second truncation.
 -----------------------------------------------------------------------------
-module Store.Types 
+module Store.Types
   ( AttrTag(..)
   , Bucket(..)
   , toBucket
@@ -34,19 +34,38 @@ module Store.Types
   , getThrd
   , mkTsIdxTrip
   , mkTsIdxTrip'
-  , TsIdxTup(..))
-  where
+  , TsIdxTup(..)
+  )
+where
 
-import Control.Lens (_1, _2, _3, view)
-import Data.Data (Data, Typeable)
-import Data.SafeCopy
-import Data.IxSet (Indexable(..), IxSet(..), (@=), updateIx, ixFun, ixSet, getOne)
-import qualified Data.IxSet as IxSet
-import Data.Time
-import Parse (DefQuery(..), PageNum(..), TimeStamp(..))
-import Parse.Entry (Entry(..), LogEntry(..), Phrase(..))
-
-import Time
+import           Control.Lens                   ( _1
+                                                , _2
+                                                , _3
+                                                , view
+                                                )
+import           Data.Data                      ( Data
+                                                , Typeable
+                                                )
+import           Data.IxSet                     ( Indexable(..)
+                                                , IxSet(..)
+                                                , (@=)
+                                                , getOne
+                                                , ixFun
+                                                , ixSet
+                                                , updateIx
+                                                )
+import qualified Data.IxSet                    as IxSet
+import           Data.SafeCopy
+import           Data.Time
+import           Parse                          ( DefQuery(..)
+                                                , PageNum(..)
+                                                , TimeStamp(..)
+                                                )
+import           Parse.Entry                    ( Entry(..)
+                                                , LogEntry(..)
+                                                , Phrase(..)
+                                                )
+import           Time
 
 -- TODO 
 -- ▣  (index) replace `[DayLog]` with `IxSet DayLog]`
@@ -87,14 +106,14 @@ data Bucket
 deriveSafeCopy 0 'base ''Bucket
 
 toBucket :: LogEntry -> Bucket
-toBucket (Dump _) = Dmp
-toBucket (TabTsEntry (_, _, (Read _ _))) = Rds
-toBucket (TabTsEntry (_, _, (Def _))) = Defs
-toBucket (TabTsEntry (_, _, (Quotation _ _ _))) = Qts
-toBucket (TabTsEntry (_, _, (Commentary _))) = Cmts
-toBucket (TabTsEntry (_, _, (PN pg))) = Pgs pg
-toBucket (TabTsEntry (_, _, (Phr _))) = Phrs
-toBucket (TabTsEntry (_, _, (Dialogue _))) = Dial
+toBucket (Dump       _                         ) = Dmp
+toBucket (TabTsEntry (_, _, (Read _ _)        )) = Rds
+toBucket (TabTsEntry (_, _, (Def _)           )) = Defs
+toBucket (TabTsEntry (_, _, (Quotation _ _ _) )) = Qts
+toBucket (TabTsEntry (_, _, (Commentary _)    )) = Cmts
+toBucket (TabTsEntry (_, _, (PN pg)           )) = Pgs pg
+toBucket (TabTsEntry (_, _, (Phr _)           )) = Phrs
+toBucket (TabTsEntry (_, _, (Dialogue _)      )) = Dial
 toBucket (TabTsEntry (_, _, (Parse.Entry.Null))) = Store.Types.Null
 
 -- | Reference to db's 'reads' bucket by primary key.
@@ -111,7 +130,7 @@ data TsIdx v = TsIdx
 
 -- | Smart constructor for 'TsIdx' to maintain truncation of 'UTCTime's pico seconds.
 mkTsIdx :: UTCTime -> v -> TsIdx v
-mkTsIdx ts v = TsIdx (truncateUTC ts) v 
+mkTsIdx ts v = TsIdx (truncateUTC ts) v
 
 deriveSafeCopy 0 'base ''TsIdx
 
@@ -121,7 +140,7 @@ instance (Ord v, Typeable v) => Indexable (TsIdx v) where
                 , ixFun $ return . utctDay . ts -- 'Day'
                 ]
   -- if input validation (for truncated 'UTCTime' doesn't work, apply 'truncateUTC' here
-  
+
 data TsIdxTag v = TsIdxTag
   { tsTag :: TsIdx v
   , attr :: Maybe AttrTag
@@ -146,11 +165,11 @@ newtype TsIdxTup a b = TsIdxTup
   } deriving (Eq, Ord, Show, Read, Data)
 
 
-mkTsIdxTup' :: UTCTime -> (a, b) -> TsIdxTup a b 
+mkTsIdxTup' :: UTCTime -> (a, b) -> TsIdxTup a b
 mkTsIdxTup' ts v = TsIdxTup $ mkTsIdx ts v
 
-mkTsIdxTup :: TsIdx (a, b) -> TsIdxTup a b 
-mkTsIdxTup = TsIdxTup 
+mkTsIdxTup :: TsIdx (a, b) -> TsIdxTup a b
+mkTsIdxTup = TsIdxTup
 
 
 instance (Ord a, Ord b, Typeable a, Typeable b) => Indexable (TsIdxTup a b) where
@@ -175,9 +194,9 @@ mkTsIdxTrip' ts v = TsIdxTrip $ mkTsIdx ts v
 mkTsIdxTrip :: TsIdx (a, b, c) -> TsIdxTrip a b c
 mkTsIdxTrip = TsIdxTrip
 
-getFst = (\(x,_,_) -> x)
-getSnd = (\(_,x,_) -> x)
-getThrd = (\(_,_,x) -> x)
+getFst = (\(x, _, _) -> x)
+getSnd = (\(_, x, _) -> x)
+getThrd = (\(_, _, x) -> x)
 
 deriveSafeCopy 0 'base ''TsIdxTrip
 
@@ -192,11 +211,11 @@ instance (Ord a, Ord b, Typeable a, Typeable b, Ord c, Typeable c) =>
       , ixFun $ return . view _3 . val . tsTrip -- third
       ]
 
-data Defns = Defns { defTs :: TsIdx DefQuery 
+data Defns = Defns { defTs :: TsIdx DefQuery
                    , defAttr :: Maybe AttrTag }
   deriving (Data, Eq, Ord, Show, Read)
 
 instance Indexable Defns where
-  empty = ixSet [ ixFun $ return . ts . defTs 
+  empty = ixSet [ ixFun $ return . ts . defTs
                 , ixFun $ return . defAttr
                 ]

@@ -16,9 +16,12 @@
 -----------------------------------------------------------------------------
 module Time where
 
-import Data.Time
-import Parse (TimeStamp(..))
-import Control.Lens (preview, _Left, _Right)
+import           Control.Lens                   ( _Left
+                                                , _Right
+                                                , preview
+                                                )
+import           Data.Time
+import           Parse                          ( TimeStamp(..) )
 
 -- | Makes 'UTCTime' from a 'Day' by adding a 'DiffTime' of zero, that is, a
 -- time representing midnight on the given day.
@@ -30,9 +33,10 @@ dayToUTC day = UTCTime day (secondsToDiffTime 0)
 -- 'getCurrentTimeZone')
 toUTC :: Day -> TimeStamp -> UTCTime
 toUTC d (TimeStamp h m s) =
-  UTCTime d . secondsToDiffTime . fromIntegral $ hrs + mins + s 
-  where hrs = 60 * 60 * h
-        mins = 60 * m
+  UTCTime d . secondsToDiffTime . fromIntegral $ hrs + mins + s
+ where
+  hrs  = 60 * 60 * h
+  mins = 60 * m
 
 -- | Truncates pico seconds from 'DiffTime'.
 truncateUTC :: UTCTime -> UTCTime
@@ -40,7 +44,8 @@ truncateUTC UTCTime {..} =
   UTCTime {utctDayTime = (secondsToDiffTime . truncate $ utctDayTime), ..}
 
 incrMin :: UTCTime -> UTCTime
-incrMin UTCTime {..} = UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, .. }
+incrMin UTCTime {..} =
+  UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, ..}
 
 left :: Either a b -> Maybe a
 left = preview _Left
@@ -49,4 +54,4 @@ incrDay :: Day -> Day
 incrDay = succ
 
 incrDayBy :: Int -> Day -> Day
-incrDayBy = addDays . fromIntegral 
+incrDayBy = addDays . fromIntegral

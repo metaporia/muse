@@ -24,37 +24,39 @@ import           Control.Monad.IO.Class         ( MonadIO
 import           Data.Bifunctor                 ( bimap )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
+                                                , fromJust
                                                 , isJust
                                                 , isNothing
-                                                , fromJust
                                                 )
 import           Data.Semigroup                 ( (<>) )
-import           Data.Time                      ( UTCTime(..), addDays )
+import qualified Data.Text                     as T
+import           Data.Time                      ( UTCTime(..)
+                                                , addDays
+                                                )
 import           Data.Time.Calendar             ( Day )
 import           Data.Time.Clock                ( getCurrentTime )
+import qualified Database.Esqueleto            as E
+import           Database.Esqueleto             ( (^.)
+                                                , from
+                                                , like
+                                                , where_
+                                                )
 import           Database.Persist
-import           Database.Persist.Sqlite 
+import           Database.Persist.Sqlite
 import           Debug.Trace
 import           Helpers
 import           Parse
+import qualified Parse                         as P
 import           Parse.Entry
+import qualified Parse.Entry                   as P
+import           Store.Sqlite
 import           Store.Sqlite
 import           Test.Hspec
+import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
                                                 )
 import           Time
-import qualified Database.Esqueleto            as E
-import           Database.Esqueleto             ( (^.)
-                                                , like
-                                                , where_
-                                                , from
-                                                )
-import qualified Data.Text                     as T
-import qualified Parse                         as P
-import qualified Parse.Entry                   as P
-import Text.RawString.QQ
-import Store.Sqlite 
 
 asIO :: IO a -> IO a
 asIO a = a
@@ -128,14 +130,20 @@ demo = runSqlite "sqliteSpec.db" $ do
   --  <> show (isJust satisfies)
   --  <> "\nentry: "
   --  <> ppShow satisfies
-  readEntry <- get readKey
+  readEntry        <- get readKey
   --liftIO $ putStrLn  $ "readEntry: " <> ppShow readEntry
-  attrSatisfies <- attributionSatisfies ["Woolf"] [] readKey 
+  attrSatisfies    <- attributionSatisfies ["Woolf"] [] readKey
   --liftIO $ putStrLn $ "attrSatisfies: " <> show attrSatisfies
-  satisfactoryDefs <- selectList ([] :: [Filter QuoteEntry]) [] >>= applyReadPreds ["Woolf"] ["Light"]
-  before <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
-  since <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
-  matchingQuotes <- filterQuotes since before ["%Woolf%"] ["%Lighthouse%"] ["%simplicity%"] 
+  satisfactoryDefs <-
+    selectList ([] :: [Filter QuoteEntry]) []
+      >>= applyReadPreds ["Woolf"] ["Light"]
+  before         <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
+  since          <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
+  matchingQuotes <- filterQuotes since
+                                 before
+                                 ["%Woolf%"]
+                                 ["%Lighthouse%"]
+                                 ["%simplicity%"]
   liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
   return ()
 
@@ -160,7 +168,7 @@ clearDb db = runSqlite db $ do
   deleteWhere ([] :: [Filter PageNumberEntry])
 
 clear' :: MonadIO m => DB m ()
-clear' = do 
+clear' = do
   deleteWhere ([] :: [Filter DefEntry])
   deleteWhere ([] :: [Filter ReadEntry])
   deleteWhere ([] :: [Filter QuoteEntry])
@@ -210,12 +218,10 @@ demoLogEntries
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
-      , Read "Silas Marner" "George Eliot (Mary Ann Evans)" 
-
+      , Read "Silas Marner" "George Eliot (Mary Ann Evans)"
       )
       -- N.B. this read block is here to ensure that manually attributed (indented)
       -- entries are treated by search predicates as belonging to both.
-
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}
@@ -253,10 +259,10 @@ demoLogEntries
 
 
 curr :: IO ()
-curr = runSqlite "test1.db" $ do 
+curr = runSqlite "test1.db" $ do
   runMigration migrateAll
   today <- liftIO $ utctDay <$> getCurrentTime
-  writeDay today $  fromJust $ toMaybe $ parse logEntries  reallyBroken
+  writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
   return ()
 
 reallyBroken = [r|

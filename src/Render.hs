@@ -15,22 +15,27 @@
 -----------------------------------------------------------------------------
 module Render where
 
-import Control.Monad ((>=>), void)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
-import Data.Char (toUpper)
-import Data.List (intercalate)
-import Data.Monoid ((<>))
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import Helpers
-import Parse
-import Parse.Entry
-import Prelude hiding (log, lookup, min)
-import System.Console.ANSI
-import Text.RawString.QQ
-import Text.Show.Pretty (pPrint)
-import Text.Wrap
+import           Control.Monad                  ( (>=>)
+                                                , void
+                                                )
+import qualified Data.ByteString               as B
+import qualified Data.ByteString.Lazy          as BL
+import           Data.Char                      ( toUpper )
+import           Data.List                      ( intercalate )
+import           Data.Monoid                    ( (<>) )
+import qualified Data.Text                     as T
+import qualified Data.Text.IO                  as T
+import           Helpers
+import           Parse
+import           Parse.Entry
+import           Prelude                 hiding ( log
+                                                , lookup
+                                                , min
+                                                )
+import           System.Console.ANSI
+import           Text.RawString.QQ
+import           Text.Show.Pretty               ( pPrint )
+import           Text.Wrap
 
 showAll :: [LogEntry] -> IO ()
 showAll = sequence_ . fmap (colRender True)
@@ -43,14 +48,14 @@ indent = take indentation (repeat ' ')
 upper = fmap toUpper
 
 applyToRest :: (a -> a) -> [a] -> [a]
-applyToRest _ [] = []
-applyToRest f (x:xs) = x : fmap f xs
+applyToRest _ []       = []
+applyToRest f (x : xs) = x : fmap f xs
 
 surround :: Char -> String -> String
 surround c s = c : (s ++ [c])
 
 colorize :: Bool -> (IO () -> IO ()) -> IO () -> IO ()
-colorize True col = col
+colorize True  col = col
 colorize False col = id
 
 -- Colorizes IO operation.
@@ -168,10 +173,11 @@ instance ColRender T.Text where
     wrapTextToLines defaultWrapSettings 79
 
 fmt =
-  T.unpack .
-  T.unlines .
-  fmap ((T.replicate indentation " ") <>) .
-  wrapTextToLines defaultWrapSettings 79 . T.pack
+  T.unpack
+    . T.unlines
+    . fmap ((T.replicate indentation " ") <>)
+    . wrapTextToLines defaultWrapSettings 79
+    . T.pack
 
 instance ColRender PageNum where
   colRender _ = putStrLn . show

@@ -44,32 +44,37 @@
 -----------------------------------------------------------------------------
 module Parse.Entry where
 
-import Control.Applicative
-import Control.Lens.TH (makePrisms)
-
---import Control.Lens (makeLenses, preview, review)
---import Control.Lens.Tuple
-import Control.Monad (void)
-import Debug.Trace (trace)
-import Data.Aeson hiding (Null)
-import Control.Monad.Trans.State
-import Data.Bifunctor (bimap)
-import Data.Char (isSpace)
-import Data.List (dropWhile, dropWhileEnd, intercalate)
-import Data.List.Split (splitOn)
-import Data.Semigroup ((<>))
---import Data.Maybe (fromJust)
-import Data.Time
-import GHC.Generics hiding (Infix, Prefix)
-import Helpers
-import Helpers
-import Parse
-import Prelude hiding (min, quot)
-import Text.Parser.LookAhead
-import Text.RawString.QQ
-import Text.Show.Pretty (pPrint)
-import Text.Trifecta hiding (Rendering, Span)
-import qualified Text.PrettyPrint.ANSI.Leijen as Leijen 
+import           Control.Applicative
+import           Control.Lens.TH                ( makePrisms )
+import           Control.Monad                  ( void )
+import           Control.Monad.Trans.State
+import           Data.Aeson              hiding ( Null )
+import           Data.Bifunctor                 ( bimap )
+import           Data.Char                      ( isSpace )
+import           Data.List                      ( dropWhile
+                                                , dropWhileEnd
+                                                , intercalate
+                                                )
+import           Data.List.Split                ( splitOn )
+import           Data.Semigroup                 ( (<>) )
+import           Data.Time
+import           Debug.Trace                    ( trace )
+import           GHC.Generics            hiding ( Infix
+                                                , Prefix
+                                                )
+import           Helpers
+import           Helpers
+import           Parse
+import           Prelude                 hiding ( min
+                                                , quot
+                                                )
+import           Text.Parser.LookAhead
+import qualified Text.PrettyPrint.ANSI.Leijen  as Leijen
+import           Text.RawString.QQ
+import           Text.Show.Pretty               ( pPrint )
+import           Text.Trifecta           hiding ( Rendering
+                                                , Span
+                                                )
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
@@ -93,17 +98,19 @@ import qualified Text.PrettyPrint.ANSI.Leijen as Leijen
 --  from indentation context.
 quotation :: Parser Entry
 quotation = do
-  _ <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
+  _  <- try (lpad $ symbol "quotation") <|> lpad (symbol "q")
   pg <- optional digits
   skipOptional emptyLines
   --q <- lpad $ between quote quote (some $ noneOf "\"")
-  q <- lpad $ quote'
+  q            <- lpad $ quote'
   -- FIXME see ~/sputum/muse/19.03.01 for example of valid log the breaks
   -- auto-attribution logic.
   -- TODO discard post quote attribution when indent >= 1
   --titleAuthEtc <- untilPNoTs' $ try (void $ timestamp) <|> try (void $ symbol "...") <|> eof
   titleAuthEtc <- linesNoTs <* skipOptional eof
-  return $ Quotation (intercalate " " . fmap trim . lines $ q) (trim titleAuthEtc) pg
+  return $ Quotation (intercalate " " . fmap trim . lines $ q)
+                     (trim titleAuthEtc)
+                     pg
 
 escape :: Parser String
 escape = do
@@ -139,9 +146,9 @@ quote' = do
 -- TODO support page-numbers and tags
 commentary :: Parser Entry
 commentary = do
-  _ <- try (symbol "commentary") <|> symbol "synthesis"
+  _    <- try (symbol "commentary") <|> symbol "synthesis"
   body <- entryBody
-  _ <- many newline
+  _    <- many newline
   return . Commentary . unlines . fmap trim . lines $ body
 
 -- TODO support tags??
@@ -149,17 +156,18 @@ book :: Parser Entry
 book = do
   _ <- whiteSpace
   _ <-
-    try (symbol "read") <|> try (symbol "begin to read") <|>
-    try (symbol "finish reading") <|>
-    symbol "finish"
-  title <- between quot quot (some $ noneOf "\"")
-  _ <- optional $ symbol "," -- 
-  _ <- symbol "by" <?> "expected attribution"
+    try (symbol "read")
+    <|> try (symbol "begin to read")
+    <|> try (symbol "finish reading")
+    <|> symbol "finish"
+  title       <- between quot quot (some $ noneOf "\"")
+  _           <- optional $ symbol "," -- 
+  _           <- symbol "by" <?> "expected attribution"
   -- what is this "canonical" business?
   isCanonical <- option False $ symbol "canonical" *> return True
-  author <- some (noneOf "\n")
-  _ <- entryBody
-  _ <- many newline
+  author      <- some (noneOf "\n")
+  _           <- entryBody
+  _           <- many newline
   return $ Read title author
 
 -- TODO handle "\n    \n" w/o parser fantods
@@ -234,10 +242,10 @@ logEntry = do
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
   return $ e
 
-tmp = do 
-    x <- lpad nullE 
-    _ <- void (skipOptional emptyLines) <|> eof
-    return x
+tmp = do
+  x <- lpad nullE
+  _ <- void (skipOptional emptyLines) <|> eof
+  return x
 
 logEntries :: Parser [LogEntry]
 logEntries =
@@ -287,31 +295,34 @@ logEntry' (Just previousTimeStamp) = do
           ( return
           $ Leijen.vcat
           $ (Leijen.text "Unordered or duplicate timestamps:" :)
-          -- $ (Leijen.line :)
+      -- $ (Leijen.line :)
           $ fmap Leijen.text
-          $ (wordSensitiveLineWrap 55
-           (  "Found current timestamp, t1 = "
-            <> show currentTimeStamp
-            <> ", and previous timestamp, t0  = "
-            <> show previousTimeStamp
-            <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
-            ))
+          $ (wordSensitiveLineWrap
+              55
+              (  "Found current timestamp, t1 = "
+              <> show currentTimeStamp
+              <> ", and previous timestamp, t0  = "
+              <> show previousTimeStamp
+              <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
+              )
+            )
           )
           mempty
           mempty
           mempty
 
 wordSensitiveLineWrap :: Int -> String -> [String]
-wordSensitiveLineWrap n s = 
+wordSensitiveLineWrap n s =
   let takeNCharsWorth _ []      = ([], [])
       takeNCharsWorth n (h : t) = if length h < n
-          then bimap (h :) id $ takeNCharsWorth (n - length h) t
-          else ([], h : t)
-      go ws = 
-        let (ln, rest) = takeNCharsWorth 80 ws 
-         in if not (null rest) then unwords ln : go rest
-                               else unwords ln : [unwords rest]
-  in go (words s)
+        then bimap (h :) id $ takeNCharsWorth (n - length h) t
+        else ([], h : t)
+      go ws =
+        let (ln, rest) = takeNCharsWorth 80 ws
+        in  if not (null rest)
+              then unwords ln : go rest
+              else unwords ln : [unwords rest]
+  in  go (words s)
 
 
 -- | Apply the parser to the initial state. If it fails, return @[]@.
@@ -328,9 +339,9 @@ many' s p = do
 
 many'' :: s -> (s -> Parser (a, s)) -> Parser [a]
 many'' s p = do
-  (a, s') <- p s 
-  (a:) <$> many'' s' p
-  
+  (a, s') <- p s
+  (a :) <$> many'' s' p
+
 
 
 ascendingDigits :: Int -> Parser (Int, Int)
@@ -345,16 +356,19 @@ ascendingDigits previous = do
 -- | Pass in comma-separated digits that /don't/ ascend to see what error
 -- message our dear user(s) will find upon trying to parse a log file with
 -- duplicate timestamps.
-validatedInputExample input = parse (many'' 0 ascendingDigits <* (eof <?> "digits must ascend")) -- "1,2,3" 
+validatedInputExample input =
+  parse (many'' 0 ascendingDigits <* (eof <?> "digits must ascend")) -- "1,2,3" 
 
 logEntries' :: Parser [LogEntry]
 logEntries' = do
   try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof"
   some logEntry
-    where  go p = do mLe <- try (Just <$> p) <|> return Nothing
-                     case mLe of 
-                       Just le -> (le:) <$> go p
-                       Nothing -> return []
+ where
+  go p = do
+    mLe <- try (Just <$> p) <|> return Nothing
+    case mLe of
+      Just le -> (le :) <$> go p
+      Nothing -> return []
 
 
 --some' :: Maybe s -> (Maybe s -> Parser (a, Maybe s)) -> Parser [a]
@@ -398,18 +412,18 @@ data DefQueryVariant
 -- allow this), the below jank will treat defined phrases as inline
 -- definititions.
 defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
-defHasType InlineDef' (Left (Defined _ _)) = True 
-defHasType  variant dq = variant == defQueryVariant dq
+defHasType InlineDef' (Left (Defined _ _)) = True
+defHasType variant    dq                   = variant == defQueryVariant dq
 
 defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant
-defQueryVariant (Right (Defn _ _)) = Defn'
-defQueryVariant (Right (InlineDef _ _)) = InlineDef'
+defQueryVariant (Right (Defn      _ _    )) = Defn'
+defQueryVariant (Right (InlineDef _ _    )) = InlineDef'
 defQueryVariant (Right (DefVersus _ _ _ _)) = DefVersus'
-defQueryVariant (Left _) = Phrase'
+defQueryVariant (Left  _                  ) = Phrase'
 
 isDefn :: DefQuery -> Bool
 isDefn (Defn _ _) = True
-isDefn _ = False
+isDefn _          = False
 
 data Phrase
   = Plural [Headword]
@@ -427,7 +441,7 @@ phrase = do
   whiteSpace
   try (symbol "phrase") <|> symbol "phr"
   tagList <- optional tags -- TODO tag refactor
-  p <- try definedPhrase <|> pluralPhrase
+  p       <- try definedPhrase <|> pluralPhrase
   many newline
   return $ Phr p
 
@@ -438,7 +452,7 @@ pluralPhrase = do
 
 definedPhrase :: Parser Phrase
 definedPhrase = do
-  hw <- many (noneOf ":") <* symbol ": "
+  hw      <- many (noneOf ":") <* symbol ": "
   meaning <- entryBody
   return $ Defined hw meaning
 
@@ -446,8 +460,10 @@ dialogue :: Parser Entry
 dialogue = do
   symbol "dialogue"
   eb <-
-    intercalate "\n\n" . fmap (unlines . fmap trim . lines) . splitOn "\n\n" <$>
-    entryBody
+    intercalate "\n\n"
+    .   fmap (unlines . fmap trim . lines)
+    .   splitOn "\n\n"
+    <$> entryBody
   return $ Dialogue eb
 
 makePrisms ''Entry

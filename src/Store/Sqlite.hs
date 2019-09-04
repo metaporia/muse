@@ -16,7 +16,9 @@
 
 module Store.Sqlite where
 
-import Control.Exception (catch, SomeException)
+import           Control.Exception              ( SomeException
+                                                , catch
+                                                )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
@@ -45,16 +47,16 @@ import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Esqueleto
 import qualified Database.Persist              as P
 import qualified Database.Persist.Sqlite       as P
-import           Database.Persist.Sqlite        ( Key(..)
-                                                , SqlBackend
+import           Database.Persist.Sqlite        ( BaseBackend
                                                 , Entity(..)
-                                                , insertKey
-                                                , runSqlite
-                                                , BaseBackend
-                                                , runMigration
-                                                , selectList
+                                                , Key(..)
+                                                , SqlBackend
                                                 , deleteWhere
                                                 , get
+                                                , insertKey
+                                                , runMigration
+                                                , runSqlite
+                                                , selectList
                                                 )
 import           Database.Persist.TH
 import           Debug.Trace                    ( trace )
@@ -72,7 +74,6 @@ import           Text.Show.Pretty               ( pPrint
 import           Time
 import           Time                           ( toUTC )
 import           Web.PathPieces                 ( PathPiece(..) )
-
 
 ---------------
 --- STORAGE ---
@@ -137,7 +138,7 @@ instance Tagged DefEntry where
 
 instance Tagged QuoteEntry where
   getAttributionTag = quoteEntryAttributionTag
-  getQuoteEntry = return 
+  getQuoteEntry = return
 
 instance Tagged CommentaryEntry where
   getAttributionTag = commentaryEntryAttributionTag
@@ -195,12 +196,11 @@ instance FromJSON DumpEntry'
 type DB m a = ReaderT SqlBackend m a
 
 fromPageNum :: P.PageNum -> (PageTag, Int)
-fromPageNum pageNum =
-  case pageNum of
-    (P.Page pg) -> (Page', fromIntegral pg)
-    (P.PStart pg) -> (PStart', fromIntegral pg)
-    (P.PEnd pg) -> (PEnd', fromIntegral pg)
-    (P.PFinish pg) -> (PFinish', fromIntegral pg)
+fromPageNum pageNum = case pageNum of
+  (P.Page    pg) -> (Page', fromIntegral pg)
+  (P.PStart  pg) -> (PStart', fromIntegral pg)
+  (P.PEnd    pg) -> (PEnd', fromIntegral pg)
+  (P.PFinish pg) -> (PFinish', fromIntegral pg)
 
 -- | Converts an 'AttrTag' into a primary key of the 'ReadEntry' table; that
 -- is, a wrapped 'UTCTime'.
@@ -224,170 +224,181 @@ fromAttrTag = ReadEntryKey . attrId
 -- @(writeEntry .  readRead) == id@ is true for any entry and that attributions
 -- are correctly determined (which requires manual tagging).
 writeDay :: MonadIO m => Day -> [LogEntry] -> DB m [Either String UTCTime]
-writeDay day =
-  let go ::
-           MonadIO m
+writeDay day
+  = let
+      go
+        :: MonadIO m
         => Maybe AttrTag
         -> [LogEntry]
         -> DB m [Either String UTCTime]
       go _ [] = return []
-      go mTag (h:t)
+      go mTag (h : t)
+        |
         -- a. toplevel and read entry -> insert, create tag from id and place in (optional) accumulator, recurse
-        | isTopLevel h && isRead h = do
+          isTopLevel h && isRead h
+        = do
           eitherId <- writeLogEntry day h Nothing
-          case eitherId
+          case eitherId of
+            Left err ->
+              (:)
+                <$> (  return
+                    $  Left
+                    $ "WARNING: writeDay: found entry that is both Read and Dump\ncont.: "
+                    ++ err
+                    )
+                <*> go Nothing t
+            -- begin traversal with readEntryKey in accumulator (note that it
+            -- should be immediately discarded if the next entry is not the
+            -- child of the current read entry).
+            Right readEntryKey -> go
+              (Just $ AttrTag
+                (trace ("readEntryKey: " ++ show readEntryKey) readEntryKey)
+              )
+              t
+        |
                  -- WARNING: this is impossible: it means that the entry is a Read
                  -- variant and a Dump variant, so if it occurs, it will have
                  -- been by programmer error. As such, we simply log the
                  -- irregularity, 
-                of
-            Left err ->
-              (:) <$>
-              (return $
-               Left $
-               "WARNING: writeDay: found entry that is both Read and Dump\ncont.: " ++
-               err) <*>
-              go Nothing t
-            -- begin traversal with readEntryKey in accumulator (note that it
-            -- should be immediately discarded if the next entry is not the
-            -- child of the current read entry).
-            Right readEntryKey ->
-              go
-                (Just $
-                 AttrTag
-                   (trace ("readEntryKey: " ++ show readEntryKey) readEntryKey))
-                t
         -- b. toplevel and not read entry ->  insert without tag, recurse with accumulator := Nothing 
-        | isTopLevel h
+          isTopLevel h
           -- discards accumulator should the last entry have been of the Read
           -- variant
-         = (:) <$> writeLogEntry day h Nothing <*> go Nothing t
+        = (:) <$> writeLogEntry day h Nothing <*> go Nothing t
+        |
         -- d. indented one level or more, read entry -> 
         --      insert untagged, log warning describing weird nested readings (now 
         --      this may warrant future support, but since we're only replicating 
         --      the existing behavior of muse, this is out of scope.), and pass
         --      previous accumulator through.
-        | isIndentedTo 1 h && isRead h =
-          (\h h' t -> h : h' : t) <$>
-          (return $
-           Left "WARNING: writeDay: found indented read entry, leaving untagged") <*>
-          writeLogEntry day h Nothing -- NOTE: leaving read entries untagged
-           <*>
-          go mTag t
+          isIndentedTo 1 h && isRead h
+        = (\h h' t -> h : h' : t)
+          <$> ( return
+              $ Left
+                  "WARNING: writeDay: found indented read entry, leaving untagged"
+              )
+          <*> writeLogEntry day h Nothing -- NOTE: leaving read entries untagged
+          <*> go mTag t
+        |
         -- c. indented one level or more, not read entry ->
         --      i.  accumulator is Nothing -> insert indented untagged, recurse
         --      with previous accumulator
         --      ii. accumulator is (Just attrTag) -> insert tagged, recurse
         --      with previous accumulator
-        | isIndentedTo 1 h
+          isIndentedTo 1 h
             --(:) <$> writeLogEntry day h (trace (show mTag) mTag) <*> go mTag t
-         = (:) <$> writeLogEntry day h mTag <*> go mTag t
+        = (:) <$> writeLogEntry day h mTag <*> go mTag t
+        |
         -- otherwise insert untagged, recurse with accumulator := Nothing
-        | otherwise = (:) <$> writeLogEntry day h Nothing <*> go Nothing t
-  in go Nothing
+          otherwise
+        = (:) <$> writeLogEntry day h Nothing <*> go Nothing t
+    in
+      go Nothing
 
 -- | A write action for a single 'LogEntry'. It's intended for application to
 -- lists of log entries grouped by day: for each day's list of log entries,
 -- 'writeEntry' is partially applied to the 'Day' and mapped over the entries.
 --
-writeLogEntry ::
-     MonadIO m
+writeLogEntry
+  :: MonadIO m
   => Day
   -> LogEntry
   -> Maybe AttrTag
   -> DB m (Either String UTCTime)
 writeLogEntry day logEntry mAttrTag =
-  trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $
-  case logEntry of
-    Dump dumpContents ->
-      return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
-      -- FIXME add 'DumpEntry' type & table
-      --
-      --  with acid-state, we kept a list of dumps for each day. In order to
-      --  the same with sqlite and stay consistent with our JSON-based list
-      --  workaround, we will store a list of 'DumpEntry's as JSON, of the form
-      --  [ { "dumpBody" : <string>}, .. ].
-      --
-    TabTsEntry (indentation, timestamp, entry) ->
-      let utc = toUTC day timestamp
-      in (case entry of
-            Def dq -> insertKey (DefEntryKey utc) $ toDefEntry mAttrTag dq
-            Read title author ->
-              insertKey (ReadEntryKey utc) $ ReadEntry title author
-                          -- FIXME relies on empty attribution string when manual
-                          -- attribution is omitted
-            Quotation quoteBody manualAttribution mPgNum ->
-              insertKey (QuoteEntryKey utc) $
-              QuoteEntry
-                quoteBody
-                (if manualAttribution == ""
-                   then Nothing
-                   else Just manualAttribution)
-                (fromAttrTag <$> mAttrTag)
-            Commentary commentBody ->
-              insertKey (CommentaryEntryKey utc) $
-              CommentaryEntry commentBody $ fromAttrTag <$> mAttrTag
-            PN pageNum ->
-              let (pageTag, pgNum) = fromPageNum pageNum
-              in trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $ insertKey (PageNumberEntryKey utc) $
-                 PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
-            Phr phrase ->
-              insertKey (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
-            Dialogue dialogueBody ->
-              insertKey (DialogueEntryKey utc) $
-              DialogueEntry dialogueBody $ fromAttrTag <$> mAttrTag
-            Parse.Entry.Null -> return ()) >>
-         (return $ Right utc)
+  trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry)
+    $ case logEntry of
+        Dump dumpContents ->
+          return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
+          -- FIXME add 'DumpEntry' type & table
+          --
+          --  with acid-state, we kept a list of dumps for each day. In order to
+          --  the same with sqlite and stay consistent with our JSON-based list
+          --  workaround, we will store a list of 'DumpEntry's as JSON, of the form
+          --  [ { "dumpBody" : <string>}, .. ].
+          --
+        TabTsEntry (indentation, timestamp, entry)
+          -> let utc = toUTC day timestamp
+             in
+               (case entry of
+                   Def dq -> insertKey (DefEntryKey utc) $ toDefEntry mAttrTag dq
+                   Read title author ->
+                     insertKey (ReadEntryKey utc) $ ReadEntry title author
+                                 -- FIXME relies on empty attribution string when manual
+                                 -- attribution is omitted
+                   Quotation quoteBody manualAttribution mPgNum ->
+                     insertKey (QuoteEntryKey utc) $ QuoteEntry
+                       quoteBody
+                       (if manualAttribution == ""
+                         then Nothing
+                         else Just manualAttribution
+                       )
+                       (fromAttrTag <$> mAttrTag)
+                   Commentary commentBody ->
+                     insertKey (CommentaryEntryKey utc)
+                       $   CommentaryEntry commentBody
+                       $   fromAttrTag
+                       <$> mAttrTag
+                   PN pageNum ->
+                     let (pageTag, pgNum) = fromPageNum pageNum
+                     in
+                       trace
+                         (show pageTag <> ", " <> show pgNum <> ", " <> show utc)
+                       $ insertKey (PageNumberEntryKey utc)
+                       $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
+                   Phr phrase -> insertKey (DefEntryKey utc)
+                     $ phraseToDefEntry mAttrTag phrase
+                   Dialogue dialogueBody ->
+                     insertKey (DialogueEntryKey utc)
+                       $   DialogueEntry dialogueBody
+                       $   fromAttrTag
+                       <$> mAttrTag
+                   Parse.Entry.Null -> return ()
+                 )
+                 >> (return $ Right utc)
 
 main :: IO ()
-main
-  --runSqlite ":memory:" $ do
- =
-  runSqlite "test.db" $ do
-    runMigration migrateAll
-    -- read entry
-    now <- liftIO $ getCurrentTime
-    let wutheringHeightsId = (ReadEntryKey now)
-    insertKey wutheringHeightsId $ ReadEntry "Wuthering Heights" "Emily Bronté"
-    -- def entry
-    now' <- liftIO $ getCurrentTime
-    let inline =
-          TL.decodeUtf8 $
-          encode $ Inlines [InlineDef "mizzle" "a misty drizzle"]
-        defEntryId = DefEntryKey now'
-    insertKey defEntryId $
-      DefEntry
-        inline
+main = runSqlite "test.db" $ do
+  runMigration migrateAll
+  -- read entry
+  now <- liftIO $ getCurrentTime
+  let wutheringHeightsId = (ReadEntryKey now)
+  insertKey wutheringHeightsId $ ReadEntry "Wuthering Heights" "Emily Bronté"
+  -- def entry
+  now' <- liftIO $ getCurrentTime
+  let inline = TL.decodeUtf8 $ encode $ Inlines
+        [InlineDef "mizzle" "a misty drizzle"]
+      defEntryId = DefEntryKey now'
+  insertKey defEntryId $ DefEntry inline
+                                  Inline'
+                                  (Just wutheringHeightsId)
+                                  Definition'
+                                  Nothing
+                                  Nothing
+  (allDefs :: [Entity DefEntry]  ) <- selectList [] []
+  (allReads :: [Entity ReadEntry]) <- selectList [] []
+  liftIO $ BLC.putStrLn $ encode $ Inlines
+    [InlineDef "mizzle" "a misty drizzle"]
+  let entry :: Either String Entry
+      entry = toEntry $ DefEntry
+        (TL.decodeUtf8 $ encode $ Inlines [InlineDef "mizzle" "a misty drizzle"]
+        )
         Inline'
-        (Just wutheringHeightsId)
+        Nothing
         Definition'
         Nothing
         Nothing
-    (allDefs :: [Entity DefEntry]) <- selectList [] []
-    (allReads :: [Entity ReadEntry]) <- selectList [] []
-    liftIO $
-      BLC.putStrLn $ encode $ Inlines [InlineDef "mizzle" "a misty drizzle"]
-    let entry :: Either String Entry
-        entry =
-          toEntry $
-          DefEntry
-            (TL.decodeUtf8 $
-             encode $ Inlines [InlineDef "mizzle" "a misty drizzle"])
-            Inline'
-            Nothing
-            Definition'
-            Nothing
-            Nothing
-    liftIO $ putStr "entry: " >> pPrint entry
-    liftIO $
-      pPrint $
-      let xs :: [Either String Entry]
+  liftIO $ putStr "entry: " >> pPrint entry
+  liftIO
+    $ pPrint
+    $ let xs :: [Either String Entry]
           xs = fmap (toEntry . entityVal) allDefs
-      in rights xs
-    liftIO $ pPrint $ fmap entityVal allReads
-    -- clean up 
-    deleteWhere [DefEntryId P.==. defEntryId]
-    deleteWhere [ReadEntryId P.==. wutheringHeightsId]
+      in  rights xs
+  liftIO $ pPrint $ fmap entityVal allReads
+  -- clean up 
+  deleteWhere [DefEntryId P.==. defEntryId]
+  deleteWhere [ReadEntryId P.==. wutheringHeightsId]
+  --runSqlite ":memory:" $ do
     --oneJohnPost <- selectList [BlogPostAuthorId ==. johnId] [LimitTo 1]
     --liftIO $ print (oneJohnPost :: [Entitygggg BlogPost])
     --john <- get johnId
@@ -496,63 +507,57 @@ instance ToEntry String PageNumberEntry where
 -- Note: in the future, the parser may directly marshal to the more db-friendly
 -- format; for the present, however, we mourn and carry on as best we know how.
 toDefEntry :: Maybe AttrTag -> P.DefQuery -> DefEntry
-toDefEntry mAttrTag dq =
-  case dq of
-    P.Defn mPg hws ->
-      DefEntry
-        (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
-        Headwords'
-        (fromAttrTag <$> mAttrTag)
-        Definition'
-        (fromIntegral <$> mPg)
-        Nothing
-    P.InlineDef headword meaning ->
-      DefEntry
-        (TL.decodeUtf8 $
-         encode $ Inlines [InlineDef (T.pack headword) (T.pack meaning)])
-        Inline'
-        (fromAttrTag <$> mAttrTag)
-        Definition'
-        -- TODO add page nums (prefix types?) for all definition/phrase types.
-        Nothing
-        Nothing
-    P.DefVersus headword meaning headword' meaning' ->
-      DefEntry
-        (TL.decodeUtf8 $
-         encode $
-         Inlines
-           [ InlineDef (T.pack headword) (T.pack meaning)
-           , InlineDef (T.pack headword') (T.pack meaning')
-           ])
-        Comparison'
-        (fromAttrTag <$> mAttrTag)
-        Definition'
-        -- TODO add page nums (prefix types?) for all definition/phrase types.
-        Nothing
-        Nothing
+toDefEntry mAttrTag dq = case dq of
+  P.Defn mPg hws -> DefEntry
+    (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
+    Headwords'
+    (fromAttrTag <$> mAttrTag)
+    Definition'
+    (fromIntegral <$> mPg)
+    Nothing
+  P.InlineDef headword meaning -> DefEntry
+    (TL.decodeUtf8 $ encode $ Inlines
+      [InlineDef (T.pack headword) (T.pack meaning)]
+    )
+    Inline'
+    (fromAttrTag <$> mAttrTag)
+    Definition'
+      -- TODO add page nums (prefix types?) for all definition/phrase types.
+    Nothing
+    Nothing
+  P.DefVersus headword meaning headword' meaning' -> DefEntry
+    (TL.decodeUtf8 $ encode $ Inlines
+      [ InlineDef (T.pack headword)  (T.pack meaning)
+      , InlineDef (T.pack headword') (T.pack meaning')
+      ]
+    )
+    Comparison'
+    (fromAttrTag <$> mAttrTag)
+    Definition'
+      -- TODO add page nums (prefix types?) for all definition/phrase types.
+    Nothing
+    Nothing
 
 -- | Like 'toDefEntry' but converts from 
 phraseToDefEntry :: Maybe AttrTag -> Phrase -> DefEntry
-phraseToDefEntry mAttrTag phrase =
-  case phrase of
-    Plural hws ->
-      DefEntry
-        (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
-        Headwords'
-        (fromAttrTag <$> mAttrTag)
-        Phrase'
-        Nothing
-        Nothing
-    Defined headword meaning ->
-      DefEntry
-        (TL.decodeUtf8 $
-         encode $ Inlines [InlineDef (T.pack headword) (T.pack meaning)])
-        Inline'
-        (fromAttrTag <$> mAttrTag)
-        Phrase'
-      -- TODO add page nums (prefix types?) for all definition/phrase types.
-        Nothing
-        Nothing
+phraseToDefEntry mAttrTag phrase = case phrase of
+  Plural hws -> DefEntry
+    (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
+    Headwords'
+    (fromAttrTag <$> mAttrTag)
+    Phrase'
+    Nothing
+    Nothing
+  Defined headword meaning -> DefEntry
+    (TL.decodeUtf8 $ encode $ Inlines
+      [InlineDef (T.pack headword) (T.pack meaning)]
+    )
+    Inline'
+    (fromAttrTag <$> mAttrTag)
+    Phrase'
+    -- TODO add page nums (prefix types?) for all definition/phrase types.
+    Nothing
+    Nothing
 
 --------------
 --- SEARCH ---
@@ -599,10 +604,8 @@ dispatchSearch :: MonadIO m => SearchConfig -> DB m [Result]
 dispatchSearch SearchConfig {..} =
   let withinRange = undefined
       -- x :: Int
-      x = 
-        [ -- if checkDumps
-        ]
-   in  undefined
+      x           = []
+  in  undefined
 
 
 -- | Attribution filters: if the title and author infix lists are empty, these
@@ -715,7 +718,9 @@ withinDateRange entryIdType keyWrapper sinceDay beforeDay =
     since  = dayToUTC sinceDay
     before = dayToUTC beforeDay
     dateConstraints =
-      [entryIdType P.>=. (keyWrapper since), entryIdType P.<=. (keyWrapper before)]
+      [ entryIdType P.>=. (keyWrapper since)
+      , entryIdType P.<=. (keyWrapper before)
+      ]
   in
     selectList dateConstraints []
 

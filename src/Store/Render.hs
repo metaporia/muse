@@ -13,22 +13,30 @@
 -----------------------------------------------------------------------------
 module Store.Render where
 
-import Control.Monad ((>>))
+import           Control.Monad                  ( (>>) )
 import qualified Data.IxSet
-import Data.IxSet (IxSet(..))
-import qualified Data.IxSet as IxSet
-import Data.Monoid ((<>))
-import Data.Set (toList)
-import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import Data.Time (Day, UTCTime(..), toGregorian)
-import Data.Time.LocalTime
-import Render
-import Store (DB(..), Dumps(..), Result(..), getUTC, Results(..))
-import Store.Types
-import Text.Show.Pretty
-import Text.Wrap
+import           Data.IxSet                     ( IxSet(..) )
+import qualified Data.IxSet                    as IxSet
+import           Data.Monoid                    ( (<>) )
+import           Data.Set                       ( toList )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
+import qualified Data.Text.IO                  as T
+import           Data.Time                      ( Day
+                                                , UTCTime(..)
+                                                , toGregorian
+                                                )
+import           Data.Time.LocalTime
+import           Render
+import           Store                          ( DB(..)
+                                                , Dumps(..)
+                                                , Result(..)
+                                                , Results(..)
+                                                , getUTC
+                                                )
+import           Store.Types
+import           Text.Show.Pretty
+import           Text.Wrap
 
 instance  ColRender DB where
   colRender col DB{..} = do
@@ -47,7 +55,7 @@ instance (Ord v, ColRender v) => ColRender (IxSet v) where
 
 instance ColRender Dumps where
   colRender col (Dumps day set) = do
-    putStr "Dumps on " 
+    putStr "Dumps on "
     colRender col day
     putStr ":\n"
     pPrint (toList set)
@@ -56,7 +64,7 @@ instance (ColRender a, ColRender b) => ColRender (TsIdxTup a b) where
   colRender col (TsIdxTup tsIdx) = colRender col tsIdx
 
 instance (ColRender a, ColRender b, ColRender c) => ColRender (TsIdxTrip a b c) where
-  colRender col (TsIdxTrip tsIdx) = colRender col tsIdx 
+  colRender col (TsIdxTrip tsIdx) = colRender col tsIdx
 
 instance (ColRender v) => ColRender (TsIdxTag v) where
   colRender col (TsIdxTag tsIdx tag) =
@@ -109,10 +117,11 @@ instance ColRender Bucket where
 
 
 fmt indent =
-  T.unpack .
-  T.unlines .
-  fmap ((T.replicate indent " ") <>) .
-  wrapTextToLines defaultWrapSettings 79 . T.pack
+  T.unpack
+    . T.unlines
+    . fmap ((T.replicate indent " ") <>)
+    . wrapTextToLines defaultWrapSettings 79
+    . T.pack
 
 instance ColRender Result where
   colRender col (DumpR t) = putStr "Dump:    " >> colRender col t
@@ -122,11 +131,11 @@ instance ColRender Result where
 instance ColRender Results where
   colRender col (Results rs)  = go Nothing rs
     where go :: (Maybe UTCTime) -> [Result] -> IO ()
-          go _ [] = return () 
+          go _ [] = return ()
           go lastTs (d@(DumpR _):rs) = colRender col d >> go lastTs rs
           go lastTs (ts@(TsR utc entry):rs) =
             let lastDay = utctDay <$> lastTs
-                currDay = Just $ utctDay utc 
+                currDay = Just $ utctDay utc
              in case (==) <$> lastDay <*> currDay of
                   Just True -> colRender col entry >> go lastTs rs
                   _ -> colRender col ts >> go (Just utc) rs

@@ -16,12 +16,12 @@
 -----------------------------------------------------------------------------
 module Diff where
 
-import Data.List (intercalate)
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Text.Metrics (levenshtein)
-import Parse
-import Parse.Entry
+import           Data.List                      ( intercalate )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
+import           Data.Text.Metrics              ( levenshtein )
+import           Parse
+import           Parse.Entry
 
 type Tag = String
 
@@ -31,8 +31,8 @@ type TagPred = String -> Bool -- Tag predicate.
 --   * extract one tag from title/author attr despite variance
 genTag :: Entry -> Maybe Tag
 genTag (Read title author) = undefined
-  where
-    initials = (++ ".") . intercalate "." . fmap (take 1 . trim) . words . trim
+ where
+  initials = (++ ".") . intercalate "." . fmap (take 1 . trim) . words . trim
 genTag _ = Nothing
 
 -- | Trims whitespace, slides shorter string over longer, gets each pair's
@@ -41,23 +41,26 @@ genTag _ = Nothing
 textDiff :: T.Text -> T.Text -> Int
 textDiff a b =
   let trim = T.unwords . T.words
-      a' = trim a
-      b' = trim b
-      la' = T.length a'
-      lb' = T.length b'
-  in if | la' == lb' -> levenshtein a' b'
-        | la' > lb' -> go lb' b' la' a'
-        | otherwise -> go la' a' lb' b'
+      a'   = trim a
+      b'   = trim b
+      la'  = T.length a'
+      lb'  = T.length b'
+  in  if
+        | la' == lb' -> levenshtein a' b'
+        | la' > lb'  -> go lb' b' la' a'
+        | otherwise  -> go la' a' lb' b'
     -- n.b. breaks if short is longer than long. do not tamper w the above
     -- guard
-  where
-    go :: Int -> T.Text -> Int -> T.Text -> Int
-    go ls short ll long =
-      sum $ (\w -> go' (T.length w) w ll long) <$> T.words short
-      where
-        go' ls short ll long =
-          minimum . fmap (uncurry levenshtein) $
-          zip (repeat short) $ [T.take ls $ T.drop i long | i <- [0 .. ll - ls]]
+ where
+  go :: Int -> T.Text -> Int -> T.Text -> Int
+  go ls short ll long =
+    sum $ (\w -> go' (T.length w) w ll long) <$> T.words short
+   where
+    go' ls short ll long =
+      minimum
+        . fmap (uncurry levenshtein)
+        $ zip (repeat short)
+        $ [ T.take ls $ T.drop i long | i <- [0 .. ll - ls] ]
 
 cowards :: [T.Text]
 cowards = ["Noel Coward", "Noël Coward"]

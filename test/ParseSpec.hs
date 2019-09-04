@@ -14,21 +14,21 @@
 -----------------------------------------------------------------------------
 module ParseSpec where
 
-import Data.Time
-import Helpers
-import Parse
-import Parse.Entry
-import Data.Maybe (fromJust)
-import Data.Text as T
-import Data.Text.IO as T
-import Prelude hiding (min)
-import Test.Hspec
-import Text.RawString.QQ
-import Text.Show.Pretty (pPrint)
-import Text.Trifecta
-import Control.Applicative 
-import Store.Sqlite
-import qualified Text.Trifecta.Result as Tri
+import           Control.Applicative
+import           Data.Maybe                     ( fromJust )
+import           Data.Text                     as T
+import           Data.Text.IO                  as T
+import           Data.Time
+import           Helpers
+import           Parse
+import           Parse.Entry
+import           Prelude                 hiding ( min )
+import           Store.Sqlite
+import           Test.Hspec
+import           Text.RawString.QQ
+import           Text.Show.Pretty               ( pPrint )
+import           Text.Trifecta
+import qualified Text.Trifecta.Result          as Tri
 
 tparse :: String -> Result [LogEntry]
 tparse = parse logEntries
@@ -140,25 +140,29 @@ tDialogue =
  
 |]
 
-tDialogueOut =
-  [ TabTsEntry
+tDialogueOut
+  = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"]))
-  , TabTsEntry
+      , Phr (Plural ["sine qua non"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"]))
-  , TabTsEntry
+      , Phr (Plural ["sine qua non"])
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 8, min = 34, sec = 34}
       , Dialogue
-          "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n")
-  , TabTsEntry
+        "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with.\n"
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 8, min = 35, sec = 27}
-      , Read "Great Expectations" "Charles Dickens")
-  ]
+      , Read "Great Expectations" "Charles Dickens"
+      )
+    ]
 
 tPhrase =
   [r|
@@ -171,96 +175,112 @@ tPhrase =
 13:36:33 λ. d casement
 |]
 
-tPhraseOut =
-  [ TabTsEntry
+tPhraseOut
+  = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"]))
-  , TabTsEntry
+      , Phr (Plural ["sine qua non"])
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 55, sec = 26}
       , Def
-          (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"]))
-  , TabTsEntry
+        (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"])
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"]))
-  , TabTsEntry
+      , Phr (Plural ["sine qua non"])
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Defined "sine qua non " "an essential condition"))
-  , TabTsEntry
+      , Phr (Defined "sine qua non " "an essential condition")
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Defined "sine qua non" "an essential condition"))
-  , TabTsEntry
+      , Phr (Defined "sine qua non" "an essential condition")
+      )
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Def (Defn Nothing ["casement"]))
-  ]
+      , Def (Defn Nothing ["casement"])
+      )
+    ]
 
 testLogWithDumpOutput' :: [LogEntry]
-testLogWithDumpOutput' =
-  [ TabTsEntry
+testLogWithDumpOutput'
+  = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
-      , Read "To the Lighthouse" "Virginia Woolf")
-  , TabTsEntry
+      , Read "To the Lighthouse" "Virginia Woolf"
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 55, sec = 17}
       , Def
-          (DefVersus
-             "benignant"
-             "kind; gracious; favorable;"
-             "benign"
-             "gentle, mild, or, medically, non-threatening"))
-  , TabTsEntry
+        (DefVersus "benignant"
+                   "kind; gracious; favorable;"
+                   "benign"
+                   "gentle, mild, or, medically, non-threatening"
+        )
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 45}
       , Def
-          (DefVersus
-             "malignant"
-             "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
-             "malign"
-             "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
-  , TabTsEntry
+        (DefVersus
+          "malignant"
+          "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+          "malign"
+          "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
+        )
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
-      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
-  , TabTsEntry
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
-      , Def (Defn (Just 38) ["sublime", "lintel"]))
-  , TabTsEntry
+      , Def (Defn (Just 38) ["sublime", "lintel"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 24, sec = 2}
       , Quotation
-          "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          Nothing)
-  , TabTsEntry
+        "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        Nothing
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 25, sec = 27}
-      , Quotation
-          "Her simplicity fathomed what clever people falsified."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          Nothing)
-  , TabTsEntry
+      , Quotation "Her simplicity fathomed what clever people falsified."
+                  "In \"To the Lighthouse\", by Virginia Woolf"
+                  Nothing
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
-      , Def (Defn Nothing ["plover"]))
-  , TabTsEntry
+      , Def (Defn Nothing ["plover"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
-      , Def (Defn Nothing ["cosmogony"]))
-  , TabTsEntry
+      , Def (Defn Nothing ["cosmogony"])
+      )
+    , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 49, sec = 58}
       , Quotation
-          "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
-          "In \"To the Lighthouse\", by Virginia Woolf"
-          (Just 38))
-  ]
+        "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+        "In \"To the Lighthouse\", by Virginia Woolf"
+        (Just 38)
+      )
+    ]
 
 testDump :: String
 testDump =
@@ -285,12 +305,13 @@ testDumpOutput :: [LogEntry]
 testDumpOutput =
   [ Dump "\ndump aeouoaeu\nsecond line"
   , TabTsEntry
-      (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+    (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
   , Dump "\ndump body\nmultiple lines"
   , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 14, min = 19, sec = 0}
-      , Read "Witches Abroad" "Terry Pratchett")
+    ( 0
+    , TimeStamp {hr = 14, min = 19, sec = 0}
+    , Read "Witches Abroad" "Terry Pratchett"
+    )
   ]
 
 testNull :: String
@@ -316,61 +337,88 @@ testLonelySpaces =
 
 testLonelySpacesOutput :: [LogEntry]
 testLonelySpacesOutput =
-  [ TabTsEntry ( 0 , TimeStamp {hr = 14, min = 19, sec = 0} , Read "Witches Abroad" "Terry Pratchett")
-  , TabTsEntry (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+  [ TabTsEntry
+    ( 0
+    , TimeStamp {hr = 14, min = 19, sec = 0}
+    , Read "Witches Abroad" "Terry Pratchett"
+    )
+  , TabTsEntry
+    (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
   ]
 
 -- `parse entries teslog`
 output :: [LogEntry]
-output =
-  [ TabTsEntry ( 0
-    , TimeStamp {hr = 9, min = 55, sec = 6}
-    , Read "To the Lighthouse" "Virginia Woolf")
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 9, min = 55, sec = 17}
-    , Def
+output
+  = [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 9, min = 55, sec = 6}
+      , Read "To the Lighthouse" "Virginia Woolf"
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 55, sec = 17}
+      , Def
+        (DefVersus "benignant"
+                   "kind; gracious; favorable;"
+                   "benign"
+                   "gentle, mild, or, medically, non-threatening"
+        )
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 11, sec = 45}
+      , Def
         (DefVersus
-           "benignant"
-           "kind; gracious; favorable;"
-           "benign"
-           "gentle, mild, or, medically, non-threatening"))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 11, sec = 45}
-    , Def
-        (DefVersus
-           "malignant"
-           "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
-           "malign"
-           "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 17, sec = 40}
-    , Def (Defn (Just 38) ["inimical", "traduce", "virulent"]))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 18, sec = 12}
-    , Def (Defn (Just 38) ["sublime", "lintel"]))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 24, sec = 2}
-    , Quotation
+          "malignant"
+          "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+          "malign"
+          "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
+        )
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 17, sec = 40}
+      , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 18, sec = 12}
+      , Def (Defn (Just 38) ["sublime", "lintel"])
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 24, sec = 2}
+      , Quotation
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
-        Nothing)
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 25, sec = 27}
-    , Quotation
-        "Her simplicity fathomed what clever people falsified."
-        "In \"To the Lighthouse\", by Virginia Woolf"
-        Nothing)
-  , TabTsEntry (1, TimeStamp {hr = 10, min = 28, sec = 49}, Def (Defn Nothing ["plover"]))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 47, sec = 59}
-    , Def (Defn Nothing ["cosmogony"]))
-  , TabTsEntry ( 1
-    , TimeStamp {hr = 10, min = 49, sec = 58}
-    , Quotation
+        Nothing
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 25, sec = 27}
+      , Quotation "Her simplicity fathomed what clever people falsified."
+                  "In \"To the Lighthouse\", by Virginia Woolf"
+                  Nothing
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 28, sec = 49}
+      , Def (Defn Nothing ["plover"])
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 47, sec = 59}
+      , Def (Defn Nothing ["cosmogony"])
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 10, min = 49, sec = 58}
+      , Quotation
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf"
-        (Just 38))
-  ]
+        (Just 38)
+      )
+    ]
 
 commentTs :: String
 commentTs =
@@ -386,10 +434,12 @@ hyper-management.
 
 commentTsOutput :: [LogEntry]
 commentTsOutput =
-  [ TabTsEntry ( 0
-    , TimeStamp {hr = 20, min = 30, sec = 0}
-    , Commentary
-        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
+  [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 20, min = 30, sec = 0}
+      , Commentary
+        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n"
+      )
   ]
 
 commentTs' :: String
@@ -406,13 +456,16 @@ hyper-management.
 |]
 
 commentTsOutput' :: [LogEntry]
-commentTsOutput' =
-  [ TabTsEntry ( 0
-    , TimeStamp {hr = 20, min = 30, sec = 0}
-    , Commentary
-        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n")
-  , TabTsEntry (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
-  ]
+commentTsOutput'
+  = [ TabTsEntry
+      ( 0
+      , TimeStamp {hr = 20, min = 30, sec = 0}
+      , Commentary
+        "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n"
+      )
+    , TabTsEntry
+      (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
+    ]
 
 -- test data
 testStrDefn :: String
@@ -568,16 +621,17 @@ tNull =
         Keane Yahn-Krafft
 |]
 
-tNullOut =
-  [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null)
-  , TabTsEntry
+tNullOut
+  = [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null)
+    , TabTsEntry
       ( 0
       , TimeStamp {hr = 22, min = 31, sec = 38}
       , Quotation
-          "I am merely coping with the collosal shame of having found out that I exist."
-          "Keane Yahn-Krafft"
-          Nothing)
-  ]
+        "I am merely coping with the collosal shame of having found out that I exist."
+        "Keane Yahn-Krafft"
+        Nothing
+      )
+    ]
 
 tDump =
   [r|
@@ -714,74 +768,67 @@ autoAttr = [r|
 
 |]
 
-autoAttrOut = 
-  [ TabTsEntry
+autoAttrOut
+  = [ TabTsEntry
       ( 0
-      , TimeStamp { hr = 12 , min = 32 , sec = 18 }
+      , TimeStamp {hr = 12, min = 32, sec = 18}
       , Def
-          (Defn
-             Nothing
-             [ "offering" , "sacrifice" , "expiate" , "propitiate" , "gift" ])
+        (Defn Nothing ["offering", "sacrifice", "expiate", "propitiate", "gift"]
+        )
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 0
-      , TimeStamp { hr = 13 , min = 32 , sec = 17 }
-      , Def (Defn Nothing [ "expectorate" , "exsputory" , "exspuition" ])
+      , TimeStamp {hr = 13, min = 32, sec = 17}
+      , Def (Defn Nothing ["expectorate", "exsputory", "exspuition"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 0
-      , TimeStamp { hr = 13 , min = 36 , sec = 14 }
-      , Def (Defn Nothing [ "exorate" , "exoration" , "entreaty" ])
+      , TimeStamp {hr = 13, min = 36, sec = 14}
+      , Def (Defn Nothing ["exorate", "exoration", "entreaty"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 0
-      , TimeStamp { hr = 13 , min = 38 , sec = 51 }
+      , TimeStamp {hr = 13, min = 38, sec = 51}
       , Read "Pride and Prejudice" "Jane Austen"
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 13 , min = 39 , sec = 5 }
+      , TimeStamp {hr = 13, min = 39, sec = 5}
       , Def
-          (Defn
-             Nothing
-             [ "ductility"
-             , "stricture"
-             , "negative"
-             , "archness"
-             , "arch"
-             , "celerity"
-             ])
-      )
-  , TabTsEntry
-      ( 1
-      , TimeStamp { hr = 13 , min = 41 , sec = 46 }
-      , Quotation
-          "Happiness in marriage is entirely a matter of chance."
-          "In \"Pride and Prejudice\" by Jane Austen"
+        (Defn
           Nothing
+          ["ductility", "stricture", "negative", "archness", "arch", "celerity"]
+        )
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 13 , min = 42 , sec = 8 }
+      , TimeStamp {hr = 13, min = 41, sec = 46}
+      , Quotation "Happiness in marriage is entirely a matter of chance."
+                  "In \"Pride and Prejudice\" by Jane Austen"
+                  Nothing
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 13, min = 42, sec = 8}
       , Quotation
-          "Mary had neither genius nor taste; and though vanity had given her application, it had likewise given her a pedantic air and a conceited manner, which would have injured a higher degree of excellence than she had reached."
-          ""
-          Nothing
+        "Mary had neither genius nor taste; and though vanity had given her application, it had likewise given her a pedantic air and a conceited manner, which would have injured a higher degree of excellence than she had reached."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 13 , min = 43 , sec = 38 }
+      , TimeStamp {hr = 13, min = 43, sec = 38}
       , Quotation "Your humility must disarm reproof." "" Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 13 , min = 43 , sec = 55 }
+      , TimeStamp {hr = 13, min = 43, sec = 55}
       , Quotation
-          "To yield without conviction is no compliment to the understanding of either [party]."
-          ""
-          Nothing
+        "To yield without conviction is no compliment to the understanding of either [party]."
+        ""
+        Nothing
       )
-  ]
+    ]
 
 p = parse logEntries
 
@@ -944,280 +991,281 @@ broken = [r|
     22:08:52 λ. phr "their characters suffered no revolution"
 |]
 
-brokenOut =
-  [ TabTsEntry
+brokenOut
+  = [ TabTsEntry
       ( 0
-      , TimeStamp { hr = 9 , min = 44 , sec = 14 }
+      , TimeStamp {hr = 9, min = 44, sec = 14}
       , Read "Pride And Prejudice" "Jane Austen"
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 44 , sec = 45 }
-      , Def (Defn Nothing [ "repine" , "abseil" ])
+      , TimeStamp {hr = 9, min = 44, sec = 45}
+      , Def (Defn Nothing ["repine", "abseil"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 45 , sec = 7 }
+      , TimeStamp {hr = 9, min = 45, sec = 7}
       , Def
-          (Defn
-             Nothing
-             [ "repute" , "dispute" , "compute" , "impute" , "putative" ])
+        (Defn Nothing ["repute", "dispute", "compute", "impute", "putative"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 49 , sec = 36 }
-      , Def (Defn Nothing [ "disoblige" ])
+      , TimeStamp {hr = 9, min = 49, sec = 36}
+      , Def (Defn Nothing ["disoblige"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 51 , sec = 8 }
-      , Def (Defn Nothing [ "perforce" ])
+      , TimeStamp {hr = 9, min = 51, sec = 8}
+      , Def (Defn Nothing ["perforce"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 51 , sec = 15 }
-      , Def (Defn Nothing [ "manifold" ])
+      , TimeStamp {hr = 9, min = 51, sec = 15}
+      , Def (Defn Nothing ["manifold"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 52 , sec = 32 }
+      , TimeStamp {hr = 9, min = 52, sec = 32}
+      , Quotation "Is not general incivility the very essence of love?"
+                  ""
+                  Nothing
+      )
+    , TabTsEntry
+      ( 1
+      , TimeStamp {hr = 9, min = 54, sec = 11}
       , Quotation
-          "Is not general incivility the very essence of love?" "" Nothing
+        "There are few people whom I really love and fewer still of whom I think well."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 54 , sec = 11 }
+      , TimeStamp {hr = 9, min = 54, sec = 32}
       , Quotation
-          "There are few people whom I really love and fewer still of whom I think well."
-          ""
-          Nothing
+        "We must not be so ready to fancy ourselves intentionally injured."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 54 , sec = 32 }
+      , TimeStamp {hr = 9, min = 54, sec = 53}
       , Quotation
-          "We must not be so ready to fancy ourselves intentionally injured."
-          ""
-          Nothing
+        "The stupidity with which he was favored by nature, must guard his courtship from any charm that could make a woman wish for its continuance."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 9 , min = 54 , sec = 53 }
-      , Quotation
-          "The stupidity with which he was favored by nature, must guard his courtship from any charm that could make a woman wish for its continuance."
-          ""
-          Nothing
+      , TimeStamp {hr = 10, min = 11, sec = 0}
+      , Phr (Plural ["\"as well by...as...\""])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 11 , sec = 0 }
-      , Phr (Plural [ "\"as well by...as...\"" ])
+      , TimeStamp {hr = 10, min = 11, sec = 22}
+      , Phr (Plural ["\"despair of\""])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 11 , sec = 22 }
-      , Phr (Plural [ "\"despair of\"" ])
+      , TimeStamp {hr = 10, min = 11, sec = 33}
+      , Phr (Plural ["\"savors of\""])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 11 , sec = 33 }
-      , Phr (Plural [ "\"savors of\"" ])
+      , TimeStamp {hr = 10, min = 13, sec = 40}
+      , Def (Defn Nothing ["insupportable"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 13 , sec = 40 }
-      , Def (Defn Nothing [ "insupportable" ])
+      , TimeStamp {hr = 10, min = 14, sec = 18}
+      , Def (Defn Nothing ["paling"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 14 , sec = 18 }
-      , Def (Defn Nothing [ "paling" ])
+      , TimeStamp {hr = 10, min = 27, sec = 13}
+      , Def (Defn Nothing ["trepidity", "trepid"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 10 , min = 27 , sec = 13 }
-      , Def (Defn Nothing [ "trepidity" , "trepid" ])
+      , TimeStamp {hr = 14, min = 10, sec = 42}
+      , Def (Defn Nothing ["fortnight"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 14 , min = 10 , sec = 42 }
-      , Def (Defn Nothing [ "fortnight" ])
+      , TimeStamp {hr = 14, min = 20, sec = 14}
+      , Def (Defn Nothing ["politic", "impolitic"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 14 , min = 20 , sec = 14 }
-      , Def (Defn Nothing [ "politic" , "impolitic" ])
-      )
-  , TabTsEntry
-      ( 1
-      , TimeStamp { hr = 14 , min = 21 , sec = 21 }
+      , TimeStamp {hr = 14, min = 21, sec = 21}
       , Def
-          (DefVersus
-             "celerity"
-             "rapidity of motion; swiftness"
-             "alacrity"
-             "cheerful readiness; sprightliness; promptness")
+        (DefVersus "celerity"
+                   "rapidity of motion; swiftness"
+                   "alacrity"
+                   "cheerful readiness; sprightliness; promptness"
+        )
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 3 , sec = 36 }
-      , Def (Defn Nothing [ "rencontre" , "rencounter" ])
+      , TimeStamp {hr = 15, min = 3, sec = 36}
+      , Def (Defn Nothing ["rencontre", "rencounter"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 6 , sec = 9 }
-      , Def (Defn Nothing [ "immure" , "durance" , "inure" ])
+      , TimeStamp {hr = 15, min = 6, sec = 9}
+      , Def (Defn Nothing ["immure", "durance", "inure"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 10 , sec = 55 }
-      , Def (Defn Nothing [ "tractable" ])
+      , TimeStamp {hr = 15, min = 10, sec = 55}
+      , Def (Defn Nothing ["tractable"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 11 , sec = 31 }
-      , Def (Defn Nothing [ "officious" ])
+      , TimeStamp {hr = 15, min = 11, sec = 31}
+      , Def (Defn Nothing ["officious"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 16 , sec = 31 }
-      , Def (Defn Nothing [ "intimate" ])
+      , TimeStamp {hr = 15, min = 16, sec = 31}
+      , Def (Defn Nothing ["intimate"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 26 , sec = 12 }
-      , Def (Defn Nothing [ "verdure" ])
+      , TimeStamp {hr = 15, min = 26, sec = 12}
+      , Def (Defn Nothing ["verdure"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 49 , sec = 25 }
-      , Def (Defn Nothing [ "obeisance" , "obedience" ])
+      , TimeStamp {hr = 15, min = 49, sec = 25}
+      , Def (Defn Nothing ["obeisance", "obedience"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 53 , sec = 15 }
-      , Def (Defn Nothing [ "derogate" , "derogation" ])
+      , TimeStamp {hr = 15, min = 53, sec = 15}
+      , Def (Defn Nothing ["derogate", "derogation"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 57 , sec = 40 }
-      , Phr (Plural [ "\"hopeless of remedy\"" ])
+      , TimeStamp {hr = 15, min = 57, sec = 40}
+      , Phr (Plural ["\"hopeless of remedy\""])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 15 , min = 57 , sec = 56 }
-      , Def (Defn Nothing [ "upbraid" ])
+      , TimeStamp {hr = 15, min = 57, sec = 56}
+      , Def (Defn Nothing ["upbraid"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 16 , min = 17 , sec = 37 }
+      , TimeStamp {hr = 16, min = 17, sec = 37}
       , Quotation
-          "One may be continually abusive to a man without saying any thing just; but one cannot be always laughing at a man without now and then stumbling upon something witty."
-          ""
-          Nothing
+        "One may be continually abusive to a man without saying any thing just; but one cannot be always laughing at a man without now and then stumbling upon something witty."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 16 , min = 18 , sec = 34 }
-      , Def (Defn Nothing [ "ecstasy" ])
+      , TimeStamp {hr = 16, min = 18, sec = 34}
+      , Def (Defn Nothing ["ecstasy"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 16 , min = 31 , sec = 17 }
+      , TimeStamp {hr = 16, min = 31, sec = 17}
       , Def
-          (DefVersus
-             "reproof"
-             "expression of blame or censure; refutation,"
-             "reproach"
-             "to blame, censure severely or contemptuously. (\"reproach\" seems the stronger term; reproof is orthogonal to civility, whereas reproach connotes a conveyance of contempt, disdain, or disgrace--not necessarily, but such are present in its definition.)")
+        (DefVersus
+          "reproof"
+          "expression of blame or censure; refutation,"
+          "reproach"
+          "to blame, censure severely or contemptuously. (\"reproach\" seems the stronger term; reproof is orthogonal to civility, whereas reproach connotes a conveyance of contempt, disdain, or disgrace--not necessarily, but such are present in its definition.)"
+        )
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 16 , min = 38 , sec = 23 }
+      , TimeStamp {hr = 16, min = 38, sec = 23}
       , Def
-          (DefVersus
-             "confute"
-             "to quell to silence, stillness, or surrender; to allay; literally, to stop from boiling (both derive from \"fuse\" as \"to melt\")"
-             "refute"
-             "to repel; to disprove by argument or evidence")
+        (DefVersus
+          "confute"
+          "to quell to silence, stillness, or surrender; to allay; literally, to stop from boiling (both derive from \"fuse\" as \"to melt\")"
+          "refute"
+          "to repel; to disprove by argument or evidence"
+        )
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 16 , min = 52 , sec = 3 }
-      , Def (Defn Nothing [ "rather" , "injunction" ])
+      , TimeStamp {hr = 16, min = 52, sec = 3}
+      , Def (Defn Nothing ["rather", "injunction"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 17 , min = 2 , sec = 35 }
-      , Phr (Plural [ "\"bent their steps thither\"" ])
+      , TimeStamp {hr = 17, min = 2, sec = 35}
+      , Phr (Plural ["\"bent their steps thither\""])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 17 , min = 6 , sec = 35 }
-      , Def (Defn Nothing [ "ovate" , "obovate" ])
+      , TimeStamp {hr = 17, min = 6, sec = 35}
+      , Def (Defn Nothing ["ovate", "obovate"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 17 , min = 15 , sec = 53 }
-      , Def (Defn Nothing [ "coppice" ])
+      , TimeStamp {hr = 17, min = 15, sec = 53}
+      , Def (Defn Nothing ["coppice"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 17 , min = 22 , sec = 38 }
-      , Def (Defn Nothing [ "occasion" ])
+      , TimeStamp {hr = 17, min = 22, sec = 38}
+      , Def (Defn Nothing ["occasion"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 17 , min = 59 , sec = 26 }
-      , Def (Defn Nothing [ "diffidence" ])
+      , TimeStamp {hr = 17, min = 59, sec = 26}
+      , Def (Defn Nothing ["diffidence"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 18 , min = 43 , sec = 22 }
-      , Def (Defn Nothing [ "paddock" ])
+      , TimeStamp {hr = 18, min = 43, sec = 22}
+      , Def (Defn Nothing ["paddock"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 20 , min = 3 , sec = 19 }
-      , Def (Defn Nothing [ "connubial" ])
+      , TimeStamp {hr = 20, min = 3, sec = 19}
+      , Def (Defn Nothing ["connubial"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 20 , min = 31 , sec = 28 }
-      , Def (Defn Nothing [ "abominate" ])
+      , TimeStamp {hr = 20, min = 31, sec = 28}
+      , Def (Defn Nothing ["abominate"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 20 , min = 39 , sec = 0 }
-      , Def (Defn Nothing [ "canvass" ])
+      , TimeStamp {hr = 20, min = 39, sec = 0}
+      , Def (Defn Nothing ["canvass"])
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 20 , min = 52 , sec = 9 }
+      , TimeStamp {hr = 20, min = 52, sec = 9}
       , Quotation
-          "We all love to instruct, though we can teach only what is not worth knowing."
-          ""
-          Nothing
+        "We all love to instruct, though we can teach only what is not worth knowing."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 21 , min = 57 , sec = 56 }
+      , TimeStamp {hr = 21, min = 57, sec = 56}
       , Quotation
-          "But in such cases as these, a good memory is unpardonable. This is the last time I shall ever remember it myself."
-          ""
-          Nothing
+        "But in such cases as these, a good memory is unpardonable. This is the last time I shall ever remember it myself."
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 22 , min = 8 , sec = 2 }
+      , TimeStamp {hr = 22, min = 8, sec = 2}
       , Quotation
-          "How unlucky that you should have a reasonable answer to give, and that I should be so reasonable as to admit it!"
-          ""
-          Nothing
+        "How unlucky that you should have a reasonable answer to give, and that I should be so reasonable as to admit it!"
+        ""
+        Nothing
       )
-  , TabTsEntry
+    , TabTsEntry
       ( 1
-      , TimeStamp { hr = 22 , min = 8 , sec = 52 }
-      , Phr (Plural [ "\"their characters suffered no revolution\"" ])
+      , TimeStamp {hr = 22, min = 8, sec = 52}
+      , Phr (Plural ["\"their characters suffered no revolution\""])
       )
-  ]
+    ]

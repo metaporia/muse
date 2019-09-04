@@ -12,9 +12,9 @@
 
 module Store.Sqlite.Types where
 
-import Data.Aeson
-import Database.Persist.TH
-import GHC.Generics
+import           Data.Aeson
+import           Database.Persist.TH
+import           GHC.Generics
 
 data DefTag
   = Headwords'

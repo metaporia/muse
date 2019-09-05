@@ -327,15 +327,41 @@ wordSensitiveLineWrap n s =
 
 -- | Apply the parser to the initial state. If it fails, return @[]@.
 -- Otherwise, recurse with the new state. 
+-- | Parse with context/state. 
 --
--- This should, for example, be able to parse a list of digits and rather
--- efficiently ensure that they are ascending.
-many' :: s -> (s -> Parser (a, s)) -> Parser [a]
-many' s p = do
-  mx <- try (Just <$> p s) <|> return Nothing
-  case mx of
-    Just (a, s') -> (a :) <$> many' s' p
-    Nothing      -> return []
+-- For example, in homage to the useful but utterly contrived, I show below how
+-- to parse a list of comma-separated digits and count the length of the list a
+-- single pass.  
+--
+-- Given:
+--  
+-- @
+--  parse :: Parser a -> String -> Trifecta.Result a
+--
+--  digitWithCounter :: Int -> Parser (Int, Int)
+--  digitWithCounter numDigits = do
+--    n <- read . return <$> digit
+--    return (n, numDigits + 1)
+-- @
+--
+-- We have:
+--
+-- >>> parse (statefulMany 0 digitWithCounter) ""
+-- Success([], 0)
+--
+-- and
+--
+-- >>> parse (statefulMany 0 digitWithCounter) "357"
+-- Success([3,5,7], 3)
+--
+statefulMany :: s -> (s -> Parser (a, s)) -> Parser ([a], s)
+statefulMany initialState p = go initialState
+ where
+  go s = do
+    mx <- try (Just <$> p s) <|> return Nothing
+    case mx of
+      Just (a, s') -> first (a :) <$> go s'
+      Nothing      -> return ([], s)
 
 many'' :: s -> (s -> Parser (a, s)) -> Parser [a]
 many'' s p = do

@@ -22,6 +22,9 @@ import           Text.Trifecta           hiding ( Rendering
                                                 )
 import qualified Text.Trifecta.Result          as Tri
 
+double :: a -> (a, a) 
+double a = (a,a)
+
 -- Like 'maybe' for lists.
 list :: b -> ([a] -> b) -> [a] -> b
 list emptyCase f [] = emptyCase

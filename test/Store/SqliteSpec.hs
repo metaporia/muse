@@ -262,7 +262,10 @@ curr :: IO ()
 curr = runSqlite "test1.db" $ do
   runMigration migrateAll
   today <- liftIO $ utctDay <$> getCurrentTime
-  writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
+  let -- logEntries :: _
+      logEntries' = statefulValidatedMany Nothing logEntrySquawk logEntryPassNewestTimeStamp 
+  liftIO $ pPrint $ parse logEntries' reallyBroken
+  --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
   return ()
 
 reallyBroken = [r|
@@ -301,6 +304,18 @@ reallyBroken = [r|
     12:05:24 λ. s109
     12:11:27 λ. d111 adenoid
     13:15:12 λ. e135
+13:48:10 λ. read "Dead Souls", by Gogol
+    13:48:18 λ. s34
+    14:15:38 λ. e45
+    20:38:14 λ. s87
+    20:38:37 λ. d adze
+    20:38:55 λ. d kaftan
+    20:39:13 λ. d empyrean
+    20:39:35 λ. d lathe, faience, hummock, vittles, victuals, aureate, gilt
+    20:43:05 λ. d veriest, circumspect
+|]
+
+sample = [r|
 13:48:10 λ. read "Dead Souls", by Gogol
     13:48:18 λ. s34
     14:15:38 λ. e45

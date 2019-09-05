@@ -215,6 +215,10 @@ data LogEntry
   | TabTsEntry (Int, TimeStamp, Entry)
   deriving (Eq, Show, Generic)
 
+getTimeStamp :: LogEntry -> Maybe TimeStamp
+getTimeStamp (TabTsEntry (_, ts,_)) = Just ts
+getTimeStamp _ = Nothing
+
 instance ToJSON LogEntry where
   toEncoding = genericToEncoding defaultOptions
 

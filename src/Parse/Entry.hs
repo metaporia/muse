@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
   ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
   TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -49,7 +50,11 @@ import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
 import           Control.Monad.Trans.State
 import           Data.Aeson              hiding ( Null )
-import           Data.Bifunctor                 ( bimap )
+import           Data.Bifunctor                 ( bimap
+                                                , first
+                                                , second
+                                                )
+import           Data.Bool                      ( bool )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhile
                                                 , dropWhileEnd
@@ -74,6 +79,7 @@ import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Text.Trifecta           hiding ( Rendering
                                                 , Span
+                                                , double
                                                 )
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
@@ -315,6 +321,92 @@ logEntry' (Just previousTimeStamp) = do
           mempty
           mempty
 
+-- | If the parser yields a non-'Nothing' 'TimeStamp', it's included in the
+-- output. Otherwise, the first parameter is used.
+--
+-- This is a "stateful" parser meant for use with 'statefulValidatedMany'. The
+-- only "stateful" behavior is the choice of timestamp to pass along.
+logEntryPassNewestTimeStamp
+  :: Maybe TimeStamp -> Parser (LogEntry, Maybe TimeStamp)
+logEntryPassNewestTimeStamp mTs = do
+  le <- logEntry
+  let mTs' = getTimeStamp le
+  case mTs' of
+    Just ts -> return (le, Just ts)
+    Nothing -> return (le, mTs')
+
+-- | If properly applied, this ensures that the 'LogEntry' parser will squeal
+-- with volume and precision whenever any timestamps are duplicated or
+-- non-ascending.
+logEntrySquawk :: Maybe TimeStamp -> Maybe TimeStamp -> Maybe String
+logEntrySquawk previous current = case (>=) <$> previous <*> current of
+  Just b -> if b
+    then Just
+      (  "duplicate or out of order timestamps: "
+      <> "prev = "
+      <> show previous
+      <> ", curr = "
+      <> show current
+      )
+    else Nothing
+  Nothing -> Nothing
+
+---- | Like 'logEntry' but this parser will enforce that no two timestamps are
+---- duplicate by requiring each to be greater than and not equal to its
+---- predecessor.
+----
+---- If the timestamp of an entry is found to be less than or equal to that which
+---- came before it, some helpful error message should be constructed with the
+---- location of the issue, and, ideally, some directions--or better yet, an
+---- interactive timestamp editing interface--as to how they might correct the
+---- issue so that the day in question's 'LogEntry' may parse successfully.
+--logEntry''
+--  :: Maybe TimeStamp -> Parser (LogEntry, Maybe TimeStamp)
+--logEntry'' Nothing = do
+--  -- No timestamp means its the first entry in the day or a dump.  If a dump
+--  -- occurs at the start of the file, the parser will proceed without a
+--  -- timestamp and treat the first non-dump entry is the start of the file
+--  -- (that is, w.r.t. the timestamp passing logic). Should a dump be situated
+--  -- in the middle of a series of timestamped entries, the dump will be parsed
+--  -- normally and the last timestamp parsed will be passed through for
+--  -- comparision with the very next timestamp to be encountered.
+--  le <- logEntry
+--  -- No lookahead required as it's the first timestamp in the day's log.  As
+--  -- such, this branch cannot fail due to duplicate or unordered timestamps.
+--  return $ case le of
+--    Dump       _          -> (le, Nothing)
+--    TabTsEntry (_, ts, _) -> (le, Just ts)
+--logEntry'' (Just previousTimeStamp) = do
+--  le <- lookAhead logEntry
+--  -- 'lookAhead' places the error caret at the end of well-formed input, in
+--  -- this case on the character of the malformed timestamp or its preceding
+--  -- whitespace.
+--  case le of
+--    Dump _ -> return (le, Just previousTimeStamp, Nothing)
+--    TabTsEntry (_, currentTimeStamp, _) ->
+--      if previousTimeStamp < currentTimeStamp
+--        then return (le, Just currentTimeStamp, Nothing)
+--        else return
+--          ( le
+--          , Just previousTimeStamp
+--          , Just
+--            (unlines
+--              (wordSensitiveLineWrap
+--                55
+--                (  "Found current timestamp, t1 = "
+--                <> show currentTimeStamp
+--                <> ", and previous timestamp, t0  = "
+--                <> show previousTimeStamp
+--                <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
+--                )
+--              )
+--            )
+--          )
+
+-- | Inserts linebreaks intelligently. 
+--
+-- It places them less than the given number of characters into a line if it
+-- the alternative is to include only part of a word.
 wordSensitiveLineWrap :: Int -> String -> [String]
 wordSensitiveLineWrap n s =
   let takeNCharsWorth _ []      = ([], [])
@@ -329,8 +421,6 @@ wordSensitiveLineWrap n s =
   in  go (words s)
 
 
--- | Apply the parser to the initial state. If it fails, return @[]@.
--- Otherwise, recurse with the new state. 
 -- | Parse with context/state. 
 --
 -- For example, in homage to the useful but utterly contrived, I show below how
@@ -367,27 +457,88 @@ statefulMany initialState p = go initialState
       Just (a, s') -> first (a :) <$> go s'
       Nothing      -> return ([], s)
 
-many'' :: s -> (s -> Parser (a, s)) -> Parser [a]
-many'' s p = do
-  (a, s') <- p s
-  (a :) <$> many'' s' p
+-- | 'threadMany' /basically/ suffices for efficient input validation (and
+-- if/when I prettify the error message by digging into the parsers delta,
+-- span, line information, it will be fully comparable to a normal "Trifecta"
+-- error message--which is what we want). 
+--
+-- However, I would prefer to write a greedy combinator like 'many' but that
+-- has two failure modes: the first parses until it fails and then the whole
+-- parser fails; the second parses until it fails and then returns the
+-- collected results.  This better suits the intended usage of 'threadMany',
+-- which is fusing parsing and (simplistic) fold-based property checking into a
+-- single parser-embedded pass.
+--
+-- tl;dr; If the left parser fails, so does the 'threadMany''; if the right one
+-- should fail, the parser keeps going as the failure signals that the parser
+-- should return what's been collected--that is, the failure is due solely to
+-- the absence of parseable input, /not/ a property violation.
+--
+-- For example:
+--
+-- >>> parse (statefulValidatedMany 0 squawkIfNotAscending shouldSquawk) "1234"
+-- Success ([1,2,3,4],4)
+--
+-- but
+--
+-- >>> parse (statefulValidatedMany 0 squawkIfNotAscending shouldSquawk) "1233"
+-- Failure (ErrInfo { _errDoc = "...expected ascending numbers...", .. })
+--
+statefulValidatedMany
+  :: s -- ^ Initial state.
+  -- | A predicate that returns an error message explaining why the given
+  -- component parser didn't fail, but 'statefulValidatedMany' did. The older
+  -- state is passed before the newer. Failure is indicated by the presence of
+  -- a error string.
+  -> (s -> s -> Maybe String)
+  -- | The stateful parser whose failure signals result collection, /not/ an
+  -- error message--for that use the previous parameter.
+  -> (s -> Parser (a, s))
+  -> Parser ([a], s)
+statefulValidatedMany initialState predicate parser =
+  let go s = do
+        maybeTup <- try (Just <$> parser s) <|> return Nothing
+        case maybeTup of
+          Nothing      -> return ([], s) -- parse failed (not predicate), and so we collect results
+          Just (a, s') -> case predicate s s' of
+            Just err -> unexpected err -- TODO fix linewrap issue (it's too short for long messages)
+            Nothing  -> first (a :) <$> go s'
+  in  go initialState
+
+-- Example predicate
+squawkIfNotAscending :: Int -> Int -> Maybe String
+squawkIfNotAscending prev curr =
+  if curr > prev then Nothing else Just $ "squawk: expected ascending numbers"
+
+-- example stateful parser
+shouldSquawk :: Int -> Parser (Int, Int)
+shouldSquawk _ = double . read . return  <$> digit
 
 
-
-ascendingDigits :: Int -> Parser (Int, Int)
-ascendingDigits previous = do
+-- keep for pretty err msg example
+ascendingDigits' :: Int -> Parser (Either String (Int, Int))
+ascendingDigits' previous = do
   current <- (read . return) <$> digit
   skipOptional (many space *> char ',' <* many space)
-  if previous < current
-    then return (current, current)
-    else unexpected "expected ascending comma-separated digits"
+  return $ if previous < current
+    then Right (current, current)
+    else
+      let
+        err = explain emptyRendering $ Err
+          (  Just
+          $  Leijen.vcat
+          $  fmap Leijen.text
+          $  ("Unorderd or duplicate timestamps:" :)
+          $  wordSensitiveLineWrap 55
+          $  "Found current timestamp, t1 = "
+          <> show current
+          <> ", previous timestapm, t2 = "
+          <> show previous
+          <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
+          ) mempty mempty mempty
+      in  -- trace (show err) $ 
+            Left "expected ascending comma-separated digits"
 
-
--- | Pass in comma-separated digits that /don't/ ascend to see what error
--- message our dear user(s) will find upon trying to parse a log file with
--- duplicate timestamps.
-validatedInputExample input =
-  parse (many'' 0 ascendingDigits <* (eof <?> "digits must ascend")) -- "1,2,3" 
 
 logEntries' :: Parser [LogEntry]
 logEntries' = do

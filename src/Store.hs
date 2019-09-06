@@ -162,7 +162,7 @@ toLogEntry (Dump' d s  ) = (d, Dump $ T.unpack s)
 toLogEntry (Ts d i ts e) = (d, TabTsEntry (i, ts, e))
 
 pp :: LogEntry' -> IO ()
-pp = (\(d, le) -> putStrLn (show d) >> colRender True le) . toLogEntry
+pp = (\(d, le) -> print d >> colRender True le) . toLogEntry
 
 -- | Since no search predicates target dumps (they're only present for
 -- compatibility), they'll be stored in a separate table. This will speed up
@@ -344,7 +344,7 @@ fromDB' DB { chrono, ..} = Results . go $ IxSet.toAscList
           Store.Types.Null -> xs
 
 fromDB :: Query DB Results
-fromDB = fromDB' <$> ask
+fromDB = asks fromDB' 
 
 -- ** 'DB' management
 -- | Insert 'LogEntry' into 'DB'. For each, an entry is added to 'chrono' and,
@@ -361,47 +361,46 @@ addLogEntry day le tag = do
   db@DB {..} <- get
   case le of
     (Dump body) -> insertDump day (T.pack body) >> return Nothing -- FIXME dumps have no 'chrono' entry?
-    (TabTsEntry (indent, ts, (Read t a))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Read t a)) ->
+      let utc = toUTC day ts
       in  updateRead utc (T.pack t) (T.pack a)
           >> updateChrono utc indent Rds
           >> return (Just utc)
-    (TabTsEntry (indent, ts, (Def dq))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Def dq)) ->
+      let utc = toUTC day ts
       in  updateDef utc dq tag >> updateChrono utc indent Defs >> return
             (Just utc)
-    (TabTsEntry (indent, ts, (Quotation q attr mp))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Quotation q attr mp)) ->
+      let utc = toUTC day ts
       in  updateQuote utc (T.pack q) (T.pack attr) (fmap fromIntegral mp) tag
           >> updateChrono utc indent Qts
           >> return (Just utc)
-    (TabTsEntry (indent, ts, (Commentary body))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Commentary body)) ->
+      let utc = toUTC day ts
       in  updateComment utc (T.pack body) tag
           >> updateChrono utc indent Cmts
           >> return (Just utc)
-    (TabTsEntry (indent, ts, (PN pg))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, PN pg)) ->
+      let utc = toUTC day ts
       in  updateChrono utc indent (Pgs pg) >> return (Just utc)
-    (TabTsEntry (indent, ts, (Phr p))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Phr p)) ->
+      let utc = toUTC day ts
       in  updatePhrase utc p tag >> updateChrono utc indent Phrs >> return
             (Just utc)
-    (TabTsEntry (indent, ts, (Dialogue body))) ->
-      let utc = (toUTC day ts)
+    (TabTsEntry (indent, ts, Dialogue body)) ->
+      let utc = toUTC day ts
       in  updateDialogue utc (T.pack body)
           >> updateChrono utc indent Dial
           >> return (Just utc)
-    (TabTsEntry (indent, ts, (Parse.Entry.Null))) -> return Nothing
+    (TabTsEntry (indent, ts, Parse.Entry.Null)) -> return Nothing
 
 -- | Tags and adds to 'DB' a day's worth of 'LogEntry's. Logs time of
 -- invocation in 'lastUpdated' to aid in caching parsed and unchanged logs.
 --
 -- TODO test!!
 addDay :: Day -> UTCTime -> [LogEntry] -> Update DB ()
-addDay day utc le = if not (null le)
-  then updateLastUpdated day utc >> tagAndUpdate le
-  else return ()
+addDay day utc le =
+  when (null le) $ updateLastUpdated day utc >> tagAndUpdate le
     --naive = void . sequence . fmap (\le -> addLogEntry day le Nothing) $ les
  where
   tagAndUpdate :: [LogEntry] -> Update DB ()
@@ -425,7 +424,7 @@ addDay day utc le = if not (null le)
   tagRest tag = foldr f (return []) -- note use of @foldl'@ for strictness
    where
     f x acc
-      | isIndentedTo 1 x = acc >>= \les -> (addLogEntry day x tag >> return les)
+      | isIndentedTo 1 x = acc >>= \les -> addLogEntry day x tag >> return les
       |
       -- FIXME this simply adds read entries as top level entries, but
       -- then returns to tagging the rest of the singly indented entries

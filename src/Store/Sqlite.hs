@@ -32,7 +32,9 @@ import qualified Data.ByteString.Lazy.Char8    as BLC
 import           Data.Either
 import           Data.Function                  ( (&) )
 import           Data.List                      ( isInfixOf )
-import           Data.Maybe                     ( catMaybes )
+import           Data.Maybe                     ( catMaybes
+                                                , fromMaybe
+                                                )
 import           Data.Semigroup                 ( (<>) )
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
@@ -72,7 +74,6 @@ import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
                                                 )
 import           Time
-import           Time                           ( toUTC )
 import           Web.PathPieces                 ( PathPiece(..) )
 
 ---------------
@@ -184,7 +185,7 @@ instance FromJSON DefEntry'
 
 -- | JSON-encodable 'DumpEntry'. A 'DumpEntry'' is a list of 'Dump's belonging
 -- to a single 'Day' (its primary key).
-data DumpEntry' = DumpEntry'
+newtype DumpEntry' = DumpEntry'
   { dumps :: String
   } deriving (Eq, Show, Generic)
 
@@ -240,13 +241,12 @@ writeDay day
           eitherId <- writeLogEntry day h Nothing
           case eitherId of
             Left err ->
-              (:)
-                <$> (  return
-                    $  Left
-                    $ "WARNING: writeDay: found entry that is both Read and Dump\ncont.: "
-                    ++ err
-                    )
-                <*> go Nothing t
+              ((Left
+               $ "WARNING: writeDay: found entry that is both Read and Dump\ncont.: "
+               ++ err
+               ) :
+                )
+                <$> go Nothing t
             -- begin traversal with readEntryKey in accumulator (note that it
             -- should be immediately discarded if the next entry is not the
             -- child of the current read entry).
@@ -273,10 +273,10 @@ writeDay day
         --      previous accumulator through.
           isIndentedTo 1 h && isRead h
         = (\h h' t -> h : h' : t)
-          <$> ( return
-              $ Left
+          <$> return
+                (Left
                   "WARNING: writeDay: found indented read entry, leaving untagged"
-              )
+                )
           <*> writeLogEntry day h Nothing -- NOTE: leaving read entries untagged
           <*> go mTag t
         |
@@ -355,17 +355,17 @@ writeLogEntry day logEntry mAttrTag =
                        <$> mAttrTag
                    Parse.Entry.Null -> return ()
                  )
-                 >> (return $ Right utc)
+                 >> return (Right utc)
 
 main :: IO ()
 main = runSqlite "test.db" $ do
   runMigration migrateAll
   -- read entry
-  now <- liftIO $ getCurrentTime
-  let wutheringHeightsId = (ReadEntryKey now)
+  now <- liftIO getCurrentTime
+  let wutheringHeightsId = ReadEntryKey now
   insertKey wutheringHeightsId $ ReadEntry "Wuthering Heights" "Emily Bronté"
   -- def entry
-  now' <- liftIO $ getCurrentTime
+  now' <- liftIO getCurrentTime
   let inline = TL.decodeUtf8 $ encode $ Inlines
         [InlineDef "mizzle" "a misty drizzle"]
       defEntryId = DefEntryKey now'
@@ -439,7 +439,7 @@ class Show err =>
   toEntry :: a -> Either err Entry
 
 instance ToEntry String DefEntry where
-  toEntry (DefEntry {..}) -- Right $ Quotation "" "" Nothing
+  toEntry DefEntry {..} -- Right $ Quotation "" "" Nothing
    =
     case eitherDecode $ TL.encodeUtf8 defEntryDefinitions of
       Right defTag ->
@@ -451,10 +451,10 @@ instance ToEntry String DefEntry where
                 case inlineDefs of
                   [] ->
                     Left "toEntry: definition: found empty list of inline defs"
-                  ((InlineDef {..}):[]) ->
+                  [InlineDef {..}] ->
                     Right $
                     Def $ P.InlineDef (T.unpack headword) (T.unpack meaning)
-                  (h:t:[]) ->
+                  [h, t] ->
                     Right $
                     Def $
                     P.DefVersus
@@ -471,7 +471,7 @@ instance ToEntry String DefEntry where
               Inlines inlineDefs ->
                 case inlineDefs of
                   [] -> Left "toEntry: phrase: found empty list of inline defs"
-                  ((InlineDef {..}):[]) ->
+                  [InlineDef {..}] ->
                     Right $ Phr $ Defined (T.unpack headword) (T.unpack meaning)
                   _ ->
                     Left
@@ -479,12 +479,12 @@ instance ToEntry String DefEntry where
       Left err -> Left err
 
 instance ToEntry String ReadEntry where
-  toEntry (ReadEntry {..}) = pure $ Read readEntryTitle readEntryAuthor
+  toEntry ReadEntry {..} = pure $ Read readEntryTitle readEntryAuthor
 
 instance ToEntry String QuoteEntry where
-  toEntry (QuoteEntry {..}) =
+  toEntry QuoteEntry {..} =
     pure $
-    Quotation quoteEntryBody (maybe "" id quoteEntryManualAttribution) Nothing -- FIXME PageNum support
+    Quotation quoteEntryBody (fromMaybe "" quoteEntryManualAttribution) Nothing -- FIXME PageNum support
 
 instance ToEntry String CommentaryEntry where
   toEntry = pure . Commentary . commentaryEntryBody -- FIXME attribution discarded
@@ -493,7 +493,7 @@ instance ToEntry String DialogueEntry where
   toEntry = pure . Dialogue . dialogueEntryBody -- FIXME attribution discarded
 
 instance ToEntry String PageNumberEntry where
-  toEntry (PageNumberEntry {..}) =
+  toEntry PageNumberEntry {..} =
     let pageNumVariant =
           case pageNumberEntryPageTag of
             Page' -> P.Page
@@ -670,14 +670,12 @@ taggedEntrySatisfies
 taggedEntrySatisfies authorPreds titlePreds entity@Entity {..} =
   case getAttributionTag entityVal of
     Just readKey -> do
-
       -- FIXME when an entry has an inferred attribution, by indentation, /and/
       -- a manual attribution, it satisfies the search--that is, it becomes a
       -- result--if the search predicates succeed for either attribution.
-
       satisfies <- attributionSatisfies authorPreds titlePreds readKey
       let manualSatisfies =
-            maybe True id
+            fromMaybe True
               $   getQuoteEntry entityVal
               >>= manualAttributionSatisfies authorPreds titlePreds
       return $ if satisfies || manualSatisfies then Just entity else Nothing
@@ -718,8 +716,8 @@ withinDateRange entryIdType keyWrapper sinceDay beforeDay =
     since  = dayToUTC sinceDay
     before = dayToUTC beforeDay
     dateConstraints =
-      [ entryIdType P.>=. (keyWrapper since)
-      , entryIdType P.<=. (keyWrapper before)
+      [ entryIdType P.>=. keyWrapper since
+      , entryIdType P.<=. keyWrapper before
       ]
   in
     selectList dateConstraints []
@@ -781,7 +779,7 @@ filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entity
     let variantSatisfies
           :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
-    entry <- (toEntry entityVal :: Either String Entry)
+    entry <- toEntry entityVal :: Either String Entry
     case entry of
       Def x@(P.Defn mPg hws) ->
         Right $ variantSatisfies defVariants (Right x) && and
@@ -852,46 +850,39 @@ filterCommentary commentPreds (Entity _ (CommentaryEntry body _)) =
 
 -- | Esqueleto constraint to select entries within a given date range.
 dateRangeConstraint
-  :: (Esqueleto query expr backend, PersistEntity record)
+  :: PersistEntity record
   => EntityField record (Key record)
   -> (UTCTime -> Key record)
-  -> expr (Entity record)
+  -> SqlExpr (Entity record)
   -> Day
   -> Day
-  -> expr (Value Bool)
+  -> SqlExpr (Value Bool)
 dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
   let since  = dayToUTC sinceDay
       before = dayToUTC beforeDay
-  in  (entityUTC ^. idType >=. (val (keyWrapper since)))
-        &&. (entityUTC ^. idType <=. (val (keyWrapper before)))
+  in  (entityUTC ^. idType >=. val (keyWrapper since))
+        &&. (entityUTC ^. idType <=. val (keyWrapper before))
 
 
 -- | An esqueleto constraint that checks whether a string is @LIKE@ all of a
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  :: Esqueleto query expr backend
-  => expr (Value (Maybe String))
-  -> [String]
-  -> expr (Value Bool)
-attributionConstraint bodyStr attrSearchStrings = foldr
+  ::  -- Esqueleto query expr backend => 
+     SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
+attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
   (val True)
-  attrSearchStrings
 
 --- QUOTATION SEARCH
 
 type QuotationSearch = [String]
 
 quoteBodySearchConstraint
-  :: Esqueleto query expr backend
-  => expr (Value String)
-  -> [String]
-  -> expr (Value Bool)
-quoteBodySearchConstraint quoteBody bodySearchStrings = foldr
-  (\searchStr rest -> (quoteBody `like` (val searchStr)) &&. rest)
+  :: SqlExpr (Value String) -> [String] -> SqlExpr (Value Bool)
+quoteBodySearchConstraint quoteBody = foldr
+  (\searchStr rest -> (quoteBody `like` val searchStr) &&. rest)
   (val True)
-  bodySearchStrings
 
 -- | 
 --  We want to produce sql that is a generalization of the below: 
@@ -932,35 +923,29 @@ filterQuotes since before authPreds titlePreds bodyStrs =
            -- satisfies title/auth preds if present
               (
               -- manual attr satsifies
-               (   (attributionConstraint
+               (   attributionConstraint
                      (quoteEntry ^. QuoteEntryManualAttribution)
                      authPreds
-                   )
-               &&. (attributionConstraint
+               &&. attributionConstraint
                      (quoteEntry ^. QuoteEntryManualAttribution)
                      titlePreds
-                   )
                )
               ||.
             -- tagged attr satsfies
-                  ((attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
+                  (attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
                                           authPreds
-                   )
-                  &&. (attributionConstraint
+                  &&. attributionConstraint
                         (just $ readEntry ^. ReadEntryTitle)
                         titlePreds
-                      )
                   )
               )
           &&. -- satisfies quoteBody preds
-              (quoteBodySearchConstraint (quoteEntry ^. QuoteEntryBody)
+              quoteBodySearchConstraint (quoteEntry ^. QuoteEntryBody)
                                          bodyStrs
-              )
-          &&. (dateRangeConstraint QuoteEntryId
+          &&. dateRangeConstraint QuoteEntryId
                                    QuoteEntryKey
                                    quoteEntry
                                    since
                                    before
-              )
           )
         return quoteEntry

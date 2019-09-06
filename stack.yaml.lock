@@ -19,20 +19,6 @@ packages:
   original:
     hackage: yaml-config-0.4.0
 - completed:
-    cabal-file:
-      size: 3489
-      sha256: 81482348bec7f1548e34e15683d47b7324e98e519bbb720bb786fd0c627fe86e
-    name: ghcid
-    version: 0.7.1
-    git: https://github.com/ndmitchell/ghcid.git
-    pantry-tree:
-      size: 3656
-      sha256: b882e26494036aab2711c97e1aa4536bd995f1e094a9f93ac5337a2e425359bf
-    commit: d6630801d3e65a62a5ff307616251785b0f5c414
-  original:
-    git: https://github.com/ndmitchell/ghcid.git
-    commit: d6630801d3e65a62a5ff307616251785b0f5c414
-- completed:
     hackage: word-wrap-0.4.1@sha256:f72233b383ef569c557bfd9812cbb8e306c415ce509082c0bd15ee51c0239ccc,1606
     pantry-tree:
       size: 423
@@ -62,7 +48,7 @@ packages:
     hackage: syb-with-class-0.6.1.10
 snapshots:
 - completed:
-    size: 537868
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/9/21.yaml
-    sha256: 0a3be91c2bce851de4755003cfb1d85d62b6f90276231fcc305729c0c5c864a9
-  original: lts-9.21
+    size: 523878
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/3.yaml
+    sha256: 470c46c27746a48c7c50f829efc0cf00112787a7804ee4ac7a27754658f6d92c
+  original: lts-14.3

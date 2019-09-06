@@ -23,7 +23,6 @@ import           Render
 import           Search
 import           Test.Hspec
 import           Text.RawString.QQ
-import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Text.Trifecta
 import qualified Text.Trifecta.Result          as Tri

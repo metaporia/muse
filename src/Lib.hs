@@ -1,7 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, ApplicativeDo, NamedFieldPuns, RecordWildCards
-  #-}
-{-# LANGUAGE DeriveGeneric #-}
+  OverloadedStrings, ApplicativeDo, RecordWildCards #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -57,42 +55,32 @@
 --    this will ease efficient review of quotes.
 -- □  replace --qb with --qt. We must forego a short option, but we may yet
 --    have an intuitive one.
+
 -----------------------------------------------------------------------------
 module Lib where
 
 import           Control.Exception              ( bracket )
-import           Control.Exception              ( bracket )
-import           Control.Monad                  ( (>=>)
-                                                , join
-                                                , void
-                                                )
 import           Control.Monad                  ( (>=>)
                                                 , join
                                                 , void
                                                 )
 import           Control.Monad.State
-import           Control.Monad.State
-import           Data.Acid
 import           Data.Acid
 import           Data.Acid.Advanced             ( query'
                                                 , update'
-                                                )
-import           Data.Acid.Advanced             ( query'
+                                                , query'
                                                 , update'
                                                 )
 import           Data.Acid.Local                ( createCheckpointAndClose )
-import           Data.Acid.Local                ( createCheckpointAndClose )
-import           Data.Acid.Remote
 import           Data.Acid.Remote
 import           Data.Aeson              hiding ( Null )
-import           Data.Aeson              hiding ( Null )
+import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
-import qualified Data.ByteString               as B
-import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toLower )
-import           Data.Foldable                  ( fold )
-import           Data.Foldable                  ( fold )
+import           Data.Foldable                  ( fold
+                                                , traverse_
+                                                )
 import           Data.IxSet                     ( Indexable(..)
                                                 , IxSet(..)
                                                 , (@=)
@@ -100,9 +88,7 @@ import           Data.IxSet                     ( Indexable(..)
                                                 , ixFun
                                                 , ixSet
                                                 , updateIx
-                                                )
-import qualified Data.IxSet
-import           Data.IxSet                     ( Indexable(..)
+                                                , Indexable(..)
                                                 , IxSet(..)
                                                 , (@=)
                                                 , getOne
@@ -117,39 +103,17 @@ import           Data.List                      ( intercalate
                                                 , isSuffixOf
                                                 , sort
                                                 )
-import           Data.List                      ( intercalate
-                                                , isInfixOf
-                                                , isPrefixOf
-                                                , isSuffixOf
-                                                , sort
-                                                )
 import           Data.Maybe                     ( catMaybes
                                                 , fromJust
                                                 , isJust
-                                                )
-import           Data.Maybe                     ( catMaybes
-                                                , fromJust
-                                                , isJust
+                                                , mapMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
-import qualified Data.Monoid                   as M
-import           Data.Monoid                    ( (<>) )
-import qualified Data.Monoid                   as M
-import qualified Data.Text                     as T
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import qualified Data.Text.IO                  as T
-import           Data.Time
 import           Data.Time
 import           Data.Time.Calendar
-import           Data.Time.Calendar
 import           Data.Time.Clock                ( utctDay )
-import           Data.Time.Clock                ( utctDay )
-import           Data.Yaml.Config               ( load
-                                                , lookup
-                                                , lookupDefault
-                                                , subconfig
-                                                )
 import           Data.Yaml.Config               ( load
                                                 , lookup
                                                 , lookupDefault
@@ -160,32 +124,15 @@ import           Database.Persist.Sqlite        ( runMigration
                                                 )
 import           Debug.Trace                    ( trace )
 import           Helpers
-import           Helpers
-import           Options.Applicative
 import           Options.Applicative
 import           Parse
-import           Parse
-import           Parse.Entry
 import           Parse.Entry
 import           Prelude                 hiding ( init
                                                 , log
                                                 , lookup
                                                 )
-import           Prelude                 hiding ( init
-                                                , log
-                                                , lookup
-                                                )
-import           Render
 import           Render
 import           Search
-import           Search
-import           Store                   hiding ( Author
-                                                , Search
-                                                , Search'
-                                                , Title
-                                                , defs
-                                                , quotes
-                                                )
 import qualified Store
 import           Store                   hiding ( Author
                                                 , Search
@@ -194,8 +141,6 @@ import           Store                   hiding ( Author
                                                 , defs
                                                 , quotes
                                                 )
-import qualified Store
-import           Store.Render
 import           Store.Render
 import qualified Store.Sqlite                  as Sql
 import           System.Directory               ( createDirectoryIfMissing
@@ -203,21 +148,12 @@ import           System.Directory               ( createDirectoryIfMissing
                                                 , getModificationTime
                                                 , listDirectory
                                                 )
-import           System.Directory               ( createDirectoryIfMissing
-                                                , doesFileExist
-                                                , getModificationTime
-                                                , listDirectory
-                                                )
-import           System.Environment             ( getEnv )
 import           System.Environment             ( getEnv )
 import           System.Exit                    ( exitFailure
                                                 , exitSuccess
                                                 )
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
-import qualified Text.Trifecta                 as Tri
-import qualified Text.Trifecta.Result          as Tri
 import qualified Text.Trifecta.Result          as Tri
 
 x = Sql.main
@@ -324,7 +260,7 @@ data TmpInput = TmpInput
 
 searchTmp :: Day -> Parser TmpInput
 searchTmp today = do
-  w    <- (subRelDur today <$> within)
+  w    <- subRelDur today <$> within
   ds   <- defs
   qs   <- quotes
   ps   <- phrases'
@@ -354,13 +290,13 @@ search' today = do
         (<>)
         (   fmap
             (\s (Attribution _ a) ->
-              (toLower <$> s) `isInfixOf` (T.unpack $ T.toLower a)
+              (toLower <$> s) `isInfixOf` T.unpack (T.toLower a)
             )
         <$> authorS
         )
       <*> (   fmap
               (\s (Attribution t _) ->
-                (toLower <$> s) `isInfixOf` (T.unpack $ T.toLower t)
+                (toLower <$> s) `isInfixOf` T.unpack (T.toLower t)
               )
           <$> titleS
           )
@@ -387,19 +323,18 @@ search' today = do
   dias     <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dialogueBody
   comments <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) commentBody
   dumps    <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dumpBody
-  return
-    $ Variants
-    $ ( Store.Search s
-                     today
-                     attrs
-                     (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments)
-      , ds
-      , ps
-      , qs
-      , dials
-      , cmts
-      , dmps
-      )
+  return $ Variants
+    ( Store.Search s
+                   today
+                   attrs
+                   (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments)
+    , ds
+    , ps
+    , qs
+    , dials
+    , cmts
+    , dmps
+    )
 
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) =
@@ -489,7 +424,7 @@ color =
 
 toplevel' :: Day -> Parser Opts'
 toplevel' today
-  = (Opts' <$> color <*> subparser
+  = Opts' <$> color <*> subparser
       (  command
           "search"
           (info
@@ -532,7 +467,7 @@ toplevel' today
              )
            )
       )
-    )
+    
 
 toplevel'' d =
   toplevel' d
@@ -807,9 +742,7 @@ dispatch' opts@(Opts' color (FetchLastRead' suppressNewline)) = do
     (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     closeAcidState -- acceptable for read only access?
     (\acid -> do
-      let put = case suppressNewline of
-            True  -> T.putStr
-            False -> T.putStrLn -- default
+      let put = if suppressNewline then T.putStr else T.putStrLn -- default
       res <- query acid LastRead
       case res of
         Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
@@ -830,51 +763,49 @@ ifNotNull l true false = if not (null l) then true else false
 -- | Pretty print output of bucket filters.
 runSearch' :: Bool -> Bool -> Variants Store.Search -> DB -> IO ()
 runSearch' debug color (Variants (search, ds, ps, qs, dials, cmts, dmps)) db@(DB dmp def rd qt dia phr cmt _ _)
-  = do
+  =
   -- if no entry-variants have been specified to the exclusion of others--that
   -- is, apply filters to all variants 
     if all (== False) [ds, ps, qs, dials, cmts, dmps]
-      then
-        (colRender color $ join
-          [ filterDumps search dmp
-          , filterDefs db search def
-          , filterQuotes db search qt
-          , filterDialogues db search dia
-          , filterPhrases db search phr
-          , filterComments db search cmt
-          ]
-        )
-      else
-        colRender color
-        . join
-        $ [ if dmps || (not . null . dumpsPreds $ bucketList search)
-            then filterDumps search dmp
-            else []
-          , if (let x = defsPreds $ bucketList search
-                in  ds || (not . null $ fst x) || (not . null $ snd x)
-               )
-            then filterDefs db search def --print ((show $ length (defsPreds $ bucketList search)) <> " def")
-            else []
-          , if qs || (not . null . quotesPreds $ bucketList search)
-            then filterQuotes db search qt --print "qt"
-            else []
-          , if dials || (not . null . dialoguesPreds $ bucketList search)
-            then filterDialogues db search dia -- print "dia"
-            else []
-          , if (let x = phrasesPreds $ bucketList search
-                in  ps || (not . null $ fst x) || (not . null $ snd x)
-               )
-            then filterPhrases db search phr --print "phr"
-            else []
-          , if cmts || (not . null . commentsPreds $ bucketList search)
-            then filterComments db search cmt --print "cmt"
-            else []
-          ]
+    then colRender color $ join
+      [ filterDumps search dmp
+      , filterDefs db search def
+      , filterQuotes db search qt
+      , filterDialogues db search dia
+      , filterPhrases db search phr
+      , filterComments db search cmt
+      ]
+    else
+      colRender color
+      . join
+      $ [ if dmps || (not . null . dumpsPreds $ bucketList search)
+          then filterDumps search dmp
+          else []
+        , if (let x = defsPreds $ bucketList search
+              in  ds || (not . null $ fst x) || (not . null $ snd x)
+             )
+          then filterDefs db search def --print ((show $ length (defsPreds $ bucketList search)) <> " def")
+          else []
+        , if qs || (not . null . quotesPreds $ bucketList search)
+          then filterQuotes db search qt --print "qt"
+          else []
+        , if dials || (not . null . dialoguesPreds $ bucketList search)
+          then filterDialogues db search dia -- print "dia"
+          else []
+        , if (let x = phrasesPreds $ bucketList search
+              in  ps || (not . null $ fst x) || (not . null $ snd x)
+             )
+          then filterPhrases db search phr --print "phr"
+          else []
+        , if cmts || (not . null . commentsPreds $ bucketList search)
+          then filterComments db search cmt --print "cmt"
+          else []
+        ]
 
 dispatch :: Opts -> IO ()
 dispatch opts@(Opts color (Search inp)) =
   putStrLn "searching...\n" >> runSearch showDebug color inp
-dispatch (Opts color (Lint                  )) = putStrLn "linting"
+dispatch (Opts color Lint                    ) = putStrLn "linting"
 dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
@@ -910,35 +841,29 @@ runSearch debug colorize input@(Input s e tp ap preds) = do
       fps   <- listDirectory . T.unpack $ entryCache mc
       dates <- sort . filterBy s e <$> pathsToDays fps
       let cachePath = (T.unpack (entryCache mc) ++)
-          entries =
-            loadFiles (cachePath . dayToPath <$> dates)
-              >>= return
-              .   catMaybes
-              .   decodeEntries
+          entries   = catMaybes . decodeEntries <$> loadFiles
+            (cachePath . dayToPath <$> dates)
             -- TODO print date above each days `[LogEntry]`
-          filtered = concat . fmap (rmOnlyRead . filterWith' input) <$> entries
+          filtered = concatMap (rmOnlyRead . filterWith' input) <$> entries
            where
             rmOnlyRead xs | M.getAll $ foldMap (M.All . isRead) xs = []
                           | otherwise                              = xs
       return filtered
   filtered <- join dateFilter
-  if debug
-    then
-      putStrLn
-          (  "start date: "
-          ++ show s
-          ++ "\n"
-          ++ "end date: "
-          ++ show e
-          ++ "\nfancy search magick!"
-          ++ "colors?: "
-          ++ show colorize
-          )
-        >> pPrint (filterWith' input testLogWithDumpOutput)
-    else return ()
+  when debug
+    $  putStrLn
+         (  "start date: "
+         ++ show s
+         ++ "\n"
+         ++ "end date: "
+         ++ show e
+         ++ "\nfancy search magick!"
+         ++ "colors?: "
+         ++ show colorize
+         )
+    >> pPrint (filterWith' input testLogWithDumpOutput)
   putStrLn "predicates:"
-  sequence_ . fmap (colRender colorize) $ filtered
-  return ()
+  traverse_ (colRender colorize) filtered
 
 -- config
 data MuseConf = MuseConf
@@ -976,7 +901,7 @@ showMuseConf = show
 writeMuseConf :: MuseConf -> IO MuseConf
 writeMuseConf mc = do
   let conf =
-        "log-dir: " <> (entrySource mc) <> "\n\ncache-dir: " <> entryCache mc
+        "log-dir: " <> entrySource mc <> "\n\ncache-dir: " <> entryCache mc
   createDirectoryIfMissing True $ T.unpack (home mc <> "/.muse")
   T.writeFile (T.unpack $ config mc) conf
   return mc
@@ -1123,14 +1048,14 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
               then rest
               else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
             Right res -> do
-              if showDebug then putStrLn $ "Success: " ++ fp else return ()
+              when showDebug $ putStrLn $ "Success: " ++ fp
               ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
           )
           (return [])
-  if quiet then putStrLn "\nSuppressing entry parse error output" else return ()
+  when quiet $ putStrLn "\nSuppressing entry parse error output"
   entryGroups <- selectModified fps >>= parseAndShowErrs
   -- TODO add to DB here
-  sequence_ $ fmap
+  traverse_
     (\(fp, eg) ->
       BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg)
     )
@@ -1201,13 +1126,13 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
               then rest
               else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
             Right res -> do
-              if showDebug then putStrLn $ "Success: " ++ fp else return ()
+              when showDebug $ putStrLn $ "Success: " ++ fp
               ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
           )
           (return [])
-  if quiet then putStrLn "\nSuppressing entry parse error output" else return ()
+  when quiet $ putStrLn "\nSuppressing entry parse error output"
   bracket
-    (openLocalStateFrom ((T.unpack home) ++ "/.muse/state/DB" :: String) initDB)
+    (openLocalStateFrom (T.unpack home ++ "/.muse/state/DB" :: String) initDB)
     createCheckpointAndClose
     (\acid -> do
       utc         <- getCurrentTime
@@ -1215,13 +1140,11 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
       entryGroups <- selectModified' fps mod >>= parseAndShowErrs
       -- TODO sqlite persistence
       -- acid state persistence
-      sequence
-        $ fmap (\(d, le) -> update acid $ AddDay d utc le)
-        $ catMaybes
-        $ fmap (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups
+      traverse_ (\(d, le) -> update acid $ AddDay d utc le)
+        $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups
      -- FIXME as yet writes to acid-state and file-system persistence solutions
      -- file-based persistence
-      sequence_ $ fmap
+      traverse_
         (\(fp, eg) ->
           BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg)
         )
@@ -1295,17 +1218,17 @@ parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home) = do
               then rest
               else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
             Right res -> do
-              if showDebug then putStrLn $ "Success: " ++ fp else return ()
+              when showDebug $ putStrLn $ "Success: " ++ fp
               ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
           )
           (return [])
-  if quiet then putStrLn "\nSuppressing entry parse error output" else return ()
+  when quiet $ putStrLn "\nSuppressing entry parse error output"
   runSqlite (home <> "/.muse/state/sqlite.db") $ do
     runMigration Sql.migrateAll
     let allFiles = return fps
     entriesByDay <- liftIO $ allFiles >>= parseAndShowErrs
 
-    sequence . fmap (uncurry Sql.writeDay) . catMaybes $ fmap
+    traverse_ (uncurry Sql.writeDay) . catMaybes $ fmap
       (\(a, b) -> (,) <$> pathToDay a <*> Just b)
       entriesByDay
   return ()

@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-9.21
+resolver: lts-14.3
 
 ghc-options:
   "$locals" : -fwarn-incomplete-patterns -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns 
@@ -47,8 +47,6 @@ packages:
 extra-deps:
 - mtl-2.2.2
 - yaml-config-0.4.0
-- git: https://github.com/ndmitchell/ghcid.git
-  commit: d6630801d3e65a62a5ff307616251785b0f5c414
 - word-wrap-0.4.1
 - acid-state-0.14.3
 - ixset-1.1.1

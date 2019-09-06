@@ -1,5 +1,5 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
-  ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
+  ScopedTypeVariables, FlexibleInstances, DeriveGeneric,
   TemplateHaskell #-}
 {-# LANGUAGE ExistentialQuantification #-}
 
@@ -49,7 +49,7 @@ import           Control.Applicative
 import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
 import           Control.Monad.Trans.State
-import           Data.Aeson              hiding ( Null )
+import           Data.Aeson              hiding ( Null, (<?>) )
 import           Data.Bifunctor                 ( bimap
                                                 , first
                                                 , second
@@ -67,7 +67,6 @@ import           Debug.Trace                    ( trace )
 import           GHC.Generics            hiding ( Infix
                                                 , Prefix
                                                 )
-import           Helpers
 import           Helpers
 import           Parse
 import           Prelude                 hiding ( min
@@ -114,7 +113,7 @@ quotation = do
   -- TODO discard post quote attribution when indent >= 1
   --titleAuthEtc <- untilPNoTs' $ try (void $ timestamp) <|> try (void $ symbol "...") <|> eof
   titleAuthEtc <- linesNoTs <* skipOptional eof
-  return $ Quotation (intercalate " " . fmap trim . lines $ q)
+  return $ Quotation (unwords . fmap trim . lines $ q)
                      (trim titleAuthEtc)
                      pg
 
@@ -305,7 +304,7 @@ logEntry' (Just previousTimeStamp) = do
           ( return
           $ Leijen.vcat
           $ (Leijen.text "Unordered or duplicate timestamps:" :)
-      -- $ (Leijen.line :)
+      -- (Leijen.line :)
           $ fmap Leijen.text
           $ (wordSensitiveLineWrap
               55
@@ -491,7 +490,7 @@ statefulValidatedMany
   -- state is passed before the newer. Failure is indicated by the presence of
   -- a error string.
   -> (s -> s -> Maybe String)
-  -- | The stateful parser whose failure signals result collection, /not/ an
+  --  The stateful parser whose failure signals result collection, /not/ an
   -- error message--for that use the previous parameter.
   -> (s -> Parser (a, s))
   -> Parser ([a], s)
@@ -508,7 +507,7 @@ statefulValidatedMany initialState predicate parser =
 -- Example predicate
 squawkIfNotAscending :: Int -> Int -> Maybe String
 squawkIfNotAscending prev curr =
-  if curr > prev then Nothing else Just $ "squawk: expected ascending numbers"
+  if curr > prev then Nothing else Just "squawk: expected ascending numbers"
 
 -- example stateful parser
 shouldSquawk :: Int -> Parser (Int, Int)
@@ -634,8 +633,7 @@ pluralPhrase = do
 definedPhrase :: Parser Phrase
 definedPhrase = do
   hw      <- many (noneOf ":") <* symbol ": "
-  meaning <- entryBody
-  return $ Defined hw meaning
+  Defined hw <$> entryBody
 
 dialogue :: Parser Entry
 dialogue = do

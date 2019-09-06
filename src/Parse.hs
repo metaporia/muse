@@ -1,5 +1,5 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
-  ScopedTypeVariables, FlexibleInstances, QuasiQuotes, DeriveGeneric,
+  ScopedTypeVariables, FlexibleInstances, DeriveGeneric,
   TemplateHaskell #-}
 
 -----------------------------------------------------------------------------
@@ -20,7 +20,7 @@ module Parse where
 import           Control.Applicative
 import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
-import           Data.Aeson              hiding ( Null )
+import           Data.Aeson              hiding ( Null, (<?>))
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhile
                                                 , dropWhileEnd
@@ -245,12 +245,12 @@ isInlineDef (InlineDef _ _) = True
 isInlineDef _               = False
 
 isDefVersus :: DefQuery -> Bool
-isDefVersus (DefVersus _ _ _ _) = True
+isDefVersus DefVersus {} = True
 isDefVersus _                   = False
 
 
-trim' :: String -> [Char]
-trim' = intercalate " " . fmap trim . lines
+trim' :: String -> String
+trim' = unwords . fmap trim . lines
 
 -- Parses one or more headwords in a comma separated list; e.g.,
 --
@@ -278,8 +278,7 @@ inlineMeaning = do
   _       <- symbolic 'd'
   tags    <- optional $ brackets (many (noneOf "]"))
   hw      <- many (noneOf ":") <* symbol ": "
-  meaning <- entryBody
-  return $ InlineDef hw meaning
+  InlineDef hw <$> entryBody
 
 -- | Splits on delimiter. E.g.,
 --
@@ -296,8 +295,7 @@ toDefVersus = do
       inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
   mTagList  <- symbol "dvs" *> optional tags
   firstDef  <- p0 <* pad (string "--- vs ---")
-  secondDef <- p1
-  return $ collect firstDef secondDef
+  collect firstDef <$> p1
 
 -- | A tag may contain any (decimal) digit, any classical laten letter, that
 -- is, one of [a-z], spaces, underscores, or hyphens. Unicode is /not/
@@ -597,11 +595,7 @@ mdy = do
   y <- year
   return $ RelDur y m d
 
-myd = do
-  m <- month
-  y <- year
-  d <- day
-  return $ RelDur y m d
+myd = RelDur <$> month <*> year <*> day
 
 ym = do
   y <- year

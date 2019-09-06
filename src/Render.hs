@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
-  MultiWayIf #-}
+  OverloadedStrings, FlexibleInstances, MultiWayIf #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -21,6 +20,7 @@ import           Control.Monad                  ( (>=>)
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toUpper )
+import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( intercalate )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
@@ -38,12 +38,12 @@ import           Text.Show.Pretty               ( pPrint )
 import           Text.Wrap
 
 showAll :: [LogEntry] -> IO ()
-showAll = sequence_ . fmap (colRender True)
+showAll = traverse_ (colRender True)
 
 indentation :: Int
 indentation = 9
 
-indent = take indentation (repeat ' ')
+indent = replicate indentation ' '
 
 upper = fmap toUpper
 
@@ -157,7 +157,7 @@ instance ColRender QuoteBody where
     colorize col cyan .
     T.putStr .
     T.unlines .
-    applyToRest ((T.replicate indentation " ") <>) .
+    applyToRest (T.replicate indentation " " <>) .
     wrapTextToLines defaultWrapSettings 79 . T.pack . \(QuoteBody s) -> s
 
 instance ColRender a => ColRender (Maybe a) where
@@ -169,13 +169,13 @@ instance ColRender T.Text where
   colRender _ =
     T.putStr .
     T.intercalate "\n" .
-    applyToRest ((T.replicate indentation " ") <>) .
+    applyToRest (T.replicate indentation " " <>) .
     wrapTextToLines defaultWrapSettings 79
 
 fmt =
   T.unpack
     . T.unlines
-    . fmap ((T.replicate indentation " ") <>)
+    . fmap (T.replicate indentation " " <>)
     . wrapTextToLines defaultWrapSettings 79
     . T.pack
 

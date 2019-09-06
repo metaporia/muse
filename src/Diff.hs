@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes, MultiWayIf #-}
+{-# LANGUAGE MultiWayIf #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -56,11 +56,9 @@ textDiff a b =
   go ls short ll long =
     sum $ (\w -> go' (T.length w) w ll long) <$> T.words short
    where
-    go' ls short ll long =
-      minimum
-        . fmap (uncurry levenshtein)
-        $ zip (repeat short)
-        $ [ T.take ls $ T.drop i long | i <- [0 .. ll - ls] ]
+    go' ls short ll long = minimum . fmap (uncurry levenshtein) $ zip
+      (repeat short)
+      [ T.take ls $ T.drop i long | i <- [0 .. ll - ls] ]
 
 cowards :: [T.Text]
 cowards = ["Noel Coward", "Noël Coward"]

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, TupleSections, MultiWayIf, QuasiQuotes #-}
+  OverloadedStrings, MultiWayIf, TupleSections #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -40,6 +40,7 @@ import           Data.Maybe                     ( catMaybes
                                                 , fromJust
                                                 , isJust
                                                 , isNothing
+                                                , mapMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
@@ -112,7 +113,7 @@ pathToDay :: FilePath -> Maybe Day
 pathToDay = join . preview _Right . showErr . parse day'
 
 showInvalidNames :: [(String, Either String (Maybe Day))] -> IO [Day]
-showInvalidNames es = foldr f (return []) es
+showInvalidNames = foldr f (return [])
  where
   f (fp, e) r = case e of
     Left  err  -> putStrLn ("Failed to parse date:\n" ++ err) >> r
@@ -126,10 +127,8 @@ pathsToDays = showInvalidNames . pathsToDays'
 dayToPath :: Day -> String
 dayToPath = replace '-' '.' . drop 2 . show
 
-
-
 replace :: Eq b => b -> b -> [b] -> [b]
-replace a b = map (\x -> if (a == x) then b else x)
+replace a b = map (\x -> if a == x then b else x)
 
 filterBy
   :: Day -- ^ start date (lower bound)
@@ -190,7 +189,7 @@ filterWith' input (x : xs)
     where rest = filter' xs
   go :: [LogEntry] -> [LogEntry]
   go []              = []
-  go ((Dump _) : xs) = go xs
+  go (Dump _ : xs) = go xs
   go (x@(TabTsEntry (tabs, _, _)) : xs)
     |
     -- collect nested
@@ -222,7 +221,7 @@ takeWhileRestWithFilter
 takeWhileRestWithFilter _ _ [] = ([], [])
 takeWhileRestWithFilter continue take (x : xs)
   | continue x = go x $ takeWhileRestWithFilter continue take xs
-  | otherwise  = ([], (x : xs))
+  | otherwise  = ([], x : xs)
  where
   go x (as, bs) | take x    = (x : as, bs)
                 | otherwise = (as, bs)
@@ -233,7 +232,7 @@ satisfies input@(Input _ _ ap tp preds') =
   let preds = catMaybes (predicates input ++ [ap, tp])
   in  if null preds
         then const True -- TODO search bug ??
-        else \e -> foldr (||) False $ preds <*> [e]
+        else \e -> or $ preds <*> [e]
 
 -- | Applies both string search and variant predicates.
 satisfies' :: Input -> LogEntry -> Bool
@@ -247,21 +246,21 @@ satisfies' input le
 variantSatisfies :: Input -> LogEntry -> Bool
 variantSatisfies input | null preds = const True
                        | -- TODO search bug ??
-                         otherwise  = \e -> foldr (||) False $ preds <*> [e]
+                         otherwise  = \e -> or $ preds <*> [e]
   where preds = catMaybes (predicates input)
 
 -- | Applies only string search predicates.
 searchSatisfies :: Input -> LogEntry -> Bool
 searchSatisfies (Input _ _ ap tp _) le
   | null res  = True
-  | otherwise = foldr (&&) True $ catMaybes res
+  | otherwise = and $ catMaybes res
   where res = [ap <*> pure le, tp <*> pure le]
 
 -- | Applies only string search predicates to author, title.
 searchSatisfies' :: Input -> LogEntry -> Bool
 searchSatisfies' (Input _ _ ap tp _) le
   | null res  = False
-  | otherwise = foldr (&&) True $ catMaybes res
+  | otherwise = and $ catMaybes res
   where res = [ap <*> pure le, tp <*> pure le]
 
 -- | Checks whether a 'LogEntry' is indented at least as much as the given
@@ -301,12 +300,12 @@ isDialogue :: LogEntry -> Bool
 isDialogue = isJust . projectDialogue
 
 doesAuthorSatisfy :: (Author -> Bool) -> LogEntry -> Bool
-doesAuthorSatisfy authPred (TabTsEntry (_, _, (Read _ author))) =
+doesAuthorSatisfy authPred (TabTsEntry (_, _, Read _ author)) =
   authPred author
 doesAuthorSatisfy _ _ = False
 
 doesTitleSatisfy :: (Title -> Bool) -> LogEntry -> Bool
-doesTitleSatisfy titlePred (TabTsEntry (_, _, (Read title _))) =
+doesTitleSatisfy titlePred (TabTsEntry (_, _, Read title _)) =
   titlePred title
 doesTitleSatisfy _ _ = False
 
@@ -315,9 +314,7 @@ doesTitleSatisfy _ _ = False
 doesReadSatisfy :: Input -> LogEntry -> Bool
 doesReadSatisfy input le
   | isRead le
-  = foldr (||) False
-    $   (catMaybes . fmap (Just input >>=) $ [authorPred, titlePred])
-    <*> pure le
+  = or $ mapMaybe (Just input >>=) [authorPred, titlePred] <*> pure le
   | otherwise
   = False
 
@@ -339,7 +336,7 @@ guardStrSearch strSearch typePreds
   | null typePreds = strSearch
   | otherwise = \e ->
     strSearch e
-      && (foldr (||) False $ (isRead : catMaybes typePreds) <*> pure e)
+      && or ((isRead : catMaybes typePreds) <*> pure e)
 
 -- | Generates `LogEntry` predicate from string predicate.
 --
@@ -415,12 +412,12 @@ projectPhrase = getEntry >=> getPhrase
 projectDialogue = getEntry >=> getDialogue
 
 project :: LogEntry -> Maybe DefQuery
-project (TabTsEntry (_, _, (Def dq))) = Just dq
+project (TabTsEntry (_, _, Def dq)) = Just dq
 project _                             = Nothing
 
 projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
-projectDef (TabTsEntry (_, _, (Def dq))) = case dq of
-  Defn      mPg headwords -> flip (,) Nothing <$> headwords
+projectDef (TabTsEntry (_, _, Def dq)) = case dq of
+  Defn      mPg headwords -> (, Nothing) <$> headwords
   InlineDef hw  meaning   -> [(hw, Just meaning)]
   DefVersus hw m hw' m'   -> [(hw, Just m), (hw', Just m')]
 projectDef _ = []

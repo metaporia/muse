@@ -58,7 +58,7 @@ showErr (Tri.Success a              ) = Right a
 showErr (Tri.Failure (ErrInfo doc _)) = Left $ show doc
 
 periodSep :: Parser String -> Parser [String]
-periodSep p = p `sepBy` (symbol ".")
+periodSep p = p `sepBy` symbol "."
 
 skipOptDot :: Parser ()
 skipOptDot = skipOptional (char '.')
@@ -66,7 +66,7 @@ skipOptDot = skipOptional (char '.')
 skipEOL :: Parser ()
 skipEOL = skipMany (oneOf "\n")
 
-isIndented :: [Char] -> Bool
+isIndented :: String -> Bool
 isIndented = isPrefixOf "           "
 
 -- | collects next n indented lines. expects first line to be indented
@@ -76,10 +76,7 @@ collectIndented (ln : lns) | isIndented ln = (ln :) <$> collectIndented lns
                            | otherwise     = (ln : lns, [])
 
 tilEOL :: Parser String
-tilEOL = do
-  skipEOL
-  val <- some (noneOf "\n")
-  return val
+tilEOL = skipEOL >> some (noneOf "\n")
 
 data MediaType
   = Play

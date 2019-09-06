@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, ApplicativeDo, NamedFieldPuns, RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric #-}
+  ApplicativeDo #-}
 
 -----------------------------------------------------------------------------
 -- |

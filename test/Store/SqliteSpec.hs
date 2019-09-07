@@ -137,8 +137,8 @@ demo = runSqlite "sqliteSpec.db" $ do
   satisfactoryDefs <-
     selectList ([] :: [Filter QuoteEntry]) []
       >>= applyReadPreds ["Woolf"] ["Light"]
-  before         <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
-  since          <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
+  before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
   matchingQuotes <- filterQuotes since
                                  before
                                  ["%Woolf%"]

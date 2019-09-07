@@ -20,7 +20,9 @@ module Parse where
 import           Control.Applicative
 import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
-import           Data.Aeson              hiding ( Null, (<?>))
+import           Data.Aeson              hiding ( Null
+                                                , (<?>)
+                                                )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhile
                                                 , dropWhileEnd
@@ -245,8 +247,8 @@ isInlineDef (InlineDef _ _) = True
 isInlineDef _               = False
 
 isDefVersus :: DefQuery -> Bool
-isDefVersus DefVersus {} = True
-isDefVersus _                   = False
+isDefVersus DefVersus{} = True
+isDefVersus _           = False
 
 
 trim' :: String -> String
@@ -275,9 +277,9 @@ toDefn = do
 --
 inlineMeaning :: Parser DefQuery
 inlineMeaning = do
-  _       <- symbolic 'd'
-  tags    <- optional $ brackets (many (noneOf "]"))
-  hw      <- many (noneOf ":") <* symbol ": "
+  _    <- symbolic 'd'
+  tags <- optional $ brackets (many (noneOf "]"))
+  hw   <- many (noneOf ":") <* symbol ": "
   InlineDef hw <$> entryBody
 
 -- | Splits on delimiter. E.g.,
@@ -293,8 +295,8 @@ toDefVersus = do
       p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
       p1 = inlineMeaning' entryBody
       inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
-  mTagList  <- symbol "dvs" *> optional tags
-  firstDef  <- p0 <* pad (string "--- vs ---")
+  mTagList <- symbol "dvs" *> optional tags
+  firstDef <- p0 <* pad (string "--- vs ---")
   collect firstDef <$> p1
 
 -- | A tag may contain any (decimal) digit, any classical laten letter, that

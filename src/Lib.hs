@@ -423,51 +423,48 @@ color =
   -- long "version" <> short 'V' <> help "Display version information") <*>
 
 toplevel' :: Day -> Parser Opts'
-toplevel' today
-  = Opts' <$> color <*> subparser
-      (  command
-          "search"
-          (info
-            (Search' <$> search' today <**> helper)
-            (progDesc
-              "Search log entries by date, author, title, or predicate on entry contents.\
+toplevel' today = Opts' <$> color <*> subparser
+  (  command
+      "search"
+      (info
+        (Search' <$> search' today <**> helper)
+        (progDesc
+          "Search log entries by date, author, title, or predicate on entry contents.\
              \ Inline definitions of headwords or phrases can be searched as well."
-            )
-          )
-      <> command
-           "parse"
-           (info
-             (Parse' <$> parse' <**> helper)
-             (progDesc "Parse entries; a bare invocation runs 'parse --all'")
-           )
-      <> command
-           "lastRead"
-           (info
-             (    FetchLastRead'
-             <$>  switch
-                    (  long "suppress-newline"
-                    <> help "Suppress trailing newline"
-                    )
-             <**> helper
-             )
-             (progDesc "Fetches most recent \"read\" entry.")
-           )
-      <> command
-           "lint"
-           (info (pure Lint')
-                 (progDesc "TBD; for, e.g., author attribution validation")
-           )
-      <> command
-           "init"
-           (info
-             (init' <**> helper)
-             (progDesc
-               "Initialize config file, cache directory, and entry log\
-             \ directory; parse all entries in 'log-dir'"
-             )
-           )
+        )
       )
-    
+  <> command
+       "parse"
+       (info
+         (Parse' <$> parse' <**> helper)
+         (progDesc "Parse entries; a bare invocation runs 'parse --all'")
+       )
+  <> command
+       "lastRead"
+       (info
+         (    FetchLastRead'
+         <$>  switch
+                (long "suppress-newline" <> help "Suppress trailing newline")
+         <**> helper
+         )
+         (progDesc "Fetches most recent \"read\" entry.")
+       )
+  <> command
+       "lint"
+       (info (pure Lint')
+             (progDesc "TBD; for, e.g., author attribution validation")
+       )
+  <> command
+       "init"
+       (info
+         (init' <**> helper)
+         (progDesc
+           "Initialize config file, cache directory, and entry log\
+             \ directory; parse all entries in 'log-dir'"
+         )
+       )
+  )
+
 
 toplevel'' d =
   toplevel' d
@@ -1154,6 +1151,13 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
   --putStrLn $ show mc
 
 -- | Parse all entries into sqlite database.
+--
+-- TODO 
+--
+-- □  caching
+--
+-- □  overwrite vs insert 'wrteDay' mode
+--
 parseAllEntries'' :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
@@ -1192,7 +1196,6 @@ parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home) = do
       --     (return [] :: IO [FilePath])
       --     fps
       --filtermap pathToDay fps
-
     -- TODO (!!!!!) exclude days with duplicate primary keys!
     parse :: String -> IO (String, Either String [LogEntry])
     parse fp =
@@ -1227,10 +1230,8 @@ parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home) = do
     runMigration Sql.migrateAll
     let allFiles = return fps
     entriesByDay <- liftIO $ allFiles >>= parseAndShowErrs
-
-    traverse_ (uncurry Sql.writeDay) . catMaybes $ fmap
-      (\(a, b) -> (,) <$> pathToDay a <*> Just b)
-      entriesByDay
+    traverse_ (uncurry Sql.writeDay)
+      $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entriesByDay
   return ()
   -- read in log file names; parse 'em
   --putStrLn $ show mc

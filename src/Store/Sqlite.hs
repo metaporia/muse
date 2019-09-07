@@ -716,9 +716,7 @@ withinDateRange entryIdType keyWrapper sinceDay beforeDay =
     since  = dayToUTC sinceDay
     before = dayToUTC beforeDay
     dateConstraints =
-      [ entryIdType P.>=. keyWrapper since
-      , entryIdType P.<=. keyWrapper before
-      ]
+      [entryIdType P.>=. keyWrapper since, entryIdType P.<=. keyWrapper before]
   in
     selectList dateConstraints []
 
@@ -921,31 +919,41 @@ filterQuotes since before authPreds titlePreds bodyStrs =
         where_
           (
            -- satisfies title/auth preds if present
-              (
+           (
               -- manual attr satsifies
-               (   attributionConstraint
-                     (quoteEntry ^. QuoteEntryManualAttribution)
-                     authPreds
+            (attributionConstraint (quoteEntry ^. QuoteEntryManualAttribution)
+                                   authPreds
+            &&. attributionConstraint
+                  (quoteEntry ^. QuoteEntryManualAttribution)
+                  titlePreds
+            )
+           ||.
+            -- tagged attr satsfies
+               (attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
+                                      authPreds
                &&. attributionConstraint
-                     (quoteEntry ^. QuoteEntryManualAttribution)
+                     (just $ readEntry ^. ReadEntryTitle)
                      titlePreds
                )
-              ||.
-            -- tagged attr satsfies
-                  (attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
-                                          authPreds
-                  &&. attributionConstraint
-                        (just $ readEntry ^. ReadEntryTitle)
-                        titlePreds
-                  )
-              )
+           )
           &&. -- satisfies quoteBody preds
               quoteBodySearchConstraint (quoteEntry ^. QuoteEntryBody)
-                                         bodyStrs
+                                        bodyStrs
           &&. dateRangeConstraint QuoteEntryId
-                                   QuoteEntryKey
-                                   quoteEntry
-                                   since
-                                   before
+                                  QuoteEntryKey
+                                  quoteEntry
+                                  since
+                                  before
           )
         return quoteEntry
+
+
+clearDb :: T.Text -> IO ()
+clearDb db = runSqlite db $ do
+  runMigration migrateAll
+  deleteWhere ([] :: [P.Filter DefEntry])
+  deleteWhere ([] :: [P.Filter ReadEntry])
+  deleteWhere ([] :: [P.Filter QuoteEntry])
+  deleteWhere ([] :: [P.Filter CommentaryEntry])
+  deleteWhere ([] :: [P.Filter DialogueEntry])
+  deleteWhere ([] :: [P.Filter PageNumberEntry])

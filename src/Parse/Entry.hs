@@ -49,7 +49,9 @@ import           Control.Applicative
 import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
 import           Control.Monad.Trans.State
-import           Data.Aeson              hiding ( Null, (<?>) )
+import           Data.Aeson              hiding ( Null
+                                                , (<?>)
+                                                )
 import           Data.Bifunctor                 ( bimap
                                                 , first
                                                 , second
@@ -113,9 +115,7 @@ quotation = do
   -- TODO discard post quote attribution when indent >= 1
   --titleAuthEtc <- untilPNoTs' $ try (void $ timestamp) <|> try (void $ symbol "...") <|> eof
   titleAuthEtc <- linesNoTs <* skipOptional eof
-  return $ Quotation (unwords . fmap trim . lines $ q)
-                     (trim titleAuthEtc)
-                     pg
+  return $ Quotation (unwords . fmap trim . lines $ q) (trim titleAuthEtc) pg
 
 escape :: Parser String
 escape = do
@@ -221,8 +221,8 @@ data LogEntry
   deriving (Eq, Show, Generic)
 
 getTimeStamp :: LogEntry -> Maybe TimeStamp
-getTimeStamp (TabTsEntry (_, ts,_)) = Just ts
-getTimeStamp _ = Nothing
+getTimeStamp (TabTsEntry (_, ts, _)) = Just ts
+getTimeStamp _                       = Nothing
 
 instance ToJSON LogEntry where
   toEncoding = genericToEncoding defaultOptions
@@ -249,7 +249,7 @@ logEntry = do
         return $ TabTsEntry (indent, ts, e)
   e <- try dump <|> try null <|> entry'
   _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
-  return $ e
+  return e
 
 tmp = do
   x <- lpad nullE
@@ -534,9 +534,12 @@ ascendingDigits' previous = do
           <> ", previous timestapm, t2 = "
           <> show previous
           <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
-          ) mempty mempty mempty
-      in  -- trace (show err) $ 
-            Left "expected ascending comma-separated digits"
+          )
+          mempty
+          mempty
+          mempty
+      in   -- trace (show err) $ 
+          Left "expected ascending comma-separated digits"
 
 
 logEntries' :: Parser [LogEntry]
@@ -632,7 +635,7 @@ pluralPhrase = do
 
 definedPhrase :: Parser Phrase
 definedPhrase = do
-  hw      <- many (noneOf ":") <* symbol ": "
+  hw <- many (noneOf ":") <* symbol ": "
   Defined hw <$> entryBody
 
 dialogue :: Parser Entry

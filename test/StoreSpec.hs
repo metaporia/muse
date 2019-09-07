@@ -77,7 +77,6 @@ import           Store.Types                    ( AttrTag(..)
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Show.Pretty               ( pPrint )
 import           Text.Trifecta           hiding ( render )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
@@ -585,6 +584,7 @@ tDia =
            filterDialogues db search' dialogues `shouldBe` [first, second]
            filterDialogues db search'' dialogues `shouldBe` [first, second]
 
+
 tQuote =
   describe "quotes: 6"
     $ it "applies single quote search pred"
@@ -646,33 +646,23 @@ tQuote =
             [byWilde]
             initBucketList { quotesPreds = [T.isInfixOf "spade"] }
         query acid ViewDB >>= \db@DB { quotes, reads } -> do
-          let
-            tag =
-              (mkTsIdxTag day'
-                          (q'', oscar, Nothing)
-                          (Just . AttrTag . truncateUTC $ day)
-              )
-            o1 = TsR (truncateUTC day')
-              $ Quotation (T.unpack q'') (T.unpack oscar) Nothing
-            o2 = TsR (truncateUTC (incrMin . incrMin $ day''))
-              $ Quotation (T.unpack q''') (T.unpack oscar) Nothing
-            e1 = TsR (truncateUTC day'')
-              $ Quotation (T.unpack q) (T.unpack edward) Nothing
-            e2 = TsR (truncateUTC $ incrMin day'')
-              $ Quotation (T.unpack q') (T.unpack edward) Nothing
-
-      -- empty
-      filterQuotes db (Search s e [] initBucketList) quotes `shouldBe` [ o1 , e1 , e2 , o2 ]
-      -- spade
-      filterQuotes db search' quotes `shouldBe` [o1]
-      -- sarcasm 
-      filterQuotes db search quotes `shouldBe` [e1]
-      -- cheap disguise & child
-      filterQuotes db search'' quotes `shouldBe` [e2]
-      -- auth pred: Oscar Wilde
-      filterQuotes db search''' quotes `shouldBe` [o1, o2]
-      -- auth pred (Oscar Wilde) & contains "spade"
-      filterQuotes db search'''' quotes `shouldBe` [o1]
+          let tag = mkTsIdxTag day' (q'', oscar, Nothing) (Just . AttrTag . truncateUTC $ day)
+              o1 = TsR (truncateUTC day') $ Quotation (T.unpack q'') (T.unpack oscar) Nothing
+              o2 = TsR (truncateUTC (incrMin . incrMin $ day'')) $ Quotation (T.unpack q''') (T.unpack oscar) Nothing
+              e1 = TsR (truncateUTC day'') $ Quotation (T.unpack q) (T.unpack edward) Nothing
+              e2 = TsR (truncateUTC $ incrMin day'') $ Quotation (T.unpack q') (T.unpack edward) Nothing
+              -- empty
+          filterQuotes db (Search s e [] initBucketList) quotes `shouldBe` [ o1 , e1 , e2 , o2 ]
+          -- spade
+          filterQuotes db search' quotes `shouldBe` [o1]
+          -- sarcasm 
+          filterQuotes db search quotes `shouldBe` [e1]
+          -- cheap disguise & child
+          filterQuotes db search'' quotes `shouldBe` [e2]
+          -- auth pred: Oscar Wilde
+          filterQuotes db search''' quotes `shouldBe` [o1, o2]
+          -- auth pred (Oscar Wilde) & contains "spade"
+          filterQuotes db search'''' quotes `shouldBe` [o1]
 
 tDefs =
   describe "definitions: 6"

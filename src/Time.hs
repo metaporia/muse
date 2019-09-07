@@ -47,6 +47,9 @@ incrMin :: UTCTime -> UTCTime
 incrMin UTCTime {..} =
   UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, ..}
 
+incrUTC :: UTCTime -> UTCTime
+incrUTC (UTCTime d dt) = UTCTime (incrDay d ) dt
+
 left :: Either a b -> Maybe a
 left = preview _Left
 

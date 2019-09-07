@@ -21,7 +21,7 @@ import           Data.Text.IO                  as T
 import           Data.Time
 import           Helpers
 import           Parse
-import           Parse.Entry
+import           Parse.Entry hiding (logEntries)
 import           Prelude                 hiding ( min )
 import           Store.Sqlite
 import           Test.Hspec
@@ -34,6 +34,7 @@ tparse :: String -> Result [LogEntry]
 tparse = parse logEntries
 
 test = hspec spec
+logEntries = validatedLogEntries
 
 --import Text.Trifecta.Result (Result(..))
 --import Test.QuickCheck
@@ -117,7 +118,7 @@ spec = do
   describe "fail on entry without valid prefix"
     $          it "parse logEntry tNoValidPrefix"
     $          example
-    $          toMaybe (parse logEntries tNoValidPrefix)
+    $          toMaybe (parse (logEntries <* eof)tNoValidPrefix) -- FIXME example of poor error message
     `shouldBe` Nothing
   describe "square-bracketed, comma-separated tags" $ do
     -- "assert that tagChar may only be one of [a-zA-Z0-9-]" 
@@ -152,8 +153,8 @@ tNoValidPrefix = [r|
 
 tDialogue =
   [r|
-13:36:33 λ. phrase sine qua non
-    13:36:33 λ. phrase sine qua non
+07:36:33 λ. phrase sine qua non
+    07:36:34 λ. phrase sine qua non
 08:34:34 λ. dialogue
 
     (After ~1hr of unbridled loquacity, having mercifully dammed the torrent)
@@ -169,12 +170,12 @@ tDialogue =
 tDialogueOut
   = [ TabTsEntry
       ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 7, min = 36, sec = 33}
       , Phr (Plural ["sine qua non"])
       )
     , TabTsEntry
       ( 1
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 7, min = 36, sec = 34}
       , Phr (Plural ["sine qua non"])
       )
     , TabTsEntry
@@ -192,19 +193,19 @@ tDialogueOut
 
 tPhrase =
   [r|
-13:36:33 λ. phrase sine qua non
+10:36:33 λ. phrase sine qua non
 10:55:26 λ. d raillery, coppice, disquisition, dissertation
 13:36:33 λ. phr sine qua non
-13:36:33 λ. phrase sine qua non : an essential condition
-13:36:33 λ. phrase sine qua non: an essential condition
+13:36:34 λ. phrase sine qua non : an essential condition
+13:36:35 λ. phrase sine qua non: an essential condition
 
-13:36:33 λ. d casement
+13:36:36 λ. d casement
 |]
 
 tPhraseOut
   = [ TabTsEntry
       ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 10, min = 36, sec = 33}
       , Phr (Plural ["sine qua non"])
       )
     , TabTsEntry
@@ -220,17 +221,17 @@ tPhraseOut
       )
     , TabTsEntry
       ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 13, min = 36, sec = 34}
       , Phr (Defined "sine qua non " "an essential condition")
       )
     , TabTsEntry
       ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 13, min = 36, sec = 35}
       , Phr (Defined "sine qua non" "an essential condition")
       )
     , TabTsEntry
       ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
+      , TimeStamp {hr = 13, min = 36, sec = 36}
       , Def (Defn Nothing ["casement"])
       )
     ]
@@ -354,7 +355,7 @@ testLonelySpaces =
   [r|
     
 
-14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+11:19:00 λ. read "Witches Abroad", by Terry Pratchett
  
 
     12:10:01 λ. d sylvan
@@ -365,7 +366,7 @@ testLonelySpacesOutput :: [LogEntry]
 testLonelySpacesOutput =
   [ TabTsEntry
     ( 0
-    , TimeStamp {hr = 14, min = 19, sec = 0}
+    , TimeStamp {hr = 11, min = 19, sec = 0}
     , Read "Witches Abroad" "Terry Pratchett"
     )
   , TabTsEntry
@@ -470,7 +471,7 @@ commentTsOutput =
 
 commentTs' :: String
 commentTs' =
-  [r|20:30:00 λ. synthesis
+  [r|10:30:00 λ. synthesis
 
 I found myself extremely aggravated by the claustrophobia-inducing parental
 harassment Alan and Buddy's Father--with his anger--, and the Mother--with
@@ -485,7 +486,7 @@ commentTsOutput' :: [LogEntry]
 commentTsOutput'
   = [ TabTsEntry
       ( 0
-      , TimeStamp {hr = 20, min = 30, sec = 0}
+      , TimeStamp {hr = 10, min = 30, sec = 0}
       , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n"
       )
@@ -514,19 +515,19 @@ testPgNum :: String
 testPgNum =
   [r|
 08:38:20 λ. p38 
-08:38:20 λ. s 38 
-08:38:20 λ. e38
-08:38:20 λ.  f38 
-08:38:20 λ. p  38
+08:38:21 λ. s 38 
+08:38:22 λ. e38
+08:38:23 λ.  f38 
+08:38:24 λ. p  38
 |]
 
 testPgNumOutput :: [LogEntry]
 testPgNumOutput =
   [ TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PStart 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PEnd 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (PFinish 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 21}, PN (PStart 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 22}, PN (PEnd 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 23}, PN (PFinish 38))
+  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 24}, PN (Page 38))
   ]
 
 testLog :: String

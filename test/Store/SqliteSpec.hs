@@ -22,6 +22,7 @@ import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
 import           Data.Bifunctor                 ( bimap )
+import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , fromJust
@@ -49,7 +50,6 @@ import           Parse
 import qualified Parse                         as P
 import           Parse.Entry
 import qualified Parse.Entry                   as P
-import           Store.Sqlite
 import           Store.Sqlite
 import           Test.Hspec
 import           Text.RawString.QQ
@@ -144,21 +144,20 @@ demo = runSqlite "sqliteSpec.db" $ do
                                  ["%Woolf%"]
                                  ["%Lighthouse%"]
                                  ["%simplicity%"]
-  liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
+  -- liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
+  let newRead =
+        ReadEntry {readEntryTitle = "Title", readEntryAuthor = "Author"}
+  liftIO $ putStrLn "before repsert"
+  selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
+    (pPrint . entityVal)
+  repsert readKey newRead
+  liftIO $ putStrLn "after repsert"
+  selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
+    (pPrint . entityVal)
   return ()
 
 clear :: IO ()
 clear = runSqlite "sqliteSpec.db" $ do
-  runMigration migrateAll
-  deleteWhere ([] :: [Filter DefEntry])
-  deleteWhere ([] :: [Filter ReadEntry])
-  deleteWhere ([] :: [Filter QuoteEntry])
-  deleteWhere ([] :: [Filter CommentaryEntry])
-  deleteWhere ([] :: [Filter DialogueEntry])
-  deleteWhere ([] :: [Filter PageNumberEntry])
-
-clearDb :: T.Text -> IO ()
-clearDb db = runSqlite db $ do
   runMigration migrateAll
   deleteWhere ([] :: [Filter DefEntry])
   deleteWhere ([] :: [Filter ReadEntry])
@@ -263,7 +262,9 @@ curr = runSqlite "test1.db" $ do
   runMigration migrateAll
   today <- liftIO $ utctDay <$> getCurrentTime
   let -- logEntries :: _
-      logEntries' = statefulValidatedMany Nothing logEntrySquawk logEntryPassNewestTimeStamp 
+      logEntries' = statefulValidatedMany Nothing
+                                          logEntrySquawk
+                                          logEntryPassNewestTimeStamp
   liftIO $ pPrint $ parse logEntries' reallyBroken
   --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
   return ()

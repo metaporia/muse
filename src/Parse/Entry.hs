@@ -256,8 +256,8 @@ tmp = do
   _ <- void (skipOptional emptyLines) <|> eof
   return x
 
-logEntries :: Parser [LogEntry]
-logEntries =
+oldLogEntries :: Parser [LogEntry]
+oldLogEntries =
   const []
     <$> (   try (void $ many space)
         <|> try (void emptyLines)
@@ -266,6 +266,7 @@ logEntries =
         )
     *>  some logEntry
 
+logEntries = validatedLogEntries
 -- | Like 'logEntry' but this parser will enforce that no two timestamps are
 -- duplicate by requiring each to be greater than and not equal to its
 -- predecessor.
@@ -511,13 +512,20 @@ squawkIfNotAscending prev curr =
 
 -- example stateful parser
 shouldSquawk :: Int -> Parser (Int, Int)
-shouldSquawk _ = double . read . return  <$> digit
+shouldSquawk _ = double . read . return <$> digit
 
+-- | Parses a file of 'LogEntry's and fails if its timesmamps are not strictly
+-- ascending (i.e., a lack of duplicates is ensured).
+validatedLogEntries :: Parser [LogEntry]
+validatedLogEntries = do
+  try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof"
+  fst
+    <$> statefulValidatedMany Nothing logEntrySquawk logEntryPassNewestTimeStamp
 
 -- keep for pretty err msg example
 ascendingDigits' :: Int -> Parser (Either String (Int, Int))
 ascendingDigits' previous = do
-  current <- (read . return) <$> digit
+  current <- read . return <$> digit
   skipOptional (many space *> char ',' <* many space)
   return $ if previous < current
     then Right (current, current)

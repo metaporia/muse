@@ -484,6 +484,13 @@ statefulMany initialState p = go initialState
 -- >>> parse (statefulValidatedMany 0 squawkIfNotAscending shouldSquawk) "1233"
 -- Failure (ErrInfo { _errDoc = "...expected ascending numbers...", .. })
 --
+--
+-- TODO assert that the parser must not fail before the end of the file, and
+-- then a failure will surface. The incident that prompts this is the lack of
+-- helpful reporting of the cause of failure when a the preceding zeros of a
+-- timestamp are omitted, which is a breaking syntax error but causes the
+-- parser to silently fail and skip the entry before returning a list of
+-- entries whose source was compliant.
 statefulValidatedMany
   :: s -- ^ Initial state.
   -- | A predicate that returns an error message explaining why the given

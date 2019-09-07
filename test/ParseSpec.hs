@@ -1296,3 +1296,26 @@ brokenOut
       , Phr (Plural ["\"their characters suffered no revolution\""])
       )
     ]
+
+-- The Problem: silently fails to parse broken timestamp and, oddly enough,
+-- then skips the whole 'LogEntry'. 
+--
+-- The Answer: first, this is an unrelated issue and since we now have
+-- successful timestamp uniqueness checking, we can proceed with the sqlite
+-- migraation; secondly, this is a /huge/ problem: the 'entryBody' parser
+-- greedily consumes until the next timestamp, includes any entry with a
+-- corrupted timestamp-e.g., the dialogue parser treats the last read entry as
+-- a continuation of the dialogue.
+silentFailure = [r|
+07:36:33 λ. phrase sine qua non
+    07:36:34 λ. phrase sine qua non
+08:34:34 λ. dialogue
+
+    (After ~1hr of unbridled loquacity, having mercifully dammed the torrent)
+    MOM: Do you mind me telling all my favorite moments?
+
+    (Without looking up from his guitar playing)
+    DAD: No, just get it over with.
+
+8:35:27 λ. read "Great Expectations" by Charles Dickens
+|]

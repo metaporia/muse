@@ -56,6 +56,7 @@ import           Database.Persist.Sqlite        ( BaseBackend
                                                 , deleteWhere
                                                 , get
                                                 , insertKey
+                                                , repsert
                                                 , runMigration
                                                 , runSqlite
                                                 , selectList
@@ -299,6 +300,8 @@ writeDay day
 -- lists of log entries grouped by day: for each day's list of log entries,
 -- 'writeEntry' is partially applied to the 'Day' and mapped over the entries.
 --
+-- If a given key exists it will be overwritten. This is excusable as the
+-- parser excludes duplicate keys.
 writeLogEntry
   :: MonadIO m
   => Day
@@ -321,13 +324,13 @@ writeLogEntry day logEntry mAttrTag =
           -> let utc = toUTC day timestamp
              in
                (case entry of
-                   Def dq -> insertKey (DefEntryKey utc) $ toDefEntry mAttrTag dq
+                   Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag dq
                    Read title author ->
-                     insertKey (ReadEntryKey utc) $ ReadEntry title author
+                     repsert (ReadEntryKey utc) $ ReadEntry title author
                                  -- FIXME relies on empty attribution string when manual
                                  -- attribution is omitted
                    Quotation quoteBody manualAttribution mPgNum ->
-                     insertKey (QuoteEntryKey utc) $ QuoteEntry
+                     repsert (QuoteEntryKey utc) $ QuoteEntry
                        quoteBody
                        (if manualAttribution == ""
                          then Nothing
@@ -335,7 +338,7 @@ writeLogEntry day logEntry mAttrTag =
                        )
                        (fromAttrTag <$> mAttrTag)
                    Commentary commentBody ->
-                     insertKey (CommentaryEntryKey utc)
+                     repsert (CommentaryEntryKey utc)
                        $   CommentaryEntry commentBody
                        $   fromAttrTag
                        <$> mAttrTag
@@ -344,12 +347,12 @@ writeLogEntry day logEntry mAttrTag =
                      in
                        trace
                          (show pageTag <> ", " <> show pgNum <> ", " <> show utc)
-                       $ insertKey (PageNumberEntryKey utc)
+                       $ repsert (PageNumberEntryKey utc)
                        $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
-                   Phr phrase -> insertKey (DefEntryKey utc)
-                     $ phraseToDefEntry mAttrTag phrase
+                   Phr phrase ->
+                     repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
                    Dialogue dialogueBody ->
-                     insertKey (DialogueEntryKey utc)
+                     repsert (DialogueEntryKey utc)
                        $   DialogueEntry dialogueBody
                        $   fromAttrTag
                        <$> mAttrTag

@@ -83,15 +83,15 @@ spec = do
           liftIO $ length satisfactoryDefs `shouldBe` 3
     it "filterQuotes" $ asIO $ runSqlInMem $ do
       filterQuotesSetup
-      before <- liftIO $ (addDays 1 . utctDay) <$> getCurrentTime
-      since <- liftIO $ (addDays (-6 * 30) . utctDay) <$> getCurrentTime
+      before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+      since <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
       matchingQuotes <- filterQuotes since
                                      before
                                      ["%Woolf%", "%Virginia%"]
                                      []
                                      ["%simplicity%"]
       liftIO
-        $          (quoteEntryBody . entityVal)
+        $          quoteEntryBody . entityVal
         <$>        matchingQuotes
         `shouldBe` ["Her simplicity fathomed what clever people falsified."]
       noMatches <- filterQuotes since
@@ -99,7 +99,7 @@ spec = do
                                 ["%Woolf%", "%Thomas Moore%"]
                                 []
                                 ["%simplicity%"]
-      liftIO $ (quoteEntryBody . entityVal) <$> noMatches `shouldBe` []
+      liftIO $ quoteEntryBody . entityVal <$> noMatches `shouldBe` []
 
 
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
@@ -159,12 +159,7 @@ demo = runSqlite "sqliteSpec.db" $ do
 clear :: IO ()
 clear = runSqlite "sqliteSpec.db" $ do
   runMigration migrateAll
-  deleteWhere ([] :: [Filter DefEntry])
-  deleteWhere ([] :: [Filter ReadEntry])
-  deleteWhere ([] :: [Filter QuoteEntry])
-  deleteWhere ([] :: [Filter CommentaryEntry])
-  deleteWhere ([] :: [Filter DialogueEntry])
-  deleteWhere ([] :: [Filter PageNumberEntry])
+  clear' 
 
 clear' :: MonadIO m => DB m ()
 clear' = do

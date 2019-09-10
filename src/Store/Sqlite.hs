@@ -918,7 +918,11 @@ filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entity
 
 
 
---- DUMP SEARCH
+--- DUMP SEARCH 
+--
+-- TODO We're leaving this unimplemented as I've never once felt the need to
+-- search dumps. The only reason dumps are a present is to prevent parse
+-- failures on those early muse logs which have dumps.
 
 -- | Search predicates applied in infix fashion to dump strings--I've never
 -- actually used this functionality through the old interface.

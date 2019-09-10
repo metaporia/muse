@@ -37,7 +37,7 @@ import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Text.Wrap
 
-showAll :: [LogEntry] -> IO ()
+showAll :: ColRender a => [a] -> IO ()
 showAll = traverse_ (colRender True)
 
 indentation :: Int

@@ -285,9 +285,8 @@ newtype DumpWrapper = DumpWrapper { unDumpWrapper :: String } deriving (Eq, Show
 instance ToResult ctx DumpWrapper where
   toResult _ = DumpR . T.pack . unDumpWrapper
 
-
 fromEntry :: UTCTime -> Entry -> Result
-fromEntry utc entry = TsR utc entry
+fromEntry = TsR 
 
 fromDumps :: Dumps -> [Result]
 fromDumps (Dumps _ set) = DumpR <$> (Set.toList set)

@@ -66,10 +66,18 @@ test = hspec spec
 
 spec :: Spec
 spec = do
-  let filterQuotesSetup =
+  let setup writeAction = do
         runMigrationSilent migrateAll
-          >>  liftIO (utctDay <$> getCurrentTime)
-          >>= flip writeDay demoLogEntries
+        today <- liftIO $ utctDay <$> getCurrentTime
+        writeAction today
+        before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+        since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+        return (since, before)
+      filterQuotesSetup = setup (`writeDay` demoLogEntries)
+      defVarSetup = setup (\today -> do
+        let entries = fromJust $ toMaybe $ parse logEntries defVar
+        writeDay today entries)
+
   describe "quote filtration" $ do
     it
         "manually attributed nested quotes are filtered as though they have two attributions (see Woolf in Eliot)"
@@ -82,16 +90,15 @@ spec = do
               >>= applyReadPreds ["Woolf"] ["Light"]
           liftIO $ length satisfactoryDefs `shouldBe` 3
     it "filterQuotes" $ asIO $ runSqlInMem $ do
-      filterQuotesSetup
-      before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
-      since <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
-      matchingQuotes <- filterQuotes since
-                                     before
-                                     ["%Woolf%", "%Virginia%"]
-                                     []
-                                     ["%simplicity%"]
+      (since, before) <- filterQuotesSetup
+      matchingQuotes  <- filterQuotes since
+                                      before
+                                      ["%Woolf%", "%Virginia%"]
+                                      []
+                                      ["%simplicity%"]
       liftIO
-        $          quoteEntryBody . entityVal
+        $          quoteEntryBody
+        .          entityVal
         <$>        matchingQuotes
         `shouldBe` ["Her simplicity fathomed what clever people falsified."]
       noMatches <- filterQuotes since
@@ -100,9 +107,54 @@ spec = do
                                 []
                                 ["%simplicity%"]
       liftIO $ quoteEntryBody . entityVal <$> noMatches `shouldBe` []
+  describe "definition filtration" $ do 
+    it "all def varians" $ asIO $ runSqlInMem $ do
+      (since, before) <- filterQuotesSetup
+      defs            <- filterDefs
+        "/home/aporia/.muse/"
+        since
+        before
+        []
+        []
+        (DefSearch [Defn', Phrase', InlineDef', DefVersus'] [] [])
+      liftIO $ defs `shouldBe` demoDefsAll
+    it "def versus variants" $ asIO $ runSqlInMem $ do
+      (since, before) <- filterQuotesSetup
+      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [DefVersus'] [] [])
+      liftIO $ defs `shouldBe` demoDefVersus
+    it "vanilla definition variants" $ asIO $ runSqlInMem $ do
+      (since, before) <- filterQuotesSetup
+      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Defn'] [] [])
+      liftIO $ defs `shouldBe` demoDefn
+    it "inline def definition variants" $ asIO $ runSqlInMem $ do
+      (since, before) <- defVarSetup
+      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [InlineDef'] [] [])
+      liftIO $ defs `shouldBe` varInline
+    it "phrase definition variants" $ asIO $ runSqlInMem $ do
+       (since, before) <- defVarSetup
+       defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Phrase'] [] [])
+       liftIO $ defs `shouldBe` varPhrase
+     
+
 
 
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
+
+run :: IO ()
+run = runSqlInMem $ do
+  runMigration migrateAll
+  let entries = fromJust $ toMaybe $ parse logEntries defVar
+  today <- liftIO $ utctDay <$> getCurrentTime
+  writeDay today entries
+
+  before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+
+  defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Phrase'] [] [])
+  liftIO $ pPrint defs
+
+  return ()
+
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do
@@ -145,15 +197,16 @@ demo = runSqlite "sqliteSpec.db" $ do
                                  ["%Lighthouse%"]
                                  ["%simplicity%"]
   -- liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
-  let newRead =
-        ReadEntry {readEntryTitle = "Title", readEntryAuthor = "Author"}
-  liftIO $ putStrLn "before repsert"
-  selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
-    (pPrint . entityVal)
-  repsert readKey newRead
-  liftIO $ putStrLn "after repsert"
-  selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
-    (pPrint . entityVal)
+  --let newRead = ReadEntry {readEntryTitle = "Title", readEntryAuthor = "Author"} liftIO $ putStrLn "before repsert"
+  --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
+  --  (pPrint . entityVal)
+  --repsert readKey newRead
+  --liftIO $ putStrLn "after repsert"
+  --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
+  --  (pPrint . entityVal)
+  defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [InlineDef'] [] [])
+  liftIO $ pPrint defs
+
   return ()
 
 clear :: IO ()
@@ -322,3 +375,71 @@ sample = [r|
     20:39:35 λ. d lathe, faience, hummock, vittles, victuals, aureate, gilt
     20:43:05 λ. d veriest, circumspect
 |]
+
+defVar = [r|
+07:52:16 λ. read "Northanger Abbey" by Jane Austen
+    10:38:00 λ. d whorl : (to form) a pattern of concentric circles
+    11:46:47 λ. d philippic
+    13:22:53 λ. phrase "fever of suspense"
+    13:52:17 λ. d mizzle: a misty drizzle
+    14:51:13 λ. d gaucherie, gauche
+    16:02:03 λ. phr "smarting under an obligation"
+    16:40:05 λ. d shillelagh: an Irish, knob-ended cudgel
+    17:02:16 λ. d marge
+    18:38:48 λ. d saccadic: of jerky, discontinous movement
+|]
+
+demoDefsAll
+  = [ Def
+      (DefVersus "benignant"
+                 "kind; gracious; favorable;"
+                 "benign"
+                 "gentle, mild, or, medically, non-threatening"
+      )
+    , Def
+      (DefVersus
+        "malignant"
+        "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+        "malign"
+        "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
+      )
+    , Def (Defn Nothing ["inimical", "traduce", "virulent"])
+    , Def (Defn Nothing ["sublime", "lintel"])
+    , Def (Defn Nothing ["plover"])
+    , Def (Defn Nothing ["cosmogony"])
+    ]
+
+demoDefVersus
+  = [ Def
+      (DefVersus "benignant"
+                 "kind; gracious; favorable;"
+                 "benign"
+                 "gentle, mild, or, medically, non-threatening"
+      )
+    , Def
+      (DefVersus
+        "malignant"
+        "(adj.) disposed to inflict suffering or cause distress; inimical; bent on evil."
+        "malign"
+        "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
+      )
+    ]
+
+demoDefn =
+  [ Def (Defn Nothing ["inimical", "traduce", "virulent"])
+  , Def (Defn Nothing ["sublime", "lintel"])
+  , Def (Defn Nothing ["plover"])
+  , Def (Defn Nothing ["cosmogony"])
+  ]
+
+varInline =
+  [ Def (P.InlineDef "whorl" "(to form) a pattern of concentric circles")
+  , Def (P.InlineDef "mizzle" "a misty drizzle")
+  , Def (P.InlineDef "shillelagh" "an Irish, knob-ended cudgel")
+  , Def (P.InlineDef "saccadic" "of jerky, discontinous movement")
+  ]
+
+varPhrase =
+  [ Phr (Plural ["\"fever of suspense\""])
+  , Phr (Plural ["\"smarting under an obligation\""])
+  ]

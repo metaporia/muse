@@ -26,10 +26,12 @@ import           Control.Monad.Trans.Reader     ( ReaderT(..) )
 import           Data.Aeson              hiding ( Result
                                                 , Value
                                                 )
+import           Data.Bifunctor                 ( bimap )
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Char8    as BLC
 import           Data.Either
+import           Data.Foldable                  ( traverse_ )
 import           Data.Function                  ( (&) )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
@@ -723,6 +725,55 @@ withinDateRange entryIdType keyWrapper sinceDay beforeDay =
   in
     selectList dateConstraints []
 
+--- QUERY HELPERS
+
+-- | Esqueleto constraint to select entries within a given date range.
+dateRangeConstraint
+  :: PersistEntity record
+  => EntityField record (Key record)
+  -> (UTCTime -> Key record)
+  -> SqlExpr (Entity record)
+  -> Day
+  -> Day
+  -> SqlExpr (Value Bool)
+dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
+  let since  = dayToUTC sinceDay
+      before = dayToUTC beforeDay
+  in  (entityUTC ^. idType >=. val (keyWrapper since))
+        &&. (entityUTC ^. idType <=. val (keyWrapper before))
+
+
+-- | An esqueleto constraint that checks whether a string is @LIKE@ all of a
+-- list of search strings, the syntax for which is specified by the Sqlite docs
+-- for @LIKE@.
+attributionConstraint
+  ::  -- Esqueleto query expr backend => 
+     SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
+attributionConstraint bodyStr = foldr
+  (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
+  (val True)
+
+-- | Applies both 
+attributionConstraints
+  :: SqlExpr (Maybe (Entity ReadEntry))
+  -> [String]
+  -> [String]
+  -> SqlExpr (Value Bool)
+attributionConstraints readEntry authPreds titlePreds =
+  foldr
+      (\authStr rest ->
+        (readEntry ?. ReadEntryAuthor `like` just (val authStr)) &&. rest
+      )
+      (val True)
+      authPreds
+    &&. foldr
+          (\titleStr rest ->
+            (readEntry ?. ReadEntryTitle `like` just (val titleStr)) &&. rest
+          )
+          (val True)
+          titlePreds
+
+
 
 --- DEFINITION SEARCH 
 
@@ -732,6 +783,63 @@ data DefSearch = DefSearch
   { defVariants :: [P.DefQueryVariant]
   , headwordPreds :: [String -> Bool]
   , meaningPreds :: [String -> Bool] }
+
+defSearchConstraint
+  :: SqlExpr (Value String) -> [String] -> SqlExpr (Value Bool)
+defSearchConstraint  body = foldr
+  (\searchStr rest -> (body `like` val searchStr) &&. rest)
+  (val True)
+
+
+-- | Runs 'filterDef' on the results of 'selectDefs'.
+filterDefs
+  :: MonadIO m
+  => String
+  -> Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> DefSearch
+  -> DB m [Entry]
+filterDefs logPath since before authPreds titlePreds defSearch
+  = do
+    defEntries <- selectDefs since before authPreds titlePreds
+    let logParseErr :: String -> IO ()
+        logParseErr err =
+          appendFile (logPath <> "/" <> "defEntryParseErrors") $ "\n" <> err
+        eitherFiltered     = filterDef defSearch <$> defEntries
+        (logErrs, entries) = catMaybes <$> partitionEithers eitherFiltered
+    traverse_ (liftIO . logParseErr) logErrs
+    return entries
+
+-- | Since 'DefEntry's need to be unpacked before the 'DefSearch' can be
+-- applied, the filter entails first selecting all 'DefEntry's within the
+-- requested date range and satisfying the any (optionally) present attribution
+-- predicates, and secondly applying the 'DefSearch' variant and
+-- headword/meaning search predicates.
+--
+--  If /any/ 'DefEntry' json is found to be malformed the incident will be
+--  logged to ~/.muse/logs/. Assumes that the log path is /not/ suffixed with a
+--  forwardslash.
+selectDefs
+  :: MonadIO m => Day -> Day -> [String] -> [String] -> DB m [Entity DefEntry]
+selectDefs since before authPreds titlePreds = do
+  let dateConstraint defEntry =
+        dateRangeConstraint DefEntryId DefEntryKey defEntry since before
+  if null authPreds && null titlePreds
+    then select $ from $ \defEntry -> do
+      where_ $ dateConstraint defEntry
+      return defEntry
+    else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
+      on
+        (defEntry ^. DefEntryAttributionTag ==. just (readEntry ^. ReadEntryId))
+      where_
+        $ attributionConstraint (just $ readEntry ^. ReadEntryAuthor) authPreds
+        &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
+                                  titlePreds
+        &&. dateConstraint defEntry
+      return defEntry
+
 
 
 -- | Definition filter. 
@@ -774,14 +882,14 @@ data DefSearch = DefSearch
 --  of the search functions might be easily factored out into one generic
 --  function.
 --
-filterDef :: DefSearch -> Entity DefEntry -> Either String Bool
+filterDef :: DefSearch -> Entity DefEntry -> Either String (Maybe Entry)
 filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal }
   = do
     let variantSatisfies
           :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
     entry <- toEntry entityVal :: Either String Entry
-    case entry of
+    (\b -> if b then Just entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
         Right $ variantSatisfies defVariants (Right x) && and
           (headwordPreds <*> hws)
@@ -812,7 +920,8 @@ filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entity
       _ ->
         Left
           "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\
-                     \           but found another 'Entry' variant."
+                       \           but found another 'Entry' variant."
+
 
 
 --- DUMP SEARCH
@@ -828,6 +937,12 @@ filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
   and ((dumps &) <$> dumpPreds)
 
 
+filterDumps
+  ::  -- MonadIO m => 
+     Day -> Day -> [String] -> DB m [String]
+filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump storage
+
+
 --- DIALOGUE SEARCH
 
 type DialogueSearch = [String -> Bool]
@@ -837,43 +952,94 @@ filterDialogue :: DialogueSearch -> Entity DialogueEntry -> Bool
 filterDialogue dialoguePreds (Entity _ (DialogueEntry body _)) =
   and ((body &) <$> dialoguePreds)
 
+filterDialogues
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> [String]
+  -> DB m [Entity DialogueEntry]
+filterDialogues since before authPreds titlePreds dialoguePreds
+  = let
+      selectWrapper constraints = if null authPreds && null titlePreds
+        then select $ from $ \de -> constraints de
+        else select $ from $ \(dialogueEntry `LeftOuterJoin` readEntry) -> do
+          on
+            (   dialogueEntry
+            ^.  DialogueEntryAttributionTag
+            ==. readEntry
+            ?.  ReadEntryId
+            )
+          constraints dialogueEntry
+          return dialogueEntry
+    in
+      selectWrapper $ \dialogueEntry -> do
+        where_
+          $   dateRangeConstraint DialogueEntryId
+                                  DialogueEntryKey
+                                  dialogueEntry
+                                  since
+                                  before
+          &&. foldr
+                (\pred rest ->
+                  (dialogueEntry ^. DialogueEntryBody `like` val pred) &&. rest
+                )
+                (val True)
+                dialoguePreds
+        return dialogueEntry
+
+
 
 --- COMMENTARY SEARCH
 
-type CommentarySearch = [String -> Bool]
+type CommentarySearch = [String]
 
 -- | Apply predicates to a commentary.
 filterCommentary :: CommentarySearch -> Entity CommentaryEntry -> Bool
 filterCommentary commentPreds (Entity _ (CommentaryEntry body _)) =
-  and ((body &) <$> commentPreds)
+  and (isInfixOf <$> commentPreds <*> pure body)
 
-
-
--- | Esqueleto constraint to select entries within a given date range.
-dateRangeConstraint
-  :: PersistEntity record
-  => EntityField record (Key record)
-  -> (UTCTime -> Key record)
-  -> SqlExpr (Entity record)
+filterCommentaries
+  :: MonadIO m
+  => Day
   -> Day
-  -> Day
-  -> SqlExpr (Value Bool)
-dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
-  let since  = dayToUTC sinceDay
-      before = dayToUTC beforeDay
-  in  (entityUTC ^. idType >=. val (keyWrapper since))
-        &&. (entityUTC ^. idType <=. val (keyWrapper before))
+  -> [String]
+  -> [String]
+  -> CommentarySearch
+  -> DB m [Entity CommentaryEntry]
+filterCommentaries since before authPreds titlePreds commentaryPreds =
+  let
+    selectWrapper constraints = if null authPreds && null titlePreds
+      then select $ from $ \commentaryEntry -> constraints commentaryEntry
+      else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
+        on
+          (   commentaryEntry
+          ^.  CommentaryEntryAttributionTag
+          ==. readEntry
+          ?.  ReadEntryId
+          )
+        constraints commentaryEntry
+        return commentaryEntry
+  in  selectWrapper $ \commentaryEntry -> do
+
+      where_
+        $   dateRangeConstraint CommentaryEntryId
+                                CommentaryEntryKey
+                                commentaryEntry
+                                since
+                                before
+        &&. foldr
+              (\pred rest ->
+                (commentaryEntry ^. CommentaryEntryBody `like` val pred)
+                  &&. rest
+              )
+              (val True)
+              commentaryPreds
+      return commentaryEntry
 
 
--- | An esqueleto constraint that checks whether a string is @LIKE@ all of a
--- list of search strings, the syntax for which is specified by the Sqlite docs
--- for @LIKE@.
-attributionConstraint
-  ::  -- Esqueleto query expr backend => 
-     SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
-attributionConstraint bodyStr = foldr
-  (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
-  (val True)
+
 
 --- QUOTATION SEARCH
 
@@ -916,8 +1082,7 @@ filterQuotes since before authPreds titlePreds bodyStrs =
     $ from
     $ \(quoteEntry `LeftOuterJoin` readEntry) -> do
         on
-          (quoteEntry ^. QuoteEntryAttributionTag ==. just
-            (readEntry ^. ReadEntryId)
+          (quoteEntry ^. QuoteEntryAttributionTag ==. (readEntry ?. ReadEntryId)
           )
         where_
           (
@@ -932,10 +1097,9 @@ filterQuotes since before authPreds titlePreds bodyStrs =
             )
            ||.
             -- tagged attr satsfies
-               (attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
-                                      authPreds
+               (attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
                &&. attributionConstraint
-                     (just $ readEntry ^. ReadEntryTitle)
+                     (readEntry ?. ReadEntryTitle)
                      titlePreds
                )
            )

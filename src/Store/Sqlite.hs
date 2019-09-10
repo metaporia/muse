@@ -253,12 +253,8 @@ writeDay day
             -- begin traversal with readEntryKey in accumulator (note that it
             -- should be immediately discarded if the next entry is not the
             -- child of the current read entry).
-            Right readEntryKey -> go
-              (Just $ AttrTag
-                (trace ("readEntryKey: " ++ show readEntryKey) readEntryKey)
-              )
-              t
-        |
+            Right readEntryKey -> go (Just $ AttrTag readEntryKey) t
+        | 
                  -- WARNING: this is impossible: it means that the entry is a Read
                  -- variant and a Dump variant, so if it occurs, it will have
                  -- been by programmer error. As such, we simply log the
@@ -289,7 +285,6 @@ writeDay day
         --      ii. accumulator is (Just attrTag) -> insert tagged, recurse
         --      with previous accumulator
           isIndentedTo 1 h
-            --(:) <$> writeLogEntry day h (trace (show mTag) mTag) <*> go mTag t
         = (:) <$> writeLogEntry day h mTag <*> go mTag t
         |
         -- otherwise insert untagged, recurse with accumulator := Nothing
@@ -311,8 +306,8 @@ writeLogEntry
   -> Maybe AttrTag
   -> DB m (Either String UTCTime)
 writeLogEntry day logEntry mAttrTag =
-  trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry)
-    $ case logEntry of
+  -- trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $ 
+    case logEntry of
         Dump dumpContents ->
           return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
           -- FIXME add 'DumpEntry' type & table
@@ -347,10 +342,8 @@ writeLogEntry day logEntry mAttrTag =
                    PN pageNum ->
                      let (pageTag, pgNum) = fromPageNum pageNum
                      in
-                       trace
-                         (show pageTag <> ", " <> show pgNum <> ", " <> show utc)
-                       $ repsert (PageNumberEntryKey utc)
-                       $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
+                       -- trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $ 
+                         repsert (PageNumberEntryKey utc) $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
                    Phr phrase ->
                      repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
                    Dialogue dialogueBody ->
@@ -605,7 +598,7 @@ data SearchConfig = SearchConfig
 
 
 -- | Dispatch search.
-dispatchSearch :: MonadIO m => SearchConfig -> DB m [Result]
+dispatchSearch :: SearchConfig -> DB m [Result]
 dispatchSearch SearchConfig {..} =
   let withinRange = undefined
       -- x :: Int
@@ -699,8 +692,9 @@ applyReadPreds
 applyReadPreds authorPreds titlePreds entities =
   fmap catMaybes
     $ sequence
-    $ let x = taggedEntrySatisfies authorPreds titlePreds <$> entities
-      in  trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) x
+    $ -- trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) $ 
+      taggedEntrySatisfies authorPreds titlePreds <$> entities
+      
 
 -- | Collects entries of from a single variant's table that were entered within
 -- the given inlusive date range. This amounts to a select query with

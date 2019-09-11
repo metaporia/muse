@@ -50,6 +50,10 @@ instance  ColRender DB where
     putStrLn "" >> colRender col comments
     putStrLn "" >> colRender col chrono
 
+instance (ColRender err, ColRender result) => ColRender (Either err result) where
+  colRender col (Left err) = putStr "Error: " >> colRender col err >> putStr "\n"
+  colRender col (Right result) = colRender col result
+
 instance (Ord v, ColRender v) => ColRender (IxSet v) where
   colRender col ixSet = colRender col (IxSet.toList ixSet)
 

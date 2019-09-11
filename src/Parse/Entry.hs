@@ -605,6 +605,9 @@ data DefQueryVariant
   | DefVersus'
   deriving (Eq, Show)
 
+allDefVariants :: [DefQueryVariant]
+allDefVariants = [Phrase', Defn', InlineDef', DefVersus']
+
 -- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
 -- are unified under a single type with a tag list (the tags refactor will
 -- allow this), the below jank will treat defined phrases as inline

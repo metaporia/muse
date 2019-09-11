@@ -19,6 +19,7 @@ module Store.Sqlite where
 import           Control.Exception              ( SomeException
                                                 , catch
                                                 )
+import           Control.Monad                  ( join )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
@@ -432,6 +433,10 @@ main = runSqlite "test.db" $ do
 --
 schemaTODO = undefined
 
+entryToResult
+  :: ToEntry String record => UTCTime -> record -> Either String Result
+entryToResult utc = fmap (TsR utc) . toEntry 
+
 class Show err =>
       ToEntry err a where
   toEntry :: a -> Either err Entry
@@ -786,25 +791,32 @@ defSearchConstraint  body = foldr
 
 
 -- | Runs 'filterDef' on the results of 'selectDefs'.
+--
+-- If 'DefSearch' contains no definition variants, then all variants will be
+-- included in the output.
 filterDefs
   :: MonadIO m
-  => String
-  -> Day
+  => Day
   -> Day
   -> [String]
   -> [String]
   -> DefSearch
-  -> DB m [Entry]
-filterDefs logPath since before authPreds titlePreds defSearch
-  = do
-    defEntries <- selectDefs since before authPreds titlePreds
-    let logParseErr :: String -> IO ()
-        logParseErr err =
-          appendFile (logPath <> "/" <> "defEntryParseErrors") $ "\n" <> err
-        eitherFiltered     = filterDef defSearch <$> defEntries
-        (logErrs, entries) = catMaybes <$> partitionEithers eitherFiltered
-    traverse_ (liftIO . logParseErr) logErrs
-    return entries
+  -> DB m [Either String Result]
+filterDefs since before authPreds titlePreds defSearch = do
+  let defSearch' = if null (defVariants defSearch)
+        then defSearch { defVariants = allDefVariants }
+        else defSearch
+  defEntries <- selectDefs since before authPreds titlePreds
+  return
+    $   filtermap
+          (\e -> case e of
+            Left  err -> Just (Left err)
+            Right mr  -> do
+              r <- mr
+              Just (Right r)
+          )
+    $   filterDef defSearch'
+    <$> defEntries
 
 -- | Since 'DefEntry's need to be unpacked before the 'DefSearch' can be
 -- applied, the filter entails first selecting all 'DefEntry's within the
@@ -876,14 +888,15 @@ selectDefs since before authPreds titlePreds = do
 --  of the search functions might be easily factored out into one generic
 --  function.
 --
-filterDef :: DefSearch -> Entity DefEntry -> Either String (Maybe Entry)
-filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal }
+filterDef :: DefSearch -> Entity DefEntry -> Either String (Maybe Result)
+filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal, entityKey }
   = do
     let variantSatisfies
           :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
+        (DefEntryKey ts) = entityKey 
     entry <- toEntry entityVal :: Either String Entry
-    (\b -> if b then Just entry else Nothing) <$> case entry of
+    (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
         Right $ variantSatisfies defVariants (Right x) && and
           (headwordPreds <*> hws)
@@ -943,12 +956,13 @@ filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump sto
 
 --- DIALOGUE SEARCH
 
-type DialogueSearch = [String -> Bool]
+type DialogueSearch = [String]
 
 -- | Apply predicates to a dialogue.
 filterDialogue :: DialogueSearch -> Entity DialogueEntry -> Bool
 filterDialogue dialoguePreds (Entity _ (DialogueEntry body _)) =
-  and ((body &) <$> dialoguePreds)
+  and (isInfixOf <$> dialoguePreds <*> pure body)
+
 
 filterDialogues
   :: MonadIO m
@@ -957,7 +971,7 @@ filterDialogues
   -> [String]
   -> [String]
   -> [String]
-  -> DB m [Entity DialogueEntry]
+  -> DB m [Either String Result]
 filterDialogues since before authPreds titlePreds dialoguePreds
   = let
       selectWrapper constraints = if null authPreds && null titlePreds
@@ -971,21 +985,22 @@ filterDialogues since before authPreds titlePreds dialoguePreds
             )
           constraints dialogueEntry
           return dialogueEntry
-    in
-      selectWrapper $ \dialogueEntry -> do
-        where_
-          $   dateRangeConstraint DialogueEntryId
-                                  DialogueEntryKey
-                                  dialogueEntry
-                                  since
-                                  before
-          &&. foldr
-                (\pred rest ->
-                  (dialogueEntry ^. DialogueEntryBody `like` val pred) &&. rest
-                )
-                (val True)
-                dialoguePreds
-        return dialogueEntry
+     in do ds <- selectWrapper $ \dialogueEntry -> do
+                            where_
+                              $   dateRangeConstraint DialogueEntryId
+                                                      DialogueEntryKey
+                                                      dialogueEntry
+                                                      since
+                                                      before
+                              &&. foldr
+                                    (\pred rest ->
+                                      (dialogueEntry ^. DialogueEntryBody `like` val pred) &&. rest
+                                    )
+                                    (val True)
+                                    dialoguePreds
+                            return dialogueEntry
+
+           return $ fmap (\(Entity (DialogueEntryKey ts) entry) -> entryToResult ts entry) ds
 
 
 
@@ -997,6 +1012,22 @@ type CommentarySearch = [String]
 filterCommentary :: CommentarySearch -> Entity CommentaryEntry -> Bool
 filterCommentary commentPreds (Entity _ (CommentaryEntry body _)) =
   and (isInfixOf <$> commentPreds <*> pure body)
+
+filterCommentaries'
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> CommentarySearch
+  -> DB m [Either String Result]
+filterCommentaries' since before authPreds titlePreds commentaryPreds = do
+  cs <- filterCommentaries since before authPreds titlePreds commentaryPreds
+  return $ fmap
+    (\(Entity (CommentaryEntryKey ts) commentaryEntry) ->
+      entryToResult ts commentaryEntry
+    )
+    cs
 
 filterCommentaries
   :: MonadIO m
@@ -1112,6 +1143,17 @@ filterQuotes since before authPreds titlePreds bodyStrs =
           )
         return quoteEntry
 
+filterQuotes'
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> [String]
+  -> DB m [Either String Result]
+filterQuotes' since before auth title quoteBody = do
+  qs <- filterQuotes since before auth title quoteBody
+  return $ fmap (\(Entity (QuoteEntryKey ts) quoteEntry) -> entryToResult ts quoteEntry) qs
 
 clearDb :: T.Text -> IO ()
 clearDb db = runSqlite db $ do

@@ -23,11 +23,13 @@ import           Control.Monad.IO.Class         ( MonadIO
                                                 )
 import           Data.Bifunctor                 ( bimap )
 import           Data.Foldable                  ( traverse_ )
+import Data.Either (rights)
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , fromJust
                                                 , isJust
                                                 , isNothing
+                                                , mapMaybe
                                                 )
 import           Data.Semigroup                 ( (<>) )
 import qualified Data.Text                     as T
@@ -50,7 +52,12 @@ import           Parse
 import qualified Parse                         as P
 import           Parse.Entry
 import qualified Parse.Entry                   as P
+import           Render                         ( showAll )
 import           Store.Sqlite
+import           Store                          ( Result(..)
+                                                , ToResult(..)
+                                                )
+import           Store.Render
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint
@@ -108,51 +115,56 @@ spec = do
                                 ["%simplicity%"]
       liftIO $ quoteEntryBody . entityVal <$> noMatches `shouldBe` []
   describe "definition filtration" $ do 
-    it "all def varians" $ asIO $ runSqlInMem $ do
+    it "all def variants" $ asIO $ runSqlInMem $ do
       (since, before) <- filterQuotesSetup
       defs            <- filterDefs
-        "/home/aporia/.muse/"
         since
         before
         []
         []
         (DefSearch [Defn', Phrase', InlineDef', DefVersus'] [] [])
-      liftIO $ defs `shouldBe` demoDefsAll
+      liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before) <- filterQuotesSetup
-      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [DefVersus'] [] [])
-      liftIO $ defs `shouldBe` demoDefVersus
+      defs <- filterDefs since before [] [] (DefSearch [DefVersus'] [] [])
+      liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before) <- filterQuotesSetup
-      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Defn'] [] [])
-      liftIO $ defs `shouldBe` demoDefn
+      defs <- filterDefs since before [] [] (DefSearch [Defn'] [] [])
+      liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before) <- defVarSetup
-      defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [InlineDef'] [] [])
-      liftIO $ defs `shouldBe` varInline
+      defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
+      liftIO $ resultsToEntry (rights defs) `shouldBe` varInline
     it "phrase definition variants" $ asIO $ runSqlInMem $ do
        (since, before) <- defVarSetup
-       defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Phrase'] [] [])
-       liftIO $ defs `shouldBe` varPhrase
+       defs <- filterDefs since before [] [] (DefSearch [Phrase'] [] [])
+       liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
      
 
 
 
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
 
+resultToEntry :: Result -> Maybe Entry 
+resultToEntry (TsR _ entry) = Just entry
+resultToEntry _ = Nothing
+
+resultsToEntry = mapMaybe resultToEntry
+
 run :: IO ()
 run = runSqlInMem $ do
-  runMigration migrateAll
+  runMigrationSilent migrateAll
   let entries = fromJust $ toMaybe $ parse logEntries defVar
   today <- liftIO $ utctDay <$> getCurrentTime
-  writeDay today entries
+  writeDay today demoLogEntries
+  before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
 
-  before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
-  since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
-
-  defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [Phrase'] [] [])
-  liftIO $ pPrint defs
-
+  matchingQuotes <- rights <$> filterQuotes' since before [] [] []
+  defs <- rights <$> filterDefs since before [] [] (DefSearch [] [] [])
+--  liftIO $ pPrint $ mapMaybe resultToEntry defs
+  liftIO $ showAll $ mapMaybe resultToEntry defs
   return ()
 
 
@@ -166,7 +178,6 @@ demo = runSqlite "sqliteSpec.db" $ do
   es    <- writeDay today demoLogEntries
   liftIO $ sequence $ either putStrLn print <$> es
   -- select all by author 
-
   -- test attribution of 'QuoteEntry'
   -- 1. get quoteEntry
   qe :: Entity QuoteEntry <- head <$> selectList ([] :: [Filter QuoteEntry]) []
@@ -174,7 +185,6 @@ demo = runSqlite "sqliteSpec.db" $ do
   let readKey = fromJust $ do
         entity <- satisfies
         getAttributionTag $ entityVal entity
-
   --liftIO $ pPrint readKey
   --liftIO
   --  $  putStrLn
@@ -204,7 +214,7 @@ demo = runSqlite "sqliteSpec.db" $ do
   --liftIO $ putStrLn "after repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
-  defs <- filterDefs "/home/aporia/.muse/" since before [] [] (DefSearch [InlineDef'] [] [])
+  defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
   liftIO $ pPrint defs
 
   return ()

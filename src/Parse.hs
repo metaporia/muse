@@ -264,6 +264,9 @@ trim' = unwords . fmap trim . lines
 --
 -- N.B. as newline is the closing delimiter, headword list shouldn't exceed one
 -- line.
+--
+-- TODO fail on trailing comma (the first parser given to 'sepBy' should be
+-- more discriminating).
 toDefn :: Parser DefQuery
 toDefn = do
   _         <- symbolic 'd'

@@ -38,6 +38,13 @@ toUTC d (TimeStamp h m s) =
   hrs  = 60 * 60 * h
   mins = 60 * m
 
+fromUTC :: UTCTime -> (Day, TimeStamp)
+fromUTC (UTCTime day dt) = 
+  let seconds = floor $ toRational dt
+      (rest, sec) = divMod seconds 60
+      (hr, min) = divMod rest 60
+   in (day, TimeStamp {..})
+
 -- | Truncates pico seconds from 'DiffTime'.
 truncateUTC :: UTCTime -> UTCTime
 truncateUTC UTCTime {..} =

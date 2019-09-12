@@ -172,9 +172,6 @@ instance ColRender T.Text where
     applyToRest (T.replicate indentation " " <>) .
     wrapTextToLines defaultWrapSettings 79
 
-instance ColRender String where
-  colRender col = colRender col . T.pack
-
 fmt =
   T.unpack
     . T.unlines
@@ -189,4 +186,7 @@ instance ColRender Integer where
   colRender _ = putStr . show
 
 instance ColRender Int where
+  colRender _ = putStr . show
+
+instance ColRender Char where
   colRender _ = putStr . show

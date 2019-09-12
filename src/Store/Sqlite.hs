@@ -12,6 +12,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_HADDOCK prune #-}
 
 module Store.Sqlite where
@@ -34,6 +35,7 @@ import qualified Data.ByteString.Lazy.Char8    as BLC
 import           Data.Either
 import           Data.Foldable                  ( traverse_ )
 import           Data.Function                  ( (&) )
+import           Helpers
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
@@ -71,7 +73,9 @@ import qualified Parse                         as P
 import           Parse.Entry             hiding ( DefQueryVariant(..) )
 import qualified Parse.Entry                   as P
 import           Search
-import           Store                          ( Result(..) )
+import           Store                          ( Result(..)
+                                                , ToResult(..)
+                                                )
 import           Store.Sqlite.Types
 import           Store.Types                    ( AttrTag(..) )
 import           Text.Show.Pretty               ( pPrint
@@ -595,6 +599,7 @@ data SearchConfig = SearchConfig
   , checkDefinitions :: Bool
   , attributionPreds :: ([String], [String]) -- tuple of search author, title search strings
   , definitionSearch :: DefSearch
+
   , quoteSearch :: QuotationSearch
   , commentarySearch :: CommentarySearch
   , dialogueSearch :: DialogueSearch
@@ -602,13 +607,79 @@ data SearchConfig = SearchConfig
   }
 
 
+-- note on cli @--def@/@-d@ should take a string of the format
+-- @"<headword>:<meaning>"@ where either headword or meaning can be omitted and
+-- the colon will inform the search dispatch whether the search string applies
+-- to headwords or meanings--e.g., @":compensation"@ would search for meanings
+-- containing "compensation"; @"malignant"@ and @"malignant:"@ would search for
+-- headwords matching "malignant"; and so on. The bare invocation (without an
+-- argument), @"-d"@/@"--def"@, would select all definitions.
+
+
 -- | Dispatch search.
-dispatchSearch :: SearchConfig -> DB m [Result]
-dispatchSearch SearchConfig {..} =
-  let withinRange = undefined
-      -- x :: Int
-      x           = []
-  in  undefined
+--
+-- The new CLI will make it so that whenever a variant-specific flag is passed,
+-- e.g., a definition headword search string, only definitions of the
+-- appropriate type are included in the output /unless/ another
+-- variant-specific flag is given in which case the two searches will be
+-- performed separately, the results of which will be concatenated--that is,
+-- assuming that the variants specified are /different/; if they are the same,
+-- one narrower search will be performed.
+--
+-- When there are /no/ predicates save those on date or attribution, all
+-- entries within that range are returned. Otherwise, only entries matching the
+-- given predicates are included--that is, entries to which predicates are not
+-- applicable are excluded.
+--
+-- Note that dumps are as yet excluded.
+dispatchSearch
+  :: MonadIO m => String -> SearchConfig -> DB m [Either String Result]
+dispatchSearch logPath SearchConfig {..}
+  = let -- x :: Int 
+      defSearch = if null (defVariants definitionSearch)
+        then definitionSearch { defVariants = allDefVariants }
+        else definitionSearch
+      (authPreds, titlePreds) = attributionPreds
+        --      search :: _
+      search =
+        if null dialogueSearch
+           && not checkDialogues
+           && null commentarySearch
+           && not checkComments
+           && null quoteSearch
+           && not checkQuotes
+           && not checkDefinitions
+           && isDefSearchNull definitionSearch -- test for null before injecting 'allDefVariants'
+        then -- show all in date range matching attribution requirements
+          join <$> sequence
+            [ -- replaces 'DefSearch' with 'allDefVariants'.
+              filterDefs since before authPreds titlePreds defSearch
+            , filterQuotes' since before authPreds titlePreds quoteSearch
+            , filterCommentaries' since
+                                  before
+                                  authPreds
+                                  titlePreds
+                                  commentarySearch
+            , filterDialogues since before authPreds titlePreds dialogueSearch
+            ]
+        else
+          join <$> sequence
+            [ if not (null quoteSearch) || checkQuotes
+              then filterQuotes' since before authPreds titlePreds quoteSearch
+              else return []
+            , if not (null commentarySearch) && checkComments
+              then filterCommentaries' since
+                                       before
+                                       authPreds
+                                       titlePreds
+                                       commentarySearch
+              else return []
+            , if not (isDefSearchNull defSearch) && checkDefinitions
+              then filterDefs since before authPreds titlePreds defSearch
+              else return []
+            ]
+    in
+      search
 
 
 -- | Attribution filters: if the title and author infix lists are empty, these
@@ -783,6 +854,9 @@ data DefSearch = DefSearch
   , headwordPreds :: [String -> Bool]
   , meaningPreds :: [String -> Bool] }
 
+isDefSearchNull :: DefSearch -> Bool
+isDefSearchNull DefSearch {..} = null defVariants && null headwordPreds && null meaningPreds
+
 defSearchConstraint
   :: SqlExpr (Value String) -> [String] -> SqlExpr (Value Bool)
 defSearchConstraint  body = foldr
@@ -803,9 +877,6 @@ filterDefs
   -> DefSearch
   -> DB m [Either String Result]
 filterDefs since before authPreds titlePreds defSearch = do
-  let defSearch' = if null (defVariants defSearch)
-        then defSearch { defVariants = allDefVariants }
-        else defSearch
   defEntries <- selectDefs since before authPreds titlePreds
   return
     $   filtermap
@@ -815,7 +886,7 @@ filterDefs since before authPreds titlePreds defSearch = do
               r <- mr
               Just (Right r)
           )
-    $   filterDef defSearch'
+    $   filterDef defSearch
     <$> defEntries
 
 -- | Since 'DefEntry's need to be unpacked before the 'DefSearch' can be

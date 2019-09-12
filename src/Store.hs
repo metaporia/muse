@@ -274,6 +274,9 @@ fromLogEntry day (TabTsEntry (_, ts, e)) = fromEntry (toUTC day ts) e
 class ToResult ctx a where
   toResult :: ctx -> a -> Result
 
+instance ToResult Day LogEntry where
+  toResult = fromLogEntry
+
 instance ToResult  UTCTime Entry where
   toResult = fromEntry
 

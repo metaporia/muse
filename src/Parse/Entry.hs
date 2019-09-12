@@ -612,8 +612,11 @@ allDefVariants = [Phrase', Defn', InlineDef', DefVersus']
 -- are unified under a single type with a tag list (the tags refactor will
 -- allow this), the below jank will treat defined phrases as inline
 -- definititions.
+--
+-- Should 'DefVersus' count as inline definitions?
 defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
 defHasType InlineDef' (Left (Defined _ _)) = True
+--defHasType InlineDef' (Right (DefVersus _ _ _ _)) = True
 defHasType variant    dq                   = variant == defQueryVariant dq
 
 defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant

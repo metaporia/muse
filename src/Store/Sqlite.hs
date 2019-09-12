@@ -592,7 +592,6 @@ data SearchConfig = SearchConfig
   { since :: Day
   , before :: Day
   , checkDumps :: Bool
-  , checkPhrases :: Bool
   , checkQuotes :: Bool
   , checkDialogues :: Bool
   , checkComments :: Bool
@@ -667,7 +666,7 @@ dispatchSearch logPath SearchConfig {..}
             [ if not (null quoteSearch) || checkQuotes
               then filterQuotes' since before authPreds titlePreds quoteSearch
               else return []
-            , if not (null commentarySearch) && checkComments
+            , if not (null commentarySearch) || checkComments
               then filterCommentaries' since
                                        before
                                        authPreds

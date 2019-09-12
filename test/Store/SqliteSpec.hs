@@ -18,12 +18,18 @@ module Store.SqliteSpec where
 
 
 import           Control.Exception              ( bracket )
+import           Control.Monad                  ( when
+                                                , unless
+                                                )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
 import           Data.Bifunctor                 ( bimap )
+import           Data.Either                    ( lefts
+                                                , rights
+                                                , partitionEithers
+                                                )
 import           Data.Foldable                  ( traverse_ )
-import Data.Either (rights)
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , fromJust
@@ -53,12 +59,12 @@ import qualified Parse                         as P
 import           Parse.Entry
 import qualified Parse.Entry                   as P
 import           Render                         ( showAll )
-import           Store.Sqlite
 import           Store                          ( Result(..)
                                                 , ToResult(..)
                                                 )
 import           Store.Render
-import           Test.Hspec
+import           Store.Sqlite            hiding ( InlineDef )
+import           Test.Hspec              hiding ( before )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
@@ -71,16 +77,18 @@ asIO a = a
 test :: IO ()
 test = hspec spec
 
-spec :: Spec
-spec = do
-  let setup writeAction = do
+setup writeAction = do
         runMigrationSilent migrateAll
         today <- liftIO $ utctDay <$> getCurrentTime
-        writeAction today
+        xs <- writeAction today
         before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
         since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
-        return (since, before)
-      filterQuotesSetup = setup (`writeDay` demoLogEntries)
+        return (since, before, xs)
+
+
+spec :: Spec
+spec = do
+  let filterQuotesSetup = setup (`writeDay` demoLogEntries)
       defVarSetup = setup (\today -> do
         let entries = fromJust $ toMaybe $ parse logEntries defVar
         writeDay today entries)
@@ -97,7 +105,7 @@ spec = do
               >>= applyReadPreds ["Woolf"] ["Light"]
           liftIO $ length satisfactoryDefs `shouldBe` 3
     it "filterQuotes" $ asIO $ runSqlInMem $ do
-      (since, before) <- filterQuotesSetup
+      (since, before, _) <- filterQuotesSetup
       matchingQuotes  <- filterQuotes since
                                       before
                                       ["%Woolf%", "%Virginia%"]
@@ -114,9 +122,9 @@ spec = do
                                 []
                                 ["%simplicity%"]
       liftIO $ quoteEntryBody . entityVal <$> noMatches `shouldBe` []
-  describe "definition filtration" $ do 
+  describe "definition filtration" $ do
     it "all def variants" $ asIO $ runSqlInMem $ do
-      (since, before) <- filterQuotesSetup
+      (since, before, _) <- filterQuotesSetup
       defs            <- filterDefs
         since
         before
@@ -125,35 +133,284 @@ spec = do
         (DefSearch [Defn', Phrase', InlineDef', DefVersus'] [] [])
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
-      (since, before) <- filterQuotesSetup
+      (since, before, _) <- filterQuotesSetup
       defs <- filterDefs since before [] [] (DefSearch [DefVersus'] [] [])
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
-      (since, before) <- filterQuotesSetup
+      (since, before, _) <- filterQuotesSetup
       defs <- filterDefs since before [] [] (DefSearch [Defn'] [] [])
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
-      (since, before) <- defVarSetup
+      (since, before, _) <- defVarSetup
       defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
       liftIO $ resultsToEntry (rights defs) `shouldBe` varInline
     it "phrase definition variants" $ asIO $ runSqlInMem $ do
-       (since, before) <- defVarSetup
+       (since, before, _) <- defVarSetup
        defs <- filterDefs since before [] [] (DefSearch [Phrase'] [] [])
        liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
-     
+  testSearchDispatch
+
+
+
+
+
+
+getDateRange :: MonadIO m => m (Day, Day)
+getDateRange = do
+  before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+  return (since, before)
+
+run = hspec testSearchDispatch
+
+testSearchDispatch :: SpecWith ()
+testSearchDispatch = describe "dispatchSearch" $ do
+  let setup'' file = setup $ \today -> do
+        exampleMuseLog <- liftIO $ readFile file
+        let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
+        partitionEithers <$> writeDay today entries
+      dispatchSearch'
+        :: MonadIO m => SearchConfig -> DB m ([String], [(TimeStamp, Entry)])
+      dispatchSearch' = -- fmap (fmap dropFirst . asTimestamped) . 
+        fmap (fmap (fmap dropFirst . asTimestamped) . partitionEithers)
+          . dispatchSearch "/home/aporia/.muse/log"
+      setup' = setup'' "examples/18.11.24-corrected"
+  it "only test date range"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        let debug = False
+        (since, before, (parseErrs, _)) <- setup'
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+
+        -- these are /only/ for explicitly set entry variant filters.
+        -- They are expected to have been set by the parser.
+        let searchAllBare before' = SearchConfig since
+                                                 before'
+                                                 False -- dump support unimplemented as yet
+                                                 False -- phrases
+                                                 False -- quotes
+                                                 False -- dialogues
+                                                 False -- comments
+                                                 False -- definitions
+                                                 ([], []) -- (authPreds, titlePreds)
+                                                 (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                                 [] -- quote body search strings
+                                                 [] -- commentary ^
+                                                 [] -- dialogue   ^
+                                                 [] -- dump       ^ (ignore)
+        (searchErrs, results) <- dispatchSearch' (searchAllBare before)
+        when
+          debug
+          (if not $ null searchErrs
+            then liftIO $ pPrint' parseErrs
+            else liftIO $ pPrint' results
+          )
+        -- should return all
+        liftIO $ results `shouldBe` dispatchAllBare
+        (searchErrs, results) <- dispatchSearch' (searchAllBare since)
+        -- should return nothing
+        liftIO $ results `shouldBe` []
+  it "definition filters"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        let debug  = False
+            pretty = False
+        (since, before, (parseErrs, _)) <- setup'
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+        let search variants = SearchConfig since
+                                           before
+                                           False -- dump support unimplemented as yet
+                                           False -- phrases
+                                           False -- quotes
+                                           False -- dialogues
+                                           False -- comments
+                                           True -- definitions
+                                           ([], []) -- (authPreds, titlePreds)
+                                           (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                           [] -- quote body search strings
+                                           [] -- commentary ^
+                                           [] -- dialogue   ^
+                                           [] -- dump       ^ (ignore)
+        -- all variants
+        (searchErrs, results) <- dispatchSearch' (search allDefVariants)
+
+        liftIO $ results `shouldBe` dispatchOnlyDefs
+
+        -- no variants
+        (searchErrs, results) <- dispatchSearch' (search [])
+
+        liftIO $ results `shouldBe` dispatchOnlyDefs
+
+        -- only inlines
+        (searchErrs, results) <- dispatchSearch' (search [InlineDef'])
+
+        liftIO $ results `shouldBe` dispatchOnlyInline
+
+        -- only defversus
+        (searchErrs, results) <- dispatchSearch' (search [DefVersus'])
+
+        liftIO $ results `shouldBe` dispatchOnlyDefVersus
+
+        when
+          debug
+          (if not $ null searchErrs
+            then liftIO $ pPrint' parseErrs
+            else if pretty
+              then liftIO $ showAll $ fmap snd results
+              else liftIO $ pPrint' results
+          )
+  it "quote filters (with only one author)"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        let debug  = False
+            pretty = False
+        (since, before, (parseErrs, _)) <- setup'
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+        let search auth title filters = SearchConfig since
+                                           before
+                                           False -- dump support unimplemented as yet
+                                           False -- phrases
+                                           True -- quotes
+                                           False -- dialogues
+                                           False -- comments
+                                           False -- definitions
+                                           (auth, title) -- (authPreds, titlePreds)
+                                           (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                           filters -- quote body search strings
+                                           [] -- commentary ^
+                                           [] -- dialogue   ^
+                                           [] -- dump       ^ (ignore)
+        -- all quotes, no body preds
+        (searchErrs, results) <- dispatchSearch' (search [] [] [])
+
+        liftIO $ results `shouldBe` dispatchOnlyQuotes
+
+        ---- one body pred 
+        (searchErrs, results) <- dispatchSearch' (search [] [] ["%Clevinger%"])
+
+        liftIO $ results `shouldBe` dispatchOneQuotePred
+
+        -- two quote preds (AND)
+        (searchErrs, results) <- dispatchSearch' (search [] [] ["%Clevinger%", "%basic flaw%"])
+
+        liftIO $ results `shouldBe` dispatchOneQuotePred
+
+        ----  auth pred
+        (searchErrs, results) <- dispatchSearch' (search ["%Heller%"] [] [])
+
+        liftIO $ results `shouldBe` dispatchOnlyQuotes
+
+        --- author and one quote preds
+        (searchErrs, results) <- dispatchSearch' (search ["%Heller%"] [] ["%was%"])
+
+        liftIO $ results `shouldBe` dispatchAuthBody
+
+        --- author, title, and one quote preds
+        (searchErrs, results) <- dispatchSearch' (search [] ["%Catch-22%"] ["%was%"])
+        liftIO $ results `shouldBe` dispatchAuthBody
+
+        when
+          debug
+          (if not $ null searchErrs
+            then liftIO $ pPrint' parseErrs
+            else if pretty
+              then liftIO $ showAll $ fmap snd results
+              else liftIO $ pPrint' results
+          )
+  it "quote filters (with many authors)"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        let debug  = True
+            pretty = False
+        (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+        let search auth title filters = SearchConfig since
+                                           before
+                                           False -- dump support unimplemented as yet
+                                           False -- phrases
+                                           True -- quotes
+                                           False -- dialogues
+                                           False -- comments
+                                           False -- definitions
+                                           (auth, title) -- (authPreds, titlePreds)
+                                           (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                           filters -- quote body search strings
+                                           [] -- commentary ^
+                                           [] -- dialogue   ^
+                                           [] -- dump       ^ (ignore)
+        -- all quotes, no body preds
+        (searchErrs, results) <- dispatchSearch' (search [] [] [])
+
+        liftIO $ results `shouldBe` globLogAllQuotes
+        
+        -- austen qs
+        (searchErrs, results) <- dispatchSearch' (search ["%Austen%"] [] [])
+        
+        liftIO $ results `shouldBe` globAustenQs
+
+        -- austen emma quote
+        (searchErrs, results) <- dispatchSearch' (search ["%Austen%"] [] ["%misapply%"])
+        
+        liftIO $ results `shouldBe` globAustenEmma
+
+        -- austen, emma
+        (searchErrs, results) <- dispatchSearch' (search ["%Austen%"] ["%Emma%"] [])
+        
+        liftIO $ results `shouldBe` globAustenEmma
+
+        ------  auth pred
+        --(searchErrs, results) <- dispatchSearch' (search ["%Heller%"] [] [])
+        --
+        --liftIO $ results `shouldBe` dispatchOnlyQuotes
+        --
+        ----- author and one quote preds
+        --(searchErrs, results) <- dispatchSearch' (search ["%Heller%"] [] ["%was%"])
+        --
+        --liftIO $ results `shouldBe` dispatchAuthBody
+        --
+        ----- author, title, and one quote preds
+        --(searchErrs, results) <- dispatchSearch' (search [] ["%Catch-22%"] ["%was%"])
+        --liftIO $ results `shouldBe` dispatchAuthBody
+
+        when
+          debug
+          (if not $ null searchErrs
+            then liftIO $ pPrint' parseErrs
+            else if pretty
+              then liftIO $ showAll $ fmap snd results
+              else liftIO $ pPrint' results
+          )
+
+
+
 
 
 
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
 
-resultToEntry :: Result -> Maybe Entry 
+
+dropFirst :: (a, b, c) -> (b, c)
+dropFirst (a, b, c) = (b, c)
+
+asTimestamped :: [Result] -> [(Day, TimeStamp, Entry)]
+asTimestamped = mapMaybe (\r -> case r of
+                                  TsR utc e -> let (day, ts) = fromUTC utc
+                                                in Just (day, ts, e)
+                                  _ -> Nothing)
+
+resultToEntry :: Result -> Maybe Entry
 resultToEntry (TsR _ entry) = Just entry
 resultToEntry _ = Nothing
 
+resultsToEntry :: [Result] -> [Entry]
 resultsToEntry = mapMaybe resultToEntry
 
-run :: IO ()
-run = runSqlInMem $ do
+run' :: IO ()
+run' = runSqlInMem $ do
   runMigrationSilent migrateAll
   let entries = fromJust $ toMaybe $ parse logEntries defVar
   today <- liftIO $ utctDay <$> getCurrentTime
@@ -177,7 +434,7 @@ demo = runSqlite "sqliteSpec.db" $ do
   -- revision: tagging w/ 'writeDay'
   es    <- writeDay today demoLogEntries
   liftIO $ sequence $ either putStrLn print <$> es
-  -- select all by author 
+  -- select all by author
   -- test attribution of 'QuoteEntry'
   -- 1. get quoteEntry
   qe :: Entity QuoteEntry <- head <$> selectList ([] :: [Filter QuoteEntry]) []
@@ -206,7 +463,7 @@ demo = runSqlite "sqliteSpec.db" $ do
                                  ["%Woolf%"]
                                  ["%Lighthouse%"]
                                  ["%simplicity%"]
-  -- liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
+  liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
   --let newRead = ReadEntry {readEntryTitle = "Title", readEntryAuthor = "Author"} liftIO $ putStrLn "before repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
@@ -215,14 +472,14 @@ demo = runSqlite "sqliteSpec.db" $ do
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
   defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
-  liftIO $ pPrint defs
+  --liftIO $ pPrint defs
 
   return ()
 
 clear :: IO ()
 clear = runSqlite "sqliteSpec.db" $ do
   runMigration migrateAll
-  clear' 
+  clear'
 
 clear' :: MonadIO m => DB m ()
 clear' = do
@@ -452,4 +709,478 @@ varInline =
 varPhrase =
   [ Phr (Plural ["\"fever of suspense\""])
   , Phr (Plural ["\"smarting under an obligation\""])
+  ]
+
+dispatchAllBare =
+  [ ( TimeStamp {hr = 10, min = 7, sec = 15}
+    , Def
+      (Defn
+        Nothing
+        ["lackadaisical", "farinaceous", "idyll", "moue", "furgle", "svelte"]
+      )
+    )
+  , (TimeStamp {hr = 10, min = 7, sec = 44}, Def (Defn Nothing ["filip"]))
+  , (TimeStamp {hr = 10, min = 8, sec = 55}, Def (Defn Nothing ["afflatus"]))
+  , ( TimeStamp {hr = 10, min = 9, sec = 26}
+    , Def (InlineDef "afflate" "(obs.) to inspire; to blow upon")
+    )
+  , ( TimeStamp {hr = 10, min = 9, sec = 37}
+    , Def
+      (Defn
+        Nothing
+        [ "temerity"
+        , "intransigent"
+        , "concupiscent"
+        , "denudate"
+        , "crump"
+        , "piaster"
+        ]
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 9, sec = 57}
+    , Def
+      (Defn
+        Nothing
+        ["rubicund", "cataleptic", "otiose", "argosy", "ersatz", "stentorian"]
+      )
+    )
+  , (TimeStamp {hr = 10, min = 10, sec = 21}, Def (Defn Nothing ["fustian"]))
+  , ( TimeStamp {hr = 10, min = 10, sec = 30}
+    , Def
+      (DefVersus
+        "umber"
+        "brown or reddish pigment"
+        "ochre"
+        "red (hematite) or yellow (limonite) pigment; the color is near orange"
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 14, sec = 28}
+    , Def
+      (DefVersus "flotsam"
+                 "goods which float when lost at sea"
+                 "jetsam"
+                 "goods which sink"
+      )
+    )
+  , (TimeStamp {hr = 10, min = 18, sec = 41}, Def (Defn Nothing ["lissome"]))
+  , ( TimeStamp {hr = 13, min = 25, sec = 38}
+    , Def (Defn Nothing ["incarnadine", "maudlin"])
+    )
+  , ( TimeStamp {hr = 13, min = 26, sec = 41}
+    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    )
+  , ( TimeStamp {hr = 13, min = 27, sec = 30}
+    , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 29}
+    , Def (Defn Nothing ["wroth", "sedulous"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 48}
+    , Def (Defn Nothing ["parturition"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 58}
+    , Def (Defn Nothing ["mucid", "mucous (adj.!)"])
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 6}
+    , Def
+      (Defn
+        Nothing
+        ["versicolor", "andiron", "scrod", "tripe", "vociferous", "myopic"]
+      )
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 32}
+    , Def (Defn Nothing ["grist", "homily", "apothegm", "Wac", "blas\233"])
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 53}
+    , Def (InlineDef "callipygous" "having beautiful buttocks")
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 57}
+    , Def (Defn Nothing ["pullulate", "pullet"])
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 3}
+    , Def
+      (DefVersus
+        "dissent (n.)"
+        "the act of dissenting, disagreement, etc."
+        "dissension (n.)"
+        "disagreement of a violent character; strife; quarrel; discord."
+      )
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 17}
+    , Def (Defn Nothing ["spook", "rapacious", "equine", "clannish"])
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 34}
+    , Def (Defn Nothing ["calcareous", "musette", "cameo"])
+    )
+  , ( TimeStamp {hr = 19, min = 0, sec = 35}
+    , Def (Defn Nothing ["spurt", "sprit"])
+    )
+  , ( TimeStamp {hr = 19, min = 8, sec = 52}
+    , Def (InlineDef "sorrel" "of a yellowish or reddish brown color")
+    )
+  , ( TimeStamp {hr = 19, min = 11, sec = 25}
+    , Def
+      (InlineDef
+        "phlegmatic"
+        "watery; generating or causing phlegm; or, of a person, not easily excited to action"
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 12, sec = 8}
+    , Def
+      (DefVersus
+        "ployment"
+        "the act of forming up a body of troops into, e.g., a column"
+        "deployment"
+        "the act of spreading a body of troops about a front; (modern) resource arrangement or distribution in preparation for battel or work."
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 25, sec = 25}
+    , Def
+      (InlineDef "clasm"
+                 "(colloq.) orgasm or, literally, breakage (as in \"-clast\")"
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 16, sec = 17}
+    , Quotation
+      "...he did not hate his mother and father, even though they had both been very good to him."
+      "In \"Catch-22\" by Joseph Heller"
+      Nothing
+    )
+  , ( TimeStamp {hr = 10, min = 17, sec = 9}
+    , Quotation
+      "Clevinger was dead. That was the basic flaw in his philosophy."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 19, min = 15, sec = 48}
+    , Quotation
+      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "In \"Catch-22\" by Joseph Heller"
+      Nothing
+    )
+  , ( TimeStamp {hr = 19, min = 15, sec = 49}
+    , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
+    )
+  ]
+
+dispatchOnlyDefs =
+  [ ( TimeStamp {hr = 10, min = 7, sec = 15}
+    , Def
+      (Defn
+        Nothing
+        ["lackadaisical", "farinaceous", "idyll", "moue", "furgle", "svelte"]
+      )
+    )
+  , (TimeStamp {hr = 10, min = 7, sec = 44}, Def (Defn Nothing ["filip"]))
+  , (TimeStamp {hr = 10, min = 8, sec = 55}, Def (Defn Nothing ["afflatus"]))
+  , ( TimeStamp {hr = 10, min = 9, sec = 26}
+    , Def (InlineDef "afflate" "(obs.) to inspire; to blow upon")
+    )
+  , ( TimeStamp {hr = 10, min = 9, sec = 37}
+    , Def
+      (Defn
+        Nothing
+        [ "temerity"
+        , "intransigent"
+        , "concupiscent"
+        , "denudate"
+        , "crump"
+        , "piaster"
+        ]
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 9, sec = 57}
+    , Def
+      (Defn
+        Nothing
+        ["rubicund", "cataleptic", "otiose", "argosy", "ersatz", "stentorian"]
+      )
+    )
+  , (TimeStamp {hr = 10, min = 10, sec = 21}, Def (Defn Nothing ["fustian"]))
+  , ( TimeStamp {hr = 10, min = 10, sec = 30}
+    , Def
+      (DefVersus
+        "umber"
+        "brown or reddish pigment"
+        "ochre"
+        "red (hematite) or yellow (limonite) pigment; the color is near orange"
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 14, sec = 28}
+    , Def
+      (DefVersus "flotsam"
+                 "goods which float when lost at sea"
+                 "jetsam"
+                 "goods which sink"
+      )
+    )
+  , (TimeStamp {hr = 10, min = 18, sec = 41}, Def (Defn Nothing ["lissome"]))
+  , ( TimeStamp {hr = 13, min = 25, sec = 38}
+    , Def (Defn Nothing ["incarnadine", "maudlin"])
+    )
+  , ( TimeStamp {hr = 13, min = 26, sec = 41}
+    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    )
+  , ( TimeStamp {hr = 13, min = 27, sec = 30}
+    , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 29}
+    , Def (Defn Nothing ["wroth", "sedulous"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 48}
+    , Def (Defn Nothing ["parturition"])
+    )
+  , ( TimeStamp {hr = 18, min = 57, sec = 58}
+    , Def (Defn Nothing ["mucid", "mucous (adj.!)"])
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 6}
+    , Def
+      (Defn
+        Nothing
+        ["versicolor", "andiron", "scrod", "tripe", "vociferous", "myopic"]
+      )
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 32}
+    , Def (Defn Nothing ["grist", "homily", "apothegm", "Wac", "blas\233"])
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 53}
+    , Def (InlineDef "callipygous" "having beautiful buttocks")
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 57}
+    , Def (Defn Nothing ["pullulate", "pullet"])
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 3}
+    , Def
+      (DefVersus
+        "dissent (n.)"
+        "the act of dissenting, disagreement, etc."
+        "dissension (n.)"
+        "disagreement of a violent character; strife; quarrel; discord."
+      )
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 17}
+    , Def (Defn Nothing ["spook", "rapacious", "equine", "clannish"])
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 34}
+    , Def (Defn Nothing ["calcareous", "musette", "cameo"])
+    )
+  , ( TimeStamp {hr = 19, min = 0, sec = 35}
+    , Def (Defn Nothing ["spurt", "sprit"])
+    )
+  , ( TimeStamp {hr = 19, min = 8, sec = 52}
+    , Def (InlineDef "sorrel" "of a yellowish or reddish brown color")
+    )
+  , ( TimeStamp {hr = 19, min = 11, sec = 25}
+    , Def
+      (InlineDef
+        "phlegmatic"
+        "watery; generating or causing phlegm; or, of a person, not easily excited to action"
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 12, sec = 8}
+    , Def
+      (DefVersus
+        "ployment"
+        "the act of forming up a body of troops into, e.g., a column"
+        "deployment"
+        "the act of spreading a body of troops about a front; (modern) resource arrangement or distribution in preparation for battel or work."
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 25, sec = 25}
+    , Def
+      (InlineDef "clasm"
+                 "(colloq.) orgasm or, literally, breakage (as in \"-clast\")"
+      )
+    )
+  ]
+
+dispatchOnlyInline =
+  [ ( TimeStamp {hr = 10, min = 9, sec = 26}
+    , Def (InlineDef "afflate" "(obs.) to inspire; to blow upon")
+    )
+  , ( TimeStamp {hr = 13, min = 26, sec = 41}
+    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    )
+  , ( TimeStamp {hr = 18, min = 58, sec = 53}
+    , Def (InlineDef "callipygous" "having beautiful buttocks")
+    )
+  , ( TimeStamp {hr = 19, min = 8, sec = 52}
+    , Def (InlineDef "sorrel" "of a yellowish or reddish brown color")
+    )
+  , ( TimeStamp {hr = 19, min = 11, sec = 25}
+    , Def
+      (InlineDef
+        "phlegmatic"
+        "watery; generating or causing phlegm; or, of a person, not easily excited to action"
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 25, sec = 25}
+    , Def
+      (InlineDef "clasm"
+                 "(colloq.) orgasm or, literally, breakage (as in \"-clast\")"
+      )
+    )
+  ]
+
+
+dispatchOnlyDefVersus =
+  [ ( TimeStamp {hr = 10, min = 10, sec = 30}
+    , Def
+      (DefVersus
+        "umber"
+        "brown or reddish pigment"
+        "ochre"
+        "red (hematite) or yellow (limonite) pigment; the color is near orange"
+      )
+    )
+  , ( TimeStamp {hr = 10, min = 14, sec = 28}
+    , Def
+      (DefVersus "flotsam"
+                 "goods which float when lost at sea"
+                 "jetsam"
+                 "goods which sink"
+      )
+    )
+  , ( TimeStamp {hr = 18, min = 59, sec = 3}
+    , Def
+      (DefVersus
+        "dissent (n.)"
+        "the act of dissenting, disagreement, etc."
+        "dissension (n.)"
+        "disagreement of a violent character; strife; quarrel; discord."
+      )
+    )
+  , ( TimeStamp {hr = 19, min = 12, sec = 8}
+    , Def
+      (DefVersus
+        "ployment"
+        "the act of forming up a body of troops into, e.g., a column"
+        "deployment"
+        "the act of spreading a body of troops about a front; (modern) resource arrangement or distribution in preparation for battel or work."
+      )
+    )
+  ]
+
+dispatchOnlyQuotes =
+  [ ( TimeStamp {hr = 10, min = 16, sec = 17}
+    , Quotation
+      "...he did not hate his mother and father, even though they had both been very good to him."
+      "In \"Catch-22\" by Joseph Heller"
+      Nothing
+    )
+  , ( TimeStamp {hr = 10, min = 17, sec = 9}
+    , Quotation
+      "Clevinger was dead. That was the basic flaw in his philosophy."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 19, min = 15, sec = 48}
+    , Quotation
+      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "In \"Catch-22\" by Joseph Heller"
+      Nothing
+    )
+  ]
+
+dispatchOneQuotePred =
+  [ ( TimeStamp {hr = 10, min = 17, sec = 9}
+    , Quotation
+      "Clevinger was dead. That was the basic flaw in his philosophy."
+      ""
+      Nothing
+    )
+  ]
+
+dispatchAuthBody =
+  [ ( TimeStamp {hr = 10, min = 17, sec = 9}
+    , Quotation
+      "Clevinger was dead. That was the basic flaw in his philosophy."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 19, min = 15, sec = 48}
+    , Quotation
+      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "In \"Catch-22\" by Joseph Heller"
+      Nothing
+    )
+  ]
+
+globLogAllQuotes =
+    [ ( TimeStamp {hr = 8, min = 47, sec = 48}
+      , Quotation
+        "What novelty is worth that sweet monotony where everything is known, and _loved_ because it is known?"
+        ""
+        Nothing
+      )
+    , ( TimeStamp {hr = 8, min = 48, sec = 52}
+      , Quotation
+        "...that fly-fishers fail in preparing their bait so as to make it alluring in the right quarter, for want of a due acquaintance with the subjectivity of fishes."
+        ""
+        Nothing
+      )
+    , ( TimeStamp {hr = 12, min = 19, sec = 51}
+      , Quotation "Lucid and ironic, she knew no merciful muddle." "" Nothing
+      )
+    , ( TimeStamp {hr = 17, min = 51, sec = 1}
+      , Quotation "You misunderstand me. I do not fear death. I _resent_ it."
+                  ""
+                  Nothing
+      )
+    , ( TimeStamp {hr = 17, min = 52, sec = 49}
+      , Quotation
+        "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
+        ""
+        Nothing
+      )
+    , ( TimeStamp {hr = 19, min = 31, sec = 2}
+      , Quotation
+        "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and we get very angry at people who don't."
+        ""
+        Nothing
+      )
+    , ( TimeStamp {hr = 20, min = 49, sec = 24}
+      , Quotation "...he had shown her the holiness of direct desire."
+                  ""
+                  Nothing
+      )
+    , ( TimeStamp {hr = 21, min = 28, sec = 18}
+      , Quotation
+        "{There's no,What} better antidote to respect than hypocrisy{.,?}"
+        "Keane Yahn-Krafft"
+        Nothing
+      )
+    , ( TimeStamp {hr = 21, min = 44, sec = 21}
+      , Quotation "Better be without sense, than misapply it as you do."
+                  ""
+                  Nothing
+      )
+    , ( TimeStamp {hr = 23, min = 33, sec = 42}
+      , Quotation
+        "Rationalization isn't just a river in Egyt\8212wait, that's denial."
+        "IZombie"
+        Nothing
+      )
+    ]
+
+globAustenQs =
+  [ ( TimeStamp {hr = 17, min = 52, sec = 49}
+    , Quotation
+      "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 21, min = 44, sec = 21}
+    , Quotation "Better be without sense, than misapply it as you do."
+                ""
+                Nothing
+    )
+  ]
+
+globAustenEmma =
+  [ ( TimeStamp {hr = 21, min = 44, sec = 21}
+    , Quotation "Better be without sense, than misapply it as you do."
+                ""
+                Nothing
+    )
   ]

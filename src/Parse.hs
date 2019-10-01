@@ -1,6 +1,8 @@
 {-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
   ScopedTypeVariables, FlexibleInstances, DeriveGeneric,
   TemplateHaskell #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -23,11 +25,13 @@ import           Control.Monad                  ( void )
 import           Data.Aeson              hiding ( Null
                                                 , (<?>)
                                                 )
+import           Data.Bifunctor                 ( bimap )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhile
                                                 , dropWhileEnd
                                                 , foldl'
                                                 , intercalate
+                                                , isInfixOf
                                                 )
 import           Data.Time
 import           GHC.Generics            hiding ( Infix
@@ -695,6 +699,7 @@ searchType = do
 -- "Eliot^George" -> ["Eliot", "George"]
 preds :: Parser [String]
 preds = sepBy (some $ noneOf "^\n") (char '^')
+
 
 testDump' :: String
 testDump' =

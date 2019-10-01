@@ -63,6 +63,7 @@ import           Data.List                      ( dropWhile
                                                 , intercalate
                                                 )
 import           Data.List.Split                ( splitOn )
+import           Data.Maybe                     ( isJust )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Time
 import           Debug.Trace                    ( trace )

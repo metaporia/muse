@@ -1,5 +1,8 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
   OverloadedStrings, ApplicativeDo, RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -74,6 +77,8 @@ import           Data.Acid.Advanced             ( query'
 import           Data.Acid.Local                ( createCheckpointAndClose )
 import           Data.Acid.Remote
 import           Data.Aeson              hiding ( Null )
+import           Data.Bifunctor                 ( bimap, first )
+import           Data.Maybe                     ( maybe )
 import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
@@ -127,6 +132,7 @@ import           Helpers
 import           Options.Applicative
 import           Parse
 import           Parse.Entry
+import           CLI.Parser.Custom
 import           Prelude                 hiding ( init
                                                 , log
                                                 , lookup
@@ -143,6 +149,7 @@ import           Store                   hiding ( Author
                                                 )
 import           Store.Render
 import qualified Store.Sqlite                  as Sql
+import           Store.Sqlite                   ( SearchConfig )
 import           System.Directory               ( createDirectoryIfMissing
                                                 , doesFileExist
                                                 , getModificationTime
@@ -155,6 +162,7 @@ import           System.Exit                    ( exitFailure
 import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
+import           Store.Sqlite                   ( DefSearch(..) )
 
 x = Sql.main
 
@@ -336,6 +344,75 @@ search' today = do
     , dmps
     )
 
+searchR :: Day -> Parser SearchConfig
+searchR today = do
+
+  authPreds  <- authorS
+  titlePreds <- titleS
+
+  attrs      <-
+    fmap
+        (<>)
+        (   fmap
+            (\s (Attribution _ a) ->
+              (toLower <$> s) `isInfixOf` T.unpack (T.toLower a)
+            )
+        <$> authorS
+        )
+      <*> (   fmap
+              (\s (Attribution t _) ->
+                (toLower <$> s) `isInfixOf` T.unpack (T.toLower t)
+              )
+          <$> titleS
+          )
+
+  defSearch <- parseDefSearch
+
+  dvs <- flag [] [DefVersus'] (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
+
+  ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
+  ps        <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
+  qs        <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
+  dials     <-
+    switch
+    $  long "dialogues"
+    <> long "dias"
+    <> long "dia"
+    <> long "dial"
+    <> help "Collect dialogues."
+  cmts <- switch $ long "comments" <> long "cmts" <> help "Collect comments."
+  dmps      <- switch $ long "dumps" <> long "dmps" <> help "Collect dumps."
+
+  s         <- subRelDur today <$> (sinceAll <|> since)
+
+  dhw'      <- defHW
+  dm'       <- defMeaning
+  q'        <- quoteBody
+  phw'      <- phraseHW
+  pm'       <- phraseMeaning
+  dias'     <- dialogueBody
+  comments' <- commentBody
+
+  pure $ Sql.SearchConfig s
+                          today
+                          dmps
+                          qs
+                          dials
+                          cmts
+                          ds
+                          -- turn search strings into infx
+                          -- searches for SQL's LIKE clause
+                          (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
+                          ((\ds@DefSearch { defVariants } -> ds { defVariants = defVariants ++ dvs} ) defSearch)
+                          (padForSqlLike <$> q')
+                          (padForSqlLike <$> comments')
+                          (padForSqlLike <$> dias')
+                          []
+
+padForSqlLike s = '%':s++"%"
+
+-- mkSearchConfig since before checkDumps checkQuotes checkDialogues checkComments checkDefs check
+
 toInput :: TmpInput -> Input
 toInput (TmpInput s e ap tp preds) =
   let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
@@ -465,6 +542,50 @@ toplevel' today = Opts' <$> color <*> subparser
        )
   )
 
+toplevelR :: Day -> Parser OptsR
+toplevelR today = (OptsR <$> color <*> subparser
+  (  command
+      "search"
+      (info
+        (SearchR <$> searchR today <**> helper)
+        (progDesc
+          "Search log entries by date, author, title, or predicate on entry contents.\
+             \ Inline definitions of headwords or phrases can be searched as well."
+        )
+      )
+  <> command
+       "parse"
+       (info
+         (ParseR <$> parse' <**> helper)
+         (progDesc "Parse entries; a bare invocation runs Rparse --allR")
+       )
+  <> command
+       "lastRead"
+       (info
+         (    FetchLastReadR
+         <$>  switch
+                (long "suppress-newline" <> help "Suppress trailing newline")
+         <**> helper
+         )
+         (progDesc "Fetches most recent \"read\" entry.")
+       )
+  <> command
+       "lint"
+       (info (pure LintR)
+             (progDesc "TBD; for, e.g., author attribution validation")
+       )
+  <> command
+       "init"
+       (info
+         ((InitR <$> quiet <*> ignore) <**> helper)
+         (progDesc
+           "Initialize config file, cache directory, and entry log\
+             \ directory; parse all entries in Rlog-dirR"
+         )
+       )
+  )) <|> (infoOption version (long "version" <> short 'V') <*> pure BareR) -- VERSION
+
+
 
 toplevel'' d =
   toplevel' d
@@ -478,10 +599,25 @@ data SubCommand'
   | Init' Bool
           Bool
 
+data SubCommandR
+  = SearchR Sql.SearchConfig
+  | ParseR InputType
+  | FetchLastReadR Bool -- toggles trailing newline suppression
+  | LintR
+  | InitR Bool
+          Bool
+  deriving Show
+
 data Opts'
   = Opts' { colorize' :: Bool
           , subcommand' :: SubCommand' }
   | Bare
+
+data OptsR
+  = OptsR { colorizeR :: Bool
+          , subcommandR :: SubCommandR }
+  | BareR
+  deriving Show
 
 toplevel :: Day -> Parser Opts
 toplevel today = Opts <$> color <*> subparser
@@ -533,6 +669,107 @@ data SubCommand
 defs :: Parser (Maybe (LogEntry -> Bool))
 defs = flag Nothing (Just isDef) $ long "definitions" <> short 'd' <> help
   "Collect only definitions"
+
+
+
+-- | Definition parser in new style.
+--
+--  * Select definition entries with @-d@/@--def@/@--defs@/@--definition@/@--definitions@.
+--  * Apply (infix, a.t.m.) string searches on both headword and meaning with
+--  @--ds@/@--def-search@.
+--
+-- The definition search option takes one string argument (@<string-arg>@)
+-- which it consumes according to the below grammar.
+--
+--
+-- Search argument grammar:
+--
+--    Note that around the colon whitespace is discarded but within a search
+--    string list is kept and included in the search.
+--  
+--    <search-arg>              ::= <headword-meaning-search>
+--                                | <headword-search>
+--                                | <meaning-search>
+--    <headword-meaning-search> ::= <predicates> ":" <predicates>
+--    <headword-search>         ::= <predicates> | <predicates> ":"
+--    <meaning-search>          :: = ":" <predicates>
+--    <predicates>              ::= <word> { <sep> <word> }
+--    <sep>                     ::= "&" | "|"
+--    <word>                    ::= <char>+
+--    <char>                    ::= [a-zA-Z]
+--    
+-- Applying only one search string to headword and/or meaning:
+--
+--    * @rep@ or @rep :@ : select entries whose headworsd contain "rep"
+--    * @:censure@ : select entries (with inline definitions) whose meanings
+--    contains "censure"
+--    * @rep:censure@ : selects entries that satisfy both of the above
+--    constraints
+--
+-- Searches with with conjunction/disjunction:
+--
+--    * @reprieve|respite@ : select entries whose headword matches either
+--    * @re&oof@ : select entries whose headword matches both 
+--    * @re&oof:latter|delay@ : select entries whose headword satisfy the
+--    above and whose meaning contains either "latter" or "delay"
+--
+
+-- For the time being, the @-d@ option will select all matching definitions of
+-- all variants to which the extracted predicates are applicable. That is, if
+-- only @-d resp@ is received, then /all/ definition types that satisfy will be
+-- included in the output. However, if the search argument is instead of the
+-- form @-d :meaning@, only satisfactory comparisons and inline definitions
+-- will be included in the output as we cannot reasonably apply a meaning
+-- search predicate to definition entries which contain only a headword.
+--
+-- We could supply @--dvs@, @--inline@, @--phrase@ options that each specify a
+-- different 'DefQueryVariant'.
+--
+-- The boolean is 'checkDefinitions'.
+defSearchInput :: Parser (DefSearchInput, Bool)
+defSearchInput = (, True) <$> (uncurry DefPred <$> defR <|> defFlag) <|> pure
+  (DefVariants [], False)
+
+parseDefSearch :: Parser DefSearch 
+parseDefSearch = 
+  ((\case
+    (Just hw, Just mn) -> DefSearch [InlineDef', DefVersus'] [hw] [mn]
+    (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] [] [mn]
+    (Just hw, Nothing) -> DefSearch  allDefVariants [hw] []
+    -- this is really an error, right? yes. see 'searchArgument' it's
+    -- impossible
+    (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
+  ) <$> defR) <|> pure (DefSearch [] [] [])
+
+
+defR :: Parser (Maybe (String -> Bool), Maybe (String -> Bool))
+defR = option
+  (eitherReader (parseEither searchArgument))
+  (  long "def-search"
+  <> long "ds"
+  <> help
+       "Consume \"<headword-preds> : <meaning-preds>, see README for search syntax."
+  )
+
+-- | Expclicitly include definition entries of any variant.
+defFlag :: Parser DefSearchInput
+defFlag = flag'
+  (DefVariants allDefVariants)
+  (  --short 'd' <> 
+  long "def"
+  <> long "defs"
+  <> long "definition"
+  -- <> long "definitions"
+  <> help "Select only definition entries."
+  )
+
+
+
+testP p = execParserPure defaultPrefs pInfo . words
+ where
+  pInfo =
+    --bimap length length <$> 
+      info p (fullDesc <> header "where does this go?")
 
 -- variant flag
 -- beginning of rewrite
@@ -640,6 +877,12 @@ parsePreds s = case parse preds s of
       ++ "\nErrInfo: "
       ++ show err
 
+-- | Run a "Trifecta" parser on a string and convert it to 'Either'.
+parseEither :: Tri.Parser a -> String -> Either String a
+parseEither p s = case parse p s of
+  Tri.Success a   -> Right a
+  Tri.Failure err -> Left $ "parseEither: error: " ++ show err
+
 quotes :: Parser (Maybe (LogEntry -> Bool))
 quotes = flag Nothing (Just isQuote) $ long "quotations" <> short 'q' <> help
   "Collect only quotations"
@@ -714,6 +957,102 @@ main' = do
   execParser
       (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch"))
     >>= dispatch'
+
+mainR :: IO ()
+mainR = do
+  today <- utctDay <$> getCurrentTime
+  execParser (info (helper <*> toplevelR today) (fullDesc <> header "dispatch"))
+    >>= dispatchR
+
+-- | Test CLI parser from ghci.
+testMainOld :: String -> IO ()
+testMainOld s = do
+  today <- utctDay <$> getCurrentTime
+  let result =
+        execParserPure
+            defaultPrefs
+            (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch"))
+          $ words s
+  case result of
+    Options.Applicative.Success opts -> dispatch' opts
+    _ -> putStrLn "err" --pPrint result
+
+
+-- | Test CLI parser from ghci.
+testMain :: String -> IO ()
+testMain s = do
+  today <- utctDay <$> getCurrentTime
+  let result =
+        execParserPure
+            defaultPrefs
+            (info (helper <*> toplevelR today) (fullDesc <> header "dispatch"))
+          $ words s
+  case result of
+    Options.Applicative.Success optsR -> dispatchR optsR
+    _ -> pPrint result
+
+
+-- TODO
+--
+-- □  (!) complete 'parseAllEntriesR' (caching (add table w date of insertion
+-- for each entry, proper db path unification, etc.)
+--
+-- □  wrap 'dispatchSearch' to pretty print output; see 'colRender'
+--
+-- □  lint: run parse but don't write to DB
+-- 
+--
+dispatchR' = undefined
+
+dispatchR :: OptsR -> IO ()
+dispatchR BareR                           = putStrLn version
+dispatchR opts@(OptsR color (SearchR searchConfig)) = do
+  mc <- loadMuseConf
+  runSqlite (sqlDbPath mc) $ do
+    runMigration Sql.migrateAll
+    results <- Sql.dispatchSearch (T.unpack $ home mc <> "/logs") searchConfig -- FIXME decide as to loging/log path
+    -- FIXME only show successes
+    liftIO $ pPrint searchConfig
+    liftIO $ showAll results
+    return ()
+  return ()
+
+    -- FIXME 
+    -- bracket
+    --(openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
+    --createCheckpointAndClose
+    --(\acid -> do
+    --  db <- query acid ViewDB
+    --  putStrLn "searching...\n"
+    --  runSearch' showDebug color s db
+    --  return ()
+    --)
+
+dispatchR (OptsR color LintR                    ) = putStrLn "linting"
+dispatchR (OptsR color (InitR quiet ignoreCache)) = do
+  putStrLn "initializing...\n" -- ++ showMuseConf mc
+  void $ museInit quiet ignoreCache
+dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
+  mc <- loadMuseConf
+  bracket
+    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
+    closeAcidState -- acceptable for read only access?
+    (\acid -> do
+      let put = if suppressNewline then T.putStr else T.putStrLn -- default
+      res <- query acid LastRead
+      case res of
+        Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
+        Nothing     -> exitFailure
+    )
+dispatchR (OptsR color (ParseR it)) = do
+  mc <- loadMuseConf
+  putStrLn "parsing..."
+  s <- case it of
+    File  fp           -> readFile fp
+    StdIn s            -> return s
+    -- TODO update 'parseAllEntries'
+    All silence ignore -> parseAllEntriesR silence ignore mc >> return ""
+  putStrLn s
 
 dispatch' :: Opts' -> IO ()
 dispatch' Bare                           = putStrLn version
@@ -874,6 +1213,9 @@ entryCache (MuseConf _ cache _) = cache <> "parsedEntries/"
 
 entrySource :: MuseConf -> T.Text
 entrySource = log
+
+sqlDbPath :: MuseConf -> T.Text
+sqlDbPath (MuseConf _ _ home) = home <> "/.muse/state/sqlite.db"
 
 config :: MuseConf -> T.Text
 config mc = home mc <> "/.muse/config.yaml"
@@ -1158,8 +1500,8 @@ parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
 --
 -- □  overwrite vs insert 'wrteDay' mode
 --
-parseAllEntries'' :: Bool -> Bool -> MuseConf -> IO ()
-parseAllEntries'' quiet ignoreCache mc@(MuseConf log cache home) = do
+parseAllEntriesR :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntriesR quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
   -- 
       --  TODO rewrite this for sqlite

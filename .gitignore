@@ -1,4 +1,4 @@
-.stack-work/
+.stack-work*/
 *.db-*
 *.db
 state/
@@ -9,3 +9,5 @@ errs
 TAGS
 ctags
 *~
+*.prof
+*.html

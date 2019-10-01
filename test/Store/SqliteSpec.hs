@@ -70,6 +70,8 @@ import           Text.Show.Pretty               ( pPrint
                                                 , ppShow
                                                 )
 import           Time
+import           Control.Monad.Logger
+import           Control.Monad.Trans.Resource
 
 asIO :: IO a -> IO a
 asIO a = a
@@ -161,20 +163,22 @@ getDateRange = do
   since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
   return (since, before)
 
+setup'' file = setup $ \today -> do
+        exampleMuseLog <- liftIO $ readFile file
+        let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
+        partitionEithers <$> writeDay today entries
+
+dispatchSearch'
+        :: MonadIO m => SearchConfig -> DB m ([String], [(TimeStamp, Entry)])
+dispatchSearch' = -- fmap (fmap dropFirst . asTimestamped) .
+  fmap (fmap (fmap dropFirst . asTimestamped) . partitionEithers)
+    . dispatchSearch "/home/aporia/.muse/log"
+
 run = hspec testSearchDispatch
 
 testSearchDispatch :: SpecWith ()
 testSearchDispatch = describe "dispatchSearch" $ do
-  let setup'' file = setup $ \today -> do
-        exampleMuseLog <- liftIO $ readFile file
-        let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
-        partitionEithers <$> writeDay today entries
-      dispatchSearch'
-        :: MonadIO m => SearchConfig -> DB m ([String], [(TimeStamp, Entry)])
-      dispatchSearch' = -- fmap (fmap dropFirst . asTimestamped) . 
-        fmap (fmap (fmap dropFirst . asTimestamped) . partitionEithers)
-          . dispatchSearch "/home/aporia/.muse/log"
-      setup' = setup'' "examples/18.11.24-corrected"
+  let setup' = setup'' "examples/18.11.24-corrected"
   it "only test date range"
     $ asIO
     $ runSqlInMem
@@ -241,15 +245,15 @@ testSearchDispatch = describe "dispatchSearch" $ do
 
         liftIO $ results `shouldBe` dispatchOnlyDefs
 
-        -- only inlines
-        (searchErrs, results) <- dispatchSearch' (search [InlineDef'])
+        ---- only inlines
+        --(searchErrs, results) <- dispatchSearch' (search [InlineDef'])
 
-        liftIO $ results `shouldBe` dispatchOnlyInline
+        --liftIO $ results `shouldBe` dispatchOnlyInline
 
-        -- only defversus
-        (searchErrs, results) <- dispatchSearch' (search [DefVersus'])
+        ---- only defversus
+        --(searchErrs, results) <- dispatchSearch' (search [DefVersus'])
 
-        liftIO $ results `shouldBe` dispatchOnlyDefVersus
+        --liftIO $ results `shouldBe` dispatchOnlyDefVersus
 
         when
           debug
@@ -285,7 +289,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
 
         liftIO $ results `shouldBe` dispatchOnlyQuotes
 
-        ---- one body pred 
+        ---- one body pred
         (searchErrs, results) <- dispatchSearch' (search [] [] ["%Clevinger%"])
 
         liftIO $ results `shouldBe` dispatchOneQuotePred
@@ -414,7 +418,8 @@ testSearchDispatch = describe "dispatchSearch" $ do
         (searchErrs, results) <- dispatchSearch' (search ["%lexical%"])
 
         liftIO $ results `shouldBe` globCommentLexical
-  it "multi-variant queries"
+
+  it "phrases & quotes queries"
     $ asIO
     $ runSqlInMem
     $ do
@@ -422,26 +427,29 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search auth title variants qs = SearchConfig since
-                                                before
-                                                False -- dump support unimplemented as yet
-                                                True  -- quotes
-                                                False -- dialogues
-                                                False -- comments
-                                                True -- definitions
-                                                (auth, title) -- (authPreds, titlePreds)
-                                                (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
-                                                qs -- quote body search strings
-                                                [] -- commentary ^
-                                                [] -- dialogue   ^
-                                                [] -- dump       ^ (ignore)
+        let search auth title variants qs = SearchConfig
+              since
+              before
+              False -- dump support unimplemented as yet
+              True  -- quotes
+              False -- dialogues
+              False -- comments
+              True -- definitions
+              (auth, title) -- (authPreds, titlePreds)
+              (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
+              qs -- quote body search strings
+              [] -- commentary ^
+              [] -- dialogue   ^
+              [] -- dump       ^ (ignore)
         -- phrases and quotes by eliot
-        (searchErrs, results) <- dispatchSearch' (search ["%Eliot%"] [] [Phrase'] [])
+        (searchErrs, results) <- dispatchSearch'
+          (search ["%Eliot%"] [] [Phrase'] [])
 
         liftIO $ results `shouldBe` globMultiPhrQt
 
         -- defversus and quotes matching "holiness"
-        (searchErrs, results) <- dispatchSearch' (search [] [] [DefVersus'] ["%holiness%"])
+        (searchErrs, results) <- dispatchSearch'
+          (search [] [] [DefVersus'] ["%holiness%"])
 
         liftIO $ results `shouldBe` globMultiDefVsQt
 
@@ -453,6 +461,61 @@ testSearchDispatch = describe "dispatchSearch" $ do
               then liftIO $ showAll $ fmap snd results
               else liftIO $ pPrint' results
           )
+
+pSearch search = runSqlInMem $ do
+  (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
+  liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+  -- (searchErrs, results) <-  (searchAllBare before)
+  (searchErrs, results) <- dispatchSearch' search 
+  liftIO $ showAll $ fmap snd results 
+
+  
+
+
+  --it "multi-variant queries"
+  --  $ asIO
+  --  $ runSqlInMem
+  --  $ do
+  --      let debug  = False
+  --          pretty = False
+  --      (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
+  --      liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+  --      let search auth title variants qs = SearchConfig
+  --            since
+  --            before
+  --            False -- dump support unimplemented as yet
+  --            True  -- quotes
+  --            False -- dialogues
+  --            False -- comments
+  --            True -- definitions
+  --            (auth, title) -- (authPreds, titlePreds)
+  --            (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
+  --            qs -- quote body search strings
+  --            [] -- commentary ^
+  --            [] -- dialogue   ^
+  --            [] -- dump       ^ (ignore)
+  --      -- phrases and quotes by eliot
+  --      (searchErrs, results) <- dispatchSearch'
+  --        (search ["%Eliot%"] [] [Phrase'] [])
+
+  --      liftIO $ results `shouldBe` globMultiPhrQt
+
+  --      -- defversus and quotes matching "holiness"
+  --      (searchErrs, results) <- dispatchSearch'
+  --        (search [] [] [DefVersus'] ["%holiness%"])
+
+  --      liftIO $ results `shouldBe` globMultiDefVsQt
+
+  --      when
+  --        debug
+  --        (if not $ null searchErrs
+  --          then liftIO $ pPrint' parseErrs
+  --          else if pretty
+  --            then liftIO $ showAll $ fmap snd results
+  --            else liftIO $ pPrint' results
+  --        )
+
+
 runSqlInMem = runSqliteInfo $ mkSqliteConnectionInfo ":memory:"
 
 
@@ -487,6 +550,18 @@ run' = runSqlInMem $ do
   liftIO $ showAll $ mapMaybe resultToEntry defs
   return ()
 
+test' :: String -> IO ()
+test' x =
+  runResourceT
+    . runStdoutLoggingT
+    . withSqliteConn "/home/aporia/.muse/state/sqlite.db"
+    . runSqlConn
+    $ do
+        before   <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+        since    <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+        matching <- filterQuotes since before [] [] ["%" <> x <> "%"]
+        liftIO $ traverse_ (pPrint . quoteEntryBody . entityVal) matching
+        return ()
 
 demo :: IO ()
 demo = runSqlite "sqliteSpec.db" $ do

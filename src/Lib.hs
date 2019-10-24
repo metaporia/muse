@@ -77,8 +77,9 @@ import           Data.Acid.Advanced             ( query'
 import           Data.Acid.Local                ( createCheckpointAndClose )
 import           Data.Acid.Remote
 import           Data.Aeson              hiding ( Null )
-import           Data.Bifunctor                 ( bimap, first )
-import           Data.Maybe                     ( maybe )
+import           Data.Bifunctor                 ( bimap
+                                                , first
+                                                )
 import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
@@ -112,6 +113,7 @@ import           Data.Maybe                     ( catMaybes
                                                 , fromJust
                                                 , isJust
                                                 , mapMaybe
+                                                , maybe
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
@@ -133,6 +135,7 @@ import           Options.Applicative
 import           Parse
 import           Parse.Entry
 import           CLI.Parser.Custom
+import           CLI.Parser.Types
 import           Prelude                 hiding ( init
                                                 , log
                                                 , lookup
@@ -162,7 +165,10 @@ import           System.Exit                    ( exitFailure
 import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
-import           Store.Sqlite                   ( DefSearch(..) )
+import           Store.Sqlite                   ( DefSearch(..)
+                                                , StrSearch(..)
+                                                , DefSearchR(..)
+                                                )
 
 x = Sql.main
 
@@ -366,7 +372,8 @@ searchR today = do
           <$> titleS
           )
 
-  defSearch <- parseDefSearch
+  -- defSearch <- parseDefSearch
+  defSearchR <- parseDefSearchR
 
   dvs <- flag [] [DefVersus'] (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
 
@@ -394,20 +401,20 @@ searchR today = do
   comments' <- commentBody
 
   pure $ Sql.SearchConfig s
-                          today
-                          dmps
-                          qs
-                          dials
-                          cmts
-                          ds
-                          -- turn search strings into infx
-                          -- searches for SQL's LIKE clause
-                          (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
-                          ((\ds@DefSearch { defVariants } -> ds { defVariants = defVariants ++ dvs} ) defSearch)
-                          (padForSqlLike <$> q')
-                          (padForSqlLike <$> comments')
-                          (padForSqlLike <$> dias')
-                          []
+                        today
+                        dmps
+                        qs
+                        dials
+                        cmts
+                        ds
+                        -- turn search strings into infx
+                        -- searches for SQL's LIKE clause
+                        (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
+                        ((\ds@DefSearchR { defVariantsR } -> ds { defVariantsR = defVariantsR ++ dvs} ) defSearchR)
+                        (padForSqlLike <$> q')
+                        (padForSqlLike <$> comments')
+                        (padForSqlLike <$> dias')
+                        []
 
 padForSqlLike s = '%':s++"%"
 
@@ -730,6 +737,7 @@ defSearchInput :: Parser (DefSearchInput, Bool)
 defSearchInput = (, True) <$> (uncurry DefPred <$> defR <|> defFlag) <|> pure
   (DefVariants [], False)
 
+-- NOTE this one is used in the current CLI parser
 parseDefSearch :: Parser DefSearch 
 parseDefSearch = 
   ((\case
@@ -740,6 +748,33 @@ parseDefSearch =
     -- impossible
     (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
   ) <$> defR) <|> pure (DefSearch [] [] [])
+
+-- Proprosed replacement as part of search string padding deferral.
+parseDefSearchR :: Parser DefSearchR
+parseDefSearchR = 
+  ((\case
+    (Just hw, Just mn) -> DefSearchR [InlineDef', DefVersus'] (Just hw) (Just mn)
+    (Nothing, Just mn) -> DefSearchR [InlineDef', DefVersus'] Nothing (Just mn)
+    (Just hw, Nothing) -> DefSearchR  allDefVariants (Just hw) Nothing
+    -- this is really an error, right? yes. see 'searchArgument' it's
+    -- impossible
+    (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
+  ) <$> defRR) <|> pure (DefSearchR [] Nothing Nothing)
+
+
+-- search string deferral revision
+defRR
+  :: Parser
+       ( Maybe (BoolExpr (StrSearch String))
+       , Maybe (BoolExpr (StrSearch String))
+       )
+defRR = option
+  (eitherReader (parseEither searchArgumentRR))
+  (  long "def-search"
+  <> long "ds"
+  <> help
+       "Consume \"<headword-preds> : <meaning-preds>, see README for search syntax."
+  )
 
 
 defR :: Parser (Maybe (String -> Bool), Maybe (String -> Bool))
@@ -958,6 +993,7 @@ main' = do
       (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch"))
     >>= dispatch'
 
+-- | This is currently in use.
 mainR :: IO ()
 mainR = do
   today <- utctDay <$> getCurrentTime

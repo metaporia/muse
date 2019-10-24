@@ -17,6 +17,7 @@
 
 module Store.Sqlite where
 
+import           CLI.Parser.Types               ( BoolExpr, interpretBoolExpr, boolExprToList )
 import           Control.Exception              ( SomeException
                                                 , catch
                                                 )
@@ -36,10 +37,11 @@ import           Data.Either
 import           Data.Foldable                  ( traverse_ )
 import           Data.Function                  ( (&) )
 import           Helpers
-import           Data.List                      ( isInfixOf )
+import           Data.List                      ( isInfixOf, isPrefixOf, isSuffixOf )
 import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
                                                 )
+import qualified Data.Maybe as Maybe
 import           Data.Semigroup                 ( (<>) )
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
@@ -135,7 +137,14 @@ DumpEntry
 |]
 
 
-data EntryType = ERead | EQuote | EDef | ECommentary | EDialogue | EPageNumber | EDump deriving (Eq, Show)
+data EntryType = ERead
+               | EQuote
+               | EDef
+               | ECommentary
+               | EDialogue
+               | EPageNumber
+               | EDump
+               deriving (Eq, Show)
 
 class Tagged a where
   getAttributionTag :: a -> Maybe (Key ReadEntry)
@@ -202,6 +211,37 @@ instance FromJSON InlineDef
 --      individual entries, each of which converted entry component wuold no
 --      longer have a timestamp as a primary key but some auto-incremented
 --      internal integer. 
+--
+--    Proposed DefEntry schema under option (i):
+--      
+--      A sparsely populated row for each definition entry would need fields to
+--      support: 
+--        * headword lists
+--        * '--- vs ---'-separated inline definitions.
+--
+--        THIS WON'T ALLOW MORE CONVOLUTED SEARCH PREDICATES.
+--
+
+--  Lists of definition variants are difficult to model sqlite. We have two
+--  options:
+--    i. json-encode lists and apply (only complex, as a potential
+--       optimization) predicates to haskell lists
+--
+--    ii. Unpack variable length arrays into sql tables referenced by a table
+--        keyed by timestamps. In the case of the DefEntry, we would have
+--        a...WAIT
+--
+--  (!!LATEST!!) we can speed up a /lot/ of queries by apply, e.g., string searches
+--  with SQL's LIKE operator, and then apply any remaining specifications of
+--  the query to only the remainder of the entries; in this way, we can avoid
+--  decoding /most/ of the unwanted entries and only suffer the time overhead
+--  for a minority of partial matches.
+
+--
+--
+--
+--
+--      
 --
 -- TODO use CASE statements to short-circuit def search select queries when the
 -- current entity has the wrong variant tag--left-to-right evaluation, and
@@ -622,7 +662,7 @@ data SearchConfig = SearchConfig
   , checkComments :: Bool
   , checkDefinitions :: Bool
   , attributionPreds :: ([String], [String]) -- tuple of search author, title search strings
-  , definitionSearch :: DefSearch
+  , definitionSearch :: DefSearchR
 
   , quoteSearch :: QuotationSearch
   , commentarySearch :: CommentarySearch
@@ -673,11 +713,11 @@ dispatchSearch logPath SearchConfig {..}
            && null quoteSearch
            && not checkQuotes
            && not checkDefinitions
-           && isDefSearchNull definitionSearch -- test for null before injecting 'allDefVariants'
+           && isDefSearchNullR definitionSearch -- test for null before injecting 'allDefVariants'
         then -- show all in date range matching attribution requirements
           join <$> sequence
             [ -- replaces 'DefSearch' with 'allDefVariants'.
-              filterDefs since before authPreds titlePreds defSearch { defVariants = allDefVariants }
+              filterDefs' since before authPreds titlePreds defSearch { defVariantsR = allDefVariants }
             , filterQuotes' since before authPreds titlePreds quoteSearch
             , filterCommentaries' since
                                   before
@@ -698,13 +738,13 @@ dispatchSearch logPath SearchConfig {..}
                                        titlePreds
                                        commentarySearch
               else return []
-            , if not (isDefSearchNull defSearch) || checkDefinitions
-              then filterDefs since before authPreds titlePreds 
+            , if not (isDefSearchNullR defSearch) || checkDefinitions
+              then filterDefs' since before authPreds titlePreds 
                   -- when the definition flag is passed, but no def variants
                   -- are specified, return all variants; otherwise, use the
                   -- defSearch unmodified.
-                  (if null (defVariants defSearch) && checkDefinitions
-                      then defSearch { defVariants = allDefVariants }
+                  (if null (defVariantsR defSearch) && checkDefinitions
+                      then defSearch { defVariantsR = allDefVariants }
                       else defSearch)
               else return []
             ]
@@ -879,18 +919,73 @@ attributionConstraints readEntry authPreds titlePreds =
 
 -- | Search predicates specifically for definitions. See 'filterDef'\'s
 -- documentation for more details.
+
 data DefSearch = DefSearch
   { defVariants :: [P.DefQueryVariant]
   , headwordPreds :: [String -> Bool]
   , meaningPreds :: [String -> Bool] }
+
+
+data StrSearch s = PrefixSearch s
+                      | InfixSearch s
+                      | SuffixSearch s
+                      deriving (Eq, Show)
+
+instance Functor StrSearch where
+  fmap f (PrefixSearch s) = PrefixSearch (f s)
+  fmap f (InfixSearch s) = InfixSearch (f s)
+  fmap f (SuffixSearch s) = SuffixSearch (f s)
+
+fromStrSearch :: StrSearch s -> s
+fromStrSearch (PrefixSearch s) = s
+fromStrSearch (InfixSearch s) = s
+fromStrSearch (SuffixSearch s) = s
+
+sqlPadStrSearch :: StrSearch String -> String
+sqlPadStrSearch (PrefixSearch s) = s++"%"
+sqlPadStrSearch (InfixSearch s) = '%':s++"%"
+sqlPadStrSearch (SuffixSearch s) = '%':s
+
+
+
+strSearchToPredicate :: StrSearch String -> (String -> Bool)
+strSearchToPredicate (PrefixSearch s) = isPrefixOf s
+strSearchToPredicate (InfixSearch s) = isInfixOf s
+strSearchToPredicate (SuffixSearch s) = isSuffixOf s
+
+-- | When theere is no 'BoolExpr', return True (this result is usually ANDed
+-- and so we don't wish to declare an entry unsatisfactory when there is no
+-- search expression. 
+applyBoolExpr :: Maybe (BoolExpr (StrSearch String)) -> String -> Bool
+applyBoolExpr Nothing   _ = True
+applyBoolExpr (Just be) s = interpretBoolExpr ((s &) . strSearchToPredicate) be
+
+
+
+-- Revision of 'DefSearch' to accomodate deferred string search type dispatch
+-- (prefix vs infix vs suffix).
+data DefSearchR = DefSearchR
+  { defVariantsR :: [P.DefQueryVariant]
+  , headwordPredsR :: Maybe (BoolExpr (StrSearch String))
+  , meaningPredsR :: Maybe (BoolExpr (StrSearch String)) }
+  deriving Show
 
 instance Show DefSearch where
   show (DefSearch variants hws mns) =
     "DefSearch " <> show variants <> " " <> show (length hws) <> " " <>
     show (length mns)
 
+
+
 isDefSearchNull :: DefSearch -> Bool
 isDefSearchNull DefSearch {..} = null defVariants && null headwordPreds && null meaningPreds
+ 
+isDefSearchNullR :: DefSearchR -> Bool
+isDefSearchNullR DefSearchR {..} =
+  null defVariantsR
+    && Maybe.isNothing headwordPredsR
+    && Maybe.isNothing meaningPredsR
+
 
 defSearchConstraint
   :: SqlExpr (Value String) -> [String] -> SqlExpr (Value Bool)
@@ -909,7 +1004,7 @@ filterDefs
   -> Day
   -> [String]
   -> [String]
-  -> DefSearch
+  -> DefSearchR
   -> DB m [Either String Result]
 filterDefs since before authPreds titlePreds defSearch = do
   defEntries <- selectDefs since before authPreds titlePreds
@@ -921,7 +1016,7 @@ filterDefs since before authPreds titlePreds defSearch = do
               r <- mr
               Just (Right r)
           )
-    $   filterDef defSearch
+    $   filterDefR defSearch -- this costly af
     <$> defEntries
 
 -- | Since 'DefEntry's need to be unpacked before the 'DefSearch' can be
@@ -933,6 +1028,7 @@ filterDefs since before authPreds titlePreds defSearch = do
 --  If /any/ 'DefEntry' json is found to be malformed the incident will be
 --  logged to ~/.muse/logs/. Assumes that the log path is /not/ suffixed with a
 --  forwardslash.
+
 selectDefs
   :: MonadIO m => Day -> Day -> [String] -> [String] -> DB m [Entity DefEntry]
 selectDefs since before authPreds titlePreds = do
@@ -951,6 +1047,93 @@ selectDefs since before authPreds titlePreds = do
                                   titlePreds
         &&. dateConstraint defEntry
       return defEntry
+
+
+-- TODO fix TL.Text <-> string conversions
+filterDefs'
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> DefSearchR
+  -> DB m [Either String Result]
+filterDefs' since before authPreds titlePreds defSearch = do
+  let mns = maybe [] (foldr ((:) . sqlPadStrSearch) [] ) (meaningPredsR defSearch)
+      -- this extracts all the string searches and pads them as infix searches
+      -- for use with SQL's LIKE operator.
+      infixSearches = maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPredsR defSearch)
+  -- liftIO $ traverse print infixSearches
+  defEntries <- selectDefs' since before authPreds titlePreds infixSearches -- collect all strings
+  return
+    $   filtermap
+          (\e -> case e of
+            Left  err -> Just (Left err)
+            Right mr  -> do
+              r <- mr
+              Just (Right r)
+          )
+    $   filterDefR defSearch -- this costly af
+    <$> defEntries
+-- | Revision of 'selectDefs'' that braves false positives by applying each
+-- string search predicates, viz., headword, meaning, to the json-encoded
+-- definition entry. 
+--
+-- This will eliminate many obviously undesirable candidate
+-- entries.
+--
+-- FIXME this relies on search strings being infix.
+-- When we get around to implementing prefix and suffix searches, perhaps the
+-- CLI's input structure could yield values of the following enum:
+--
+--   @
+--   data SearchString = PrefixSearch String
+--                     | InfixSearch String
+--                     | SuffixSearch String
+--                     deriving (Eq, Generic, Show)
+--   @
+-- 
+-- And provide an sql-aware function pad the query appropriately; that is,
+-- surround with "%" for infix, prefix "%" for prefix, and suffix "%" for
+-- suffix. With this deferred search couching, 'selectDefs'' retains acesss to
+-- the raw query with which it can apply in infix fashion to each def entry's
+-- JSON representation. 
+--
+-- 'selectDefs'' takes as list of search strings that will be dispatched as
+-- infix queries.
+--
+-- TODO we can also filter def subvariants here, as those are exposed as a field in
+-- the sql row .
+--
+selectDefs'
+  :: MonadIO m => Day -> Day -> [String] -> [String] -> [String] -> DB m [Entity DefEntry]
+selectDefs' since before authPreds titlePreds infixSearches' = do
+  let infixSearches = TL.pack <$> infixSearches'
+  let dateConstraint defEntry =
+        dateRangeConstraint DefEntryId DefEntryKey defEntry since before
+      matchesInfixSearches defEntry =
+        genericSearchConstraint (defEntry ^. DefEntryDefinitions) infixSearches
+
+  if null authPreds && null titlePreds
+    then
+      select
+      $ from
+      $ \defEntry -> do
+          -- TODO apply def variant predicates here
+          -- let defTag = defEntry  ^. DefEntryDefinitionTag
+          where_ (dateConstraint defEntry &&. matchesInfixSearches defEntry)
+          return defEntry
+    else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
+      on
+        (defEntry ^. DefEntryAttributionTag ==. just (readEntry ^. ReadEntryId))
+      where_
+        $ attributionConstraint (just $ readEntry ^. ReadEntryAuthor) authPreds
+        &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
+                                  titlePreds
+        &&. dateConstraint defEntry
+      return defEntry
+
+
 
 
 
@@ -1034,6 +1217,48 @@ filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entity
         Left
           "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\
                        \           but found another 'Entry' variant."
+filterDefR :: DefSearchR -> Entity DefEntry -> Either String (Maybe Result)
+filterDefR DefSearchR { defVariantsR, headwordPredsR, meaningPredsR } Entity { entityVal, entityKey }
+  = do
+    let variantSatisfies
+          :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
+        variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
+        (DefEntryKey ts)   = entityKey
+        applyHeadwordPreds = fmap (applyBoolExpr headwordPredsR)
+    entry <- toEntry entityVal :: Either String Entry
+    (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
+      Def x@(P.Defn mPg hws) ->
+        Right $ variantSatisfies defVariantsR (Right x) && and
+          (applyBoolExpr headwordPredsR <$> hws)
+      Def x@(P.InlineDef hw mn) ->
+        Right
+          $  variantSatisfies defVariantsR (Right x)
+          && applyBoolExpr headwordPredsR hw
+          && applyBoolExpr meaningPredsR  mn
+      Def x@(P.DefVersus hw mn hw' mn') ->
+        Right
+          $ -- only one of the two compared definitions need satisfy
+             variantSatisfies defVariantsR (Right x)
+          && (  (  applyBoolExpr headwordPredsR hw
+                && applyBoolExpr meaningPredsR  mn
+                )
+             || (  applyBoolExpr headwordPredsR hw'
+                && applyBoolExpr meaningPredsR  mn'
+                )
+             )
+      Phr x@(Plural hws) ->
+        Right $ variantSatisfies defVariantsR (Left x) && and
+          (applyHeadwordPreds hws)
+      Phr x@(Defined hw mn) ->
+        Right
+          $  variantSatisfies defVariantsR (Left x)
+          && applyBoolExpr headwordPredsR hw
+          && applyBoolExpr meaningPredsR  mn
+      _ ->
+        Left
+          "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\
+                       \           but found another 'Entry' variant."
+
 
 
 
@@ -1185,6 +1410,22 @@ quoteBodySearchConstraint
 quoteBodySearchConstraint quoteBody = foldr
   (\searchStr rest -> (quoteBody `like` val searchStr) &&. rest)
   (val True)
+
+-- | Asserts that a text fragment matches all of a list of searches
+genericSearchConstraint
+  :: SqlString a => SqlExpr (Value a) -> [a] -> SqlExpr (Value Bool)
+genericSearchConstraint textToSearch =
+  foldr (\query rest -> (textToSearch `like` val query) &&. rest) (val True)
+
+-- | Asserts that a text fragment matches all of a list of searches
+genericSearchConstraintOr
+  :: SqlString a => SqlExpr (Value a) -> [a] -> SqlExpr (Value Bool)
+genericSearchConstraintOr textToSearch =
+  foldr (\query rest -> (textToSearch `like` val query) ||. rest) (val False)
+
+
+
+
 
 -- | 
 --  We want to produce sql that is a generalization of the below: 

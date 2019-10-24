@@ -14,12 +14,17 @@
 -----------------------------------------------------------------------------
 module CLI.Parser.Custom where
 
+import           CLI.Parser.Types
 import           Control.Applicative
 import           Data.Bifunctor                 ( bimap )
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( isJust )
-import           Parse.Entry                    ( DefQueryVariant(..), allDefVariants )
-import           Store.Sqlite                   ( DefSearch(..) )
+import           Parse.Entry                    ( DefQueryVariant(..)
+                                                , allDefVariants
+                                                )
+import           Store.Sqlite                   ( DefSearch(..)
+                                                , StrSearch(..)
+                                                )
 import           Text.Trifecta
 
 --- CLI's custom search argument parser.
@@ -93,7 +98,55 @@ searchArgument =
       , \s -> interpretBoolExpr (`isInfixOf` s) meaningExpr
       )
 
-data DefSearch' = DefSearch' [DefQueryVariant] (Maybe (String -> Bool)) (Maybe (String -> Bool))
+-- Revised for 'StrSearch' refactor depended on by DefEntry search
+-- optimization. See 'selectDefs'' for refactor purpose statement and details.
+--
+-- TODO revise with 'These' datatype:
+--
+--   @
+--   data These a b = This a | That b | These a b
+--   @
+--
+-- Parses def search query string as specified in the docs for 'defR' but
+-- defers search string padding (with "%" characters for SQL's @LIKE@ operator)
+-- to the SQL query wrappers (see @filter*@ and 'selectDefs'').
+--
+-- FIXME with the above deferral 
+-- FIXME as yet this supports only infix search
+searchArgumentRR
+  :: Parser
+       ( Maybe (BoolExpr (StrSearch String))
+       , Maybe (BoolExpr (StrSearch String))
+       )
+searchArgumentRR =
+  bimap Just Just
+    <$> try headwordAndMeaning
+    <|> ((Nothing, ) . Just <$> try meaningOnly)
+    <|> ((, Nothing) . Just <$> headwordOnly)
+ where
+  headwordOnly :: Parser (BoolExpr (StrSearch String))
+  headwordOnly = do
+    expr <- parseBoolExpr
+    skipOptional (symbolic ':')
+    return $ InfixSearch <$> expr
+
+  meaningOnly :: Parser (BoolExpr (StrSearch String))
+  meaningOnly = do
+    symbolic ':'
+    expr <- parseBoolExpr
+    return $ InfixSearch <$> expr
+
+  headwordAndMeaning
+    :: Parser (BoolExpr (StrSearch String), BoolExpr (StrSearch String))
+  headwordAndMeaning = do
+    hwExpr <- parseBoolExpr
+    symbolic ':'
+    meaningExpr <- parseBoolExpr
+    return (InfixSearch <$> hwExpr, InfixSearch <$> meaningExpr)
+
+data DefSearch' = DefSearch' [DefQueryVariant] 
+                             (Maybe (String -> Bool)) 
+                             (Maybe (String -> Bool))
 
 
 searchArgumentR :: Parser DefSearch'
@@ -127,71 +180,5 @@ searchArgumentR =
       [InlineDef', DefVersus']
       (Just $ \s -> interpretBoolExpr (`isInfixOf` s) hwExpr)
       (Just $ \s -> interpretBoolExpr (`isInfixOf` s) meaningExpr)
-
-
-
-data BoolExpr a = AndE (BoolExpr a) (BoolExpr a)
-                | OrE (BoolExpr a) (BoolExpr a)
-                | LitE a
-                deriving (Show)
-
-instance Functor BoolExpr where
-  fmap f (LitE a) = LitE (f a)
-  fmap f (OrE l r) = OrE (fmap f l) (fmap f r)
-  fmap f (AndE l r) = AndE (fmap f l) (fmap f r)
-
-instance Foldable BoolExpr where
-  foldr f base (AndE l r) = foldr f (foldr f base r) l
-  foldr f base (OrE l r) = foldr f (foldr f base r) l
-  foldr f base (LitE a) = f a base
-
-evalBoolExpr :: (b -> b -> b) -> (b -> b -> b) -> (a -> b) -> BoolExpr a -> b
-evalBoolExpr andE orE litE = go
- where
-  go expr = case expr of
-    LitE a   -> litE a
-    OrE  l r -> orE (go l) (go r)
-    AndE l r -> andE (go l) (go r)
-
--- | @evalMapBoolExpr f andOp orOp litOp@ applies @f@ to all 'LitE' leaves; and
--- @andOp@ and @orOp to all 'AndE' and 'OrE' forks, respectively.
-evalMapBoolExpr
-  :: (a -> b) -> (c -> c -> c) -> (c -> c -> c) -> (b -> c) -> BoolExpr a -> c
-evalMapBoolExpr f andE orE litE = go
- where
-  go expr = case expr of
-    LitE a   -> litE (f a)
-    OrE  l r -> orE (go l) (go r)
-    AndE l r -> andE (go l) (go r)
-
--- | Interpret 'BoolExpr' with AND, OR, and a function to convert the tree's
--- values to 'Bool'.
-interpretBoolExpr :: (a -> Bool) -> BoolExpr a -> Bool
-interpretBoolExpr pred = evalMapBoolExpr pred (&&) (||) id
-
-interpretBoolExpr' :: BoolExpr Bool -> Bool
-interpretBoolExpr' = interpretBoolExpr id
-
-
--- | Right-associative parser for boolean expressions. 
---
---  * operators limited to AND and OR
---  * elements are alphabetic strings.
---
--- The intended usage of this function is to extract a users search strings
--- from the command-line and then create a single string predicate out of the
--- 'BoolExpr' with 'boolExprSatisfies'. E.g.,
---
--- > evalMapBoolExpr (`isInfixOf` searchCandidate)
---
-parseBoolExpr :: Parser (BoolExpr String)
-parseBoolExpr = expr
- where
-  expr   = term `chainr1` andE
-  term   = factor `chainr1` orE
-  factor = parens expr <|> litE
-  litE   = LitE <$> token (some letter)
-  andE   = AndE <$ symbolic '&'
-  orE    = OrE <$ symbolic '|'
 
 

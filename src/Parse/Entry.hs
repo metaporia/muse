@@ -599,6 +599,7 @@ isQuotation :: Entry -> Bool
 isQuotation (Quotation _ _ _) = True
 isQuotation _                 = False
 
+-- TODO TAG REFACTOR (Phrase and Def unification)
 data DefQueryVariant
   = Phrase'
   | Defn'

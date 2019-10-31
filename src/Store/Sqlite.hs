@@ -34,7 +34,7 @@ import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Char8    as BLC
 import           Data.Either
-import           Data.Foldable                  ( traverse_ )
+import           Data.Foldable                  ( foldl', traverse_ )
 import           Data.Function                  ( (&) )
 import           Helpers
 import           Data.List                      ( isInfixOf, isPrefixOf, isSuffixOf )
@@ -1050,6 +1050,9 @@ selectDefs since before authPreds titlePreds = do
 
 
 -- TODO fix TL.Text <-> string conversions
+-- FIXME (optimization refactor) search json for tags to narrow down candidate
+-- entries, for e.g., selecting all DefVersus entries, (which still takse
+-- >140ms on average).
 filterDefs'
   :: MonadIO m
   => Day
@@ -1064,7 +1067,7 @@ filterDefs' since before authPreds titlePreds defSearch = do
       -- for use with SQL's LIKE operator.
       infixSearches = maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPredsR defSearch)
   -- liftIO $ traverse print infixSearches
-  defEntries <- selectDefs' since before authPreds titlePreds infixSearches -- collect all strings
+  defEntries <- selectDefs' since before authPreds titlePreds infixSearches (defVariantsR defSearch) -- collect all strings
   return
     $   filtermap
           (\e -> case e of
@@ -1075,6 +1078,18 @@ filterDefs' since before authPreds titlePreds defSearch = do
           )
     $   filterDefR defSearch -- this costly af
     <$> defEntries
+
+-- | FIXME (REMOVE ME) janky workaround until completion of tag refactor
+--
+-- Let's just ignore phrases to explore the performance gains of this approach.
+--
+jankyConvertDefQueryVariantToDefEntryTags :: P.DefQueryVariant -> DefTag
+jankyConvertDefQueryVariantToDefEntryTags P.Phrase' = undefined -- inline or defn? unaccountable behavior
+jankyConvertDefQueryVariantToDefEntryTags P.Defn' = Headwords'
+jankyConvertDefQueryVariantToDefEntryTags P.InlineDef' = Inline'
+jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'
+
+
 -- | Revision of 'selectDefs'' that braves false positives by applying each
 -- string search predicates, viz., headword, meaning, to the json-encoded
 -- definition entry. 
@@ -1106,9 +1121,17 @@ filterDefs' since before authPreds titlePreds defSearch = do
 -- the sql row .
 --
 selectDefs'
-  :: MonadIO m => Day -> Day -> [String] -> [String] -> [String] -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds infixSearches' = do
+  :: MonadIO m
+  => Day
+  -> Day
+  -> [String]
+  -> [String]
+  -> [String]
+  -> [P.DefQueryVariant]
+  -> DB m [Entity DefEntry]
+selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
   let infixSearches = TL.pack <$> infixSearches'
+  let querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
   let dateConstraint defEntry =
         dateRangeConstraint DefEntryId DefEntryKey defEntry since before
       matchesInfixSearches defEntry =
@@ -1119,9 +1142,49 @@ selectDefs' since before authPreds titlePreds infixSearches' = do
       select
       $ from
       $ \defEntry -> do
-          -- TODO apply def variant predicates here
+          -- FIXME (optimization refactor) apply def variant predicates here
           -- let defTag = defEntry  ^. DefEntryDefinitionTag
-          where_ (dateConstraint defEntry &&. matchesInfixSearches defEntry)
+          -- requires unifying Phrase vs DefEntry distinction. then it just
+          -- becomes the above code (convert variants to tags compare tags)
+          --
+          --let
+          --  toDefQueryVariant :: PhraseOrDef -> DefTag -> P.DefQueryVariant
+          --  toDefQueryVariant Phrase'     _      = P.Phrase'
+          --  toDefQueryVariant Definition' defTag = case defTag of
+          --    Headwords'  -> P.Defn'
+          --    Inline'     -> P.InlineDef'
+          --    Comparison' -> P.DefVersus'
+
+          --  -- WARNING: this will return true when given an empty list
+          --  variantConstraint
+          --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
+          let variantConstraint _ [] = val True
+              variantConstraint defTag variants =
+                 foldl' (\res v -> (val v ==. defTag) ||. res) (val True) variants
+
+          where_
+            (   dateConstraint defEntry
+            &&. matchesInfixSearches defEntry
+            -- FIXME (blocked on tag refactor) JANK WORKAROUND
+            &&. variantConstraint (defEntry ^. DefEntryDefinitionTag) querysDefTags
+
+            -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
+            -- a tag than a structural distinction
+            -- &&. (variantConstraint (defEntry ^. DefEntryPhraseOrDef)
+            --                       (defEntry ^. DefEntryDefinitionTag)
+            --                       defVariants
+            --    ) -- FIXME tag check here!
+                 -- * each entry has a json encoded tag in its definitions
+                 -- field (one of Inlines, Headwords, (the string "headwords" 
+                 -- occurs more than once for def versus comparison entries)
+                 -- * and in the "phrase_or_def" field one of Definition' or
+                 -- Phrase'
+                 --
+                 -- we need a filter to take a list of DefQueryVariant 
+                 -- ( Phrase' | Defn' | InlineDef' | DefVersus'), 
+                 -- the entry's definition tag (Headwords' | Inline' | Comparison), and
+                 -- the entry's phrase_or_def (Phrase' | Definiton')
+            )
           return defEntry
     else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
       on

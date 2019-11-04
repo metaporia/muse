@@ -86,6 +86,10 @@ import           Text.Show.Pretty               ( pPrint
 import           Time
 import           Web.PathPieces                 ( PathPiece(..) )
 
+
+-- TODO (!!!) clean up source, remove revisions, document, reorder defs as necessary,
+-- purge old or inapplicable TODOs.
+
 ---------------
 --- STORAGE ---
 ---------------
@@ -1081,10 +1085,18 @@ filterDefs' since before authPreds titlePreds defSearch = do
 
 -- | FIXME (REMOVE ME) janky workaround until completion of tag refactor
 --
+-- Note that a defversus filter now takes only around 40ms--for some reason
+-- this is not nearly as good an improvement as expected (sql filters for,
+-- e.g., meaning searches speed, which take only around 15ms). I think this is
+-- due to that the query requested /all/ comparisons whereas the meaning
+-- searches only requested matching entries, causing the former to spend extra
+-- time marshalling data from sql to json in haskell to the final haskell
+-- types. YES! adding a meaning predicate brought down the mean time to ~18ms.
+--
 -- Let's just ignore phrases to explore the performance gains of this approach.
 --
 jankyConvertDefQueryVariantToDefEntryTags :: P.DefQueryVariant -> DefTag
-jankyConvertDefQueryVariantToDefEntryTags P.Phrase' = undefined -- inline or defn? unaccountable behavior
+jankyConvertDefQueryVariantToDefEntryTags P.Phrase' = Inline' -- inline or defn? unaccountable behavior; we've chosen to (temporarily) weather the false positives
 jankyConvertDefQueryVariantToDefEntryTags P.Defn' = Headwords'
 jankyConvertDefQueryVariantToDefEntryTags P.InlineDef' = Inline'
 jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'

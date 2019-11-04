@@ -168,6 +168,7 @@ import qualified Text.Trifecta.Result          as Tri
 import           Store.Sqlite                   ( DefSearch(..)
                                                 , StrSearch(..)
                                                 , DefSearchR(..)
+                                                , fetchLastRead
                                                 )
 
 x = Sql.main
@@ -1066,20 +1067,31 @@ dispatchR opts@(OptsR color (SearchR searchConfig)) = do
 
 dispatchR (OptsR color LintR                    ) = putStrLn "linting"
 dispatchR (OptsR color (InitR quiet ignoreCache)) = do
+  -- FIXME (complete sqlite) init with sql db: blocked on fetch last read
+  -- functionality
+  --
+  -- This still uses the acid state db to find the last read entry
   putStrLn "initializing...\n" -- ++ showMuseConf mc
   void $ museInit quiet ignoreCache
 dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
   mc <- loadMuseConf
-  bracket
-    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    closeAcidState -- acceptable for read only access?
-    (\acid -> do
-      let put = if suppressNewline then T.putStr else T.putStrLn -- default
-      res <- query acid LastRead
-      case res of
-        Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
-        Nothing     -> exitFailure
-    )
+  runSqlite (sqlDbPath mc) $ do
+    -- FIXME searches on
+    lastRead <- fetchLastRead
+    let put = if suppressNewline then putStr else putStrLn -- default
+    liftIO $ case lastRead of
+      Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
+      Nothing     -> exitFailure
+  --bracket
+  --  (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
+  --  closeAcidState -- acceptable for read only access?
+  --  (\acid -> do
+  --    let put = if suppressNewline then T.putStr else T.putStrLn -- default
+  --    res <- query acid LastRead
+  --    case res of
+  --      Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
+  --      Nothing     -> exitFailure
+  --  )
 dispatchR (OptsR color (ParseR it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
@@ -1090,152 +1102,8 @@ dispatchR (OptsR color (ParseR it)) = do
     All silence ignore -> parseAllEntriesR silence ignore mc >> return ""
   putStrLn s
 
-dispatch' :: Opts' -> IO ()
-dispatch' Bare                           = putStrLn version
-dispatch' opts@(Opts' color (Search' s)) = do
-  mc <- loadMuseConf
-  bracket
-    -- FIXME
-    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    createCheckpointAndClose
-    (\acid -> do
-      db <- query acid ViewDB
-      putStrLn "searching...\n"
-      runSearch' showDebug color s db
-      return ()
-    )
-dispatch' (Opts' color Lint'                    ) = putStrLn "linting"
-dispatch' (Opts' color (Init' quiet ignoreCache)) = do
-  putStrLn "initializing...\n" -- ++ showMuseConf mc
-  void $ museInit quiet ignoreCache
-dispatch' opts@(Opts' color (FetchLastRead' suppressNewline)) = do
-  mc <- loadMuseConf
-  bracket
-    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    closeAcidState -- acceptable for read only access?
-    (\acid -> do
-      let put = if suppressNewline then T.putStr else T.putStrLn -- default
-      res <- query acid LastRead
-      case res of
-        Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
-        Nothing     -> exitFailure
-    )
-dispatch' (Opts' color (Parse' it)) = do
-  mc <- loadMuseConf
-  putStrLn "parsing..."
-  s <- case it of
-    File  fp           -> readFile fp
-    StdIn s            -> return s
-    -- TODO update 'parseAllEntries'
-    All silence ignore -> parseAllEntries' silence ignore mc >> return ""
-  putStrLn s
 
 ifNotNull l true false = if not (null l) then true else false
-
--- | Pretty print output of bucket filters.
-runSearch' :: Bool -> Bool -> Variants Store.Search -> DB -> IO ()
-runSearch' debug color (Variants (search, ds, ps, qs, dials, cmts, dmps)) db@(DB dmp def rd qt dia phr cmt _ _)
-  =
-  -- if no entry-variants have been specified to the exclusion of others--that
-  -- is, apply filters to all variants 
-    if all (== False) [ds, ps, qs, dials, cmts, dmps]
-    then colRender color $ join
-      [ filterDumps search dmp
-      , filterDefs db search def
-      , filterQuotes db search qt
-      , filterDialogues db search dia
-      , filterPhrases db search phr
-      , filterComments db search cmt
-      ]
-    else
-      colRender color
-      . join
-      $ [ if dmps || (not . null . dumpsPreds $ bucketList search)
-          then filterDumps search dmp
-          else []
-        , if (let x = defsPreds $ bucketList search
-              in  ds || (not . null $ fst x) || (not . null $ snd x)
-             )
-          then filterDefs db search def --print ((show $ length (defsPreds $ bucketList search)) <> " def")
-          else []
-        , if qs || (not . null . quotesPreds $ bucketList search)
-          then filterQuotes db search qt --print "qt"
-          else []
-        , if dials || (not . null . dialoguesPreds $ bucketList search)
-          then filterDialogues db search dia -- print "dia"
-          else []
-        , if (let x = phrasesPreds $ bucketList search
-              in  ps || (not . null $ fst x) || (not . null $ snd x)
-             )
-          then filterPhrases db search phr --print "phr"
-          else []
-        , if cmts || (not . null . commentsPreds $ bucketList search)
-          then filterComments db search cmt --print "cmt"
-          else []
-        ]
-
-dispatch :: Opts -> IO ()
-dispatch opts@(Opts color (Search inp)) =
-  putStrLn "searching...\n" >> runSearch showDebug color inp
-dispatch (Opts color Lint                    ) = putStrLn "linting"
-dispatch (Opts color (Init quiet ignoreCache)) = do
-  putStrLn "initializing...\n" -- ++ showMuseConf mc
-  void $ museInit quiet ignoreCache
-dispatch opts@(Opts color FetchLastRead) = do
-  mc <- loadMuseConf
-  bracket
-    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    closeAcidState -- acceptable for read only access?
-    (\acid -> do
-      res <- query acid LastRead
-      case res of
-        Just (t, a) -> T.putStrLn $ "read \"" <> t <> "\" by " <> a
-        Nothing     -> exitFailure
-    )
-dispatch (Opts color (Parse it)) = do
-  mc <- loadMuseConf
-  putStrLn "parsing..."
-  s <- case it of
-    File  fp           -> readFile fp
-    StdIn s            -> return s
-    -- TODO fix unintuitive/broken parse CLI behavior
-    -- TODO `muse parse` should run `--update` by default, using cached logs
-    -- where the source file is unchanged
-    All silence ignore -> parseAllEntries silence ignore mc >> return ""
-  putStrLn s
-
--- | As yet, this searches only pre-parsed `LogEntry`s.
-runSearch :: Bool -> Bool -> Input -> IO ()
-runSearch debug colorize input@(Input s e tp ap preds) = do
-  let
-    dateFilter = do
-      mc    <- loadMuseConf
-      fps   <- listDirectory . T.unpack $ entryCache mc
-      dates <- sort . filterBy s e <$> pathsToDays fps
-      let cachePath = (T.unpack (entryCache mc) ++)
-          entries   = catMaybes . decodeEntries <$> loadFiles
-            (cachePath . dayToPath <$> dates)
-            -- TODO print date above each days `[LogEntry]`
-          filtered = concatMap (rmOnlyRead . filterWith' input) <$> entries
-           where
-            rmOnlyRead xs | M.getAll $ foldMap (M.All . isRead) xs = []
-                          | otherwise                              = xs
-      return filtered
-  filtered <- join dateFilter
-  when debug
-    $  putStrLn
-         (  "start date: "
-         ++ show s
-         ++ "\n"
-         ++ "end date: "
-         ++ show e
-         ++ "\nfancy search magick!"
-         ++ "colors?: "
-         ++ show colorize
-         )
-    >> pPrint (filterWith' input testLogWithDumpOutput)
-  putStrLn "predicates:"
-  traverse_ (colRender colorize) filtered
 
 -- config
 data MuseConf = MuseConf

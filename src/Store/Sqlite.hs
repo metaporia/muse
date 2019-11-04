@@ -51,6 +51,7 @@ import qualified Data.Text.Lazy.Encoding       as TL
 import           Data.Time                      ( Day
                                                 , UTCTime(..)
                                                 , toGregorian
+                                                , addDays
                                                 )
 import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Esqueleto
@@ -438,6 +439,7 @@ main = runSqlite "test.db" $ do
   insertKey wutheringHeightsId $ ReadEntry "Wuthering Heights" "Emily Bronté"
   -- def entry
   now' <- liftIO getCurrentTime
+  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
   let inline = TL.decodeUtf8 $ encode $ Inlines
         [InlineDef "mizzle" "a misty drizzle"]
       defEntryId = DefEntryKey now'
@@ -461,15 +463,15 @@ main = runSqlite "test.db" $ do
         Nothing
         Nothing
   liftIO $ putStr "entry: " >> pPrint entry
-  liftIO
-    $ pPrint
-    $ let xs :: [Either String Entry]
-          xs = fmap (toEntry . entityVal) allDefs
-      in  rights xs
-  liftIO $ pPrint $ fmap entityVal allReads
+  --liftIO
+  --  $ pPrint
+  --  $ let xs :: [Either String Entry]
+  --        xs = fmap (toEntry . entityVal) allDefs
+  --    in  rights xs
+  --liftIO $ pPrint $ fmap entityVal allReads
   -- clean up 
-  deleteWhere [DefEntryId P.==. defEntryId]
-  deleteWhere [ReadEntryId P.==. wutheringHeightsId]
+  --deleteWhere [DefEntryId P.==. defEntryId]
+  --deleteWhere [ReadEntryId P.==. wutheringHeightsId]
   --runSqlite ":memory:" $ do
     --oneJohnPost <- selectList [BlogPostAuthorId ==. johnId] [LimitTo 1]
     --liftIO $ print (oneJohnPost :: [Entitygggg BlogPost])
@@ -477,6 +479,11 @@ main = runSqlite "test.db" $ do
     --liftIO $ print (john :: Maybe Person)
     --delete janeId
     --deleteWhere [BlogPostAuthorId ==. johnId]
+  --reads <- select $ from $ \readEntry -> do
+  --      orderBy [asc (readEntry ^. ReadEntryId)]
+  reads <- fetchLastRead
+  liftIO $ pPrint  reads 
+  return ()
 
 -- # DB schema TODO list:
 -- ## Write
@@ -1631,3 +1638,18 @@ clearDb db = runSqlite db $ do
   deleteWhere ([] :: [P.Filter CommentaryEntry])
   deleteWhere ([] :: [P.Filter DialogueEntry])
   deleteWhere ([] :: [P.Filter PageNumberEntry])
+
+-----------
+-- READs --
+-----------
+
+-- | Fetch the most recent read entry.
+--
+-- TODO return @Maybe (Title, Author)@ 
+fetchLastRead :: MonadIO m => DB m (Maybe (String, String))
+fetchLastRead = do
+  first <- selectFirst ([] :: [P.Filter ReadEntry]) [P.Desc ReadEntryId]
+  case entityVal <$> first of
+    Just ReadEntry { readEntryTitle, readEntryAuthor } ->
+      return $ Just (readEntryTitle, readEntryAuthor)
+    Nothing -> return Nothing

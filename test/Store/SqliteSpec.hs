@@ -127,28 +127,28 @@ spec = do
   describe "definition filtration" $ do
     it "all def variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs            <- filterDefs
+      defs            <- filterDefs'
         since
         before
         []
         []
-        (DefSearch [Defn', Phrase', InlineDef', DefVersus'] [] [])
+        (DefSearchR [Defn', Phrase', InlineDef', DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs since before [] [] (DefSearch [DefVersus'] [] [])
+      defs <- filterDefs' since before [] [] (DefSearchR [DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs since before [] [] (DefSearch [Defn'] [] [])
+      defs <- filterDefs' since before [] [] (DefSearchR [Defn'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
-      defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
+      defs <- filterDefs' since before [] [] (DefSearchR [InlineDef'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` varInline
     it "phrase definition variants" $ asIO $ runSqlInMem $ do
        (since, before, _) <- defVarSetup
-       defs <- filterDefs since before [] [] (DefSearch [Phrase'] [] [])
+       defs <- filterDefs' since before [] [] (DefSearchR [Phrase'] Nothing Nothing)
        liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
   testSearchDispatch
 
@@ -197,7 +197,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
                                                  False -- comments
                                                  False -- definitions
                                                  ([], []) -- (authPreds, titlePreds)
-                                                 (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                                 (DefSearchR [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
                                                  [] -- quote body search strings
                                                  [] -- commentary ^
                                                  [] -- dialogue   ^
@@ -230,7 +230,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
                                            False -- comments
                                            True -- definitions
                                            ([], []) -- (authPreds, titlePreds)
-                                           (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                           (DefSearchR variants Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
                                            [] -- quote body search strings
                                            [] -- commentary ^
                                            [] -- dialogue   ^
@@ -279,7 +279,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
                                                      False -- comments
                                                      False -- definitions
                                                      (auth, title) -- (authPreds, titlePreds)
-                                                     (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                                     (DefSearchR [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
                                                      filters -- quote body search strings
                                                      [] -- commentary ^
                                                      [] -- dialogue   ^
@@ -340,7 +340,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
                                                      False -- comments
                                                      False -- definitions
                                                      (auth, title) -- (authPreds, titlePreds)
-                                                     (DefSearch [] [] []) -- defQueryVariants, headwordPreds, meaningPreds
+                                                     (DefSearchR [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
                                                      filters -- quote body search strings
                                                      [] -- commentary ^
                                                      [] -- dialogue   ^
@@ -403,7 +403,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
                                           True
                                           False
                                           ([], [])
-                                          (DefSearch [] [] [])
+                                          (DefSearchR [] Nothing Nothing)
                                           []
                                           filters
                                           []
@@ -436,7 +436,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               False -- comments
               True -- definitions
               (auth, title) -- (authPreds, titlePreds)
-              (DefSearch variants [] []) -- defQueryVariants, headwordPreds, meaningPreds
+              (DefSearchR variants Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
               qs -- quote body search strings
               [] -- commentary ^
               [] -- dialogue   ^
@@ -545,7 +545,7 @@ run' = runSqlInMem $ do
   since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
 
   matchingQuotes <- rights <$> filterQuotes' since before [] [] []
-  defs <- rights <$> filterDefs since before [] [] (DefSearch [] [] [])
+  defs <- rights <$> filterDefs' since before [] [] (DefSearchR allDefVariants Nothing Nothing)
 --  liftIO $ pPrint $ mapMaybe resultToEntry defs
   liftIO $ showAll $ mapMaybe resultToEntry defs
   return ()
@@ -601,7 +601,7 @@ demo = runSqlite "sqliteSpec.db" $ do
                                  ["%Woolf%"]
                                  ["%Lighthouse%"]
                                  ["%simplicity%"]
-  liftIO $ pPrint $ (quoteEntryBody . entityVal) <$> matchingQuotes -- -- satisfactoryDefs
+  liftIO $ pPrint $ quoteEntryBody . entityVal <$> matchingQuotes -- -- satisfactoryDefs
   --let newRead = ReadEntry {readEntryTitle = "Title", readEntryAuthor = "Author"} liftIO $ putStrLn "before repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
@@ -609,8 +609,8 @@ demo = runSqlite "sqliteSpec.db" $ do
   --liftIO $ putStrLn "after repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
-  defs <- filterDefs since before [] [] (DefSearch [InlineDef'] [] [])
-  --liftIO $ pPrint defs
+  defs <- filterDefs' since before [] [] (DefSearchR [Defn'] Nothing Nothing)
+  liftIO $ pPrint defs
 
   return ()
 

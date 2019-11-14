@@ -57,7 +57,6 @@ import           Data.Time
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Helpers
-import           Lib                            ( runSearch' )
 import           Parse
 import           Parse.Entry
 import           Prelude                 hiding ( min
@@ -447,7 +446,15 @@ withNewConnFrom fp action = bracket
   (\acid -> update acid ReinitDB >> action acid)
 
 spec :: Spec
-spec = do
+spec =
+  describe "Stub store test. TODO test sql storage."
+    $          it ""
+    $          True
+    `shouldBe` True
+
+
+spec' :: Spec
+spec' = do
   around (withNewConnFrom "testState/DB") $ do
     describe "Add day's worth of logs to DB."
       $ it

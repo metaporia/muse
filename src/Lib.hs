@@ -60,7 +60,10 @@
 --    have an intuitive one.
 
 -----------------------------------------------------------------------------
-module Lib where
+module Lib
+  ( main
+  )
+where
 
 import           Control.Exception              ( bracket )
 import           Control.Monad                  ( (>=>)
@@ -68,14 +71,7 @@ import           Control.Monad                  ( (>=>)
                                                 , void
                                                 )
 import           Control.Monad.State
-import           Data.Acid
-import           Data.Acid.Advanced             ( query'
-                                                , update'
-                                                , query'
-                                                , update'
-                                                )
-import           Data.Acid.Local                ( createCheckpointAndClose )
-import           Data.Acid.Remote
+
 import           Data.Aeson              hiding ( Null )
 import           Data.Bifunctor                 ( bimap
                                                 , first
@@ -84,33 +80,9 @@ import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toLower )
-import           Data.Foldable                  ( fold
-                                                , traverse_
-                                                )
-import           Data.IxSet                     ( Indexable(..)
-                                                , IxSet(..)
-                                                , (@=)
-                                                , getOne
-                                                , ixFun
-                                                , ixSet
-                                                , updateIx
-                                                , Indexable(..)
-                                                , IxSet(..)
-                                                , (@=)
-                                                , getOne
-                                                , ixFun
-                                                , ixSet
-                                                , updateIx
-                                                )
-import qualified Data.IxSet
-import           Data.List                      ( intercalate
-                                                , isInfixOf
-                                                , isPrefixOf
-                                                , isSuffixOf
-                                                , sort
-                                                )
-import           Data.Maybe                     ( catMaybes
-                                                , fromJust
+import           Data.Foldable                  ( fold , traverse_)
+import           Data.List                      ( isInfixOf , sort)
+import           Data.Maybe                     ( fromJust
                                                 , isJust
                                                 , mapMaybe
                                                 , maybe
@@ -119,12 +91,9 @@ import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 import           Data.Time
-import           Data.Time.Calendar
 import           Data.Time.Clock                ( utctDay )
 import           Data.Yaml.Config               ( load
-                                                , lookup
                                                 , lookupDefault
-                                                , subconfig
                                                 )
 import           Database.Persist.Sqlite        ( runMigration
                                                 , runSqlite
@@ -142,7 +111,6 @@ import           Prelude                 hiding ( init
                                                 )
 import           Render
 import           Search
-import qualified Store
 import           Store                   hiding ( Author
                                                 , Search
                                                 , Search'
@@ -150,7 +118,7 @@ import           Store                   hiding ( Author
                                                 , defs
                                                 , quotes
                                                 )
-import           Store.Render
+import           Store.Render ()
 import qualified Store.Sqlite                  as Sql
 import           Store.Sqlite                   ( SearchConfig )
 import           System.Directory               ( createDirectoryIfMissing
@@ -159,20 +127,14 @@ import           System.Directory               ( createDirectoryIfMissing
                                                 , listDirectory
                                                 )
 import           System.Environment             ( getEnv )
-import           System.Exit                    ( exitFailure
-                                                , exitSuccess
-                                                )
+import           System.Exit                    ( exitFailure)
 import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
-import           Store.Sqlite                   ( DefSearch(..)
-                                                , StrSearch(..)
+import           Store.Sqlite                   ( StrSearch(..)
                                                 , DefSearchR(..)
                                                 , fetchLastRead
                                                 )
-
-x = Sql.main
-
 version :: String
 version = "muse 0.2.1"
 
@@ -226,33 +188,6 @@ relDurReader = eitherReader $ \s -> case parse reldur s of
   -- y m d
   -- m d y
 
--- | attach after --author and --title flags before search string. the search 
--- mode and the search string are separated by a space
-searchPredOpt :: String -> Either String (SearchType, String) -- search type, rest of string
-searchPredOpt s = case parse ((,) <$> searchType <*> Tri.many Tri.anyChar) s of
-  Tri.Success rd -> Right rd
-  Tri.Failure err ->
-    Left
-      $  "Cannot parse search predicate options: "
-      ++ s
-      ++ "\nErrInfo: "
-      ++ show err
-
--- | Contains filters, either entry predicates or projections, including:
---
--- * filter by author match
--- * filter by title match
--- * filter within date
--- * map definition extraction 
--- * map quotation extraction
---
--- Of the above, filters will be applied (in arbitrary order, a.t.m.) to log
--- entries, after which map will be applied to the remainder.
---
--- A `Search` instance will be generated by the 
-data DateTime =
-  DateTime
-
 -- | Convert duration, combined with the system time, into UTC time. See the
 -- `time` library.
 subRelDur :: Day -> RelDur -> Day
@@ -261,95 +196,6 @@ subRelDur day (RelDur y m d) =
     . addGregorianMonthsRollOver (negate m)
     . addDays (negate d)
     $ day
-
--- | Represents filters and entry maps extracted from CLI invocation.
--- Ugly applicative-do parse error workaround--it couldn't handle the input
--- conversion inside a do block.
-data TmpInput = TmpInput
-  { startDateTime :: Day
-  , endDateTime :: Day
-  , authorPred :: Maybe (Author -> Bool)
-  , titlePred :: Maybe (Title -> Bool)
-  , predicates :: [Maybe (LogEntry -> Bool)]
-  }
-
-searchTmp :: Day -> Parser TmpInput
-searchTmp today = do
-  w    <- subRelDur today <$> within
-  ds   <- defs
-  qs   <- quotes
-  ps   <- phrases'
-  dias <- dialogues'
-  a    <- fmap consumeSearchType <$> author
-  t    <- fmap consumeSearchType <$> title
-  pure (TmpInput w today a t [ds, qs, ps, dias])
-
--- | Parameterized around the CLI's option struct, 'Variants' indicates for
--- each bucket/table whether to apply the specified search predicates to its
--- entries (and so whether entries of that type are allowable in the final
--- output).
-newtype Variants a =
-  Variants ( a
-           , Bool --  defs
-           , Bool --  phrases
-           , Bool --  quotes
-           , Bool --  dialogues
-           , Bool --  comments
-           , Bool --  dumps
-            )
-
-search' :: Day -> Parser (Variants Store.Search)
-search' today = do
-  attrs <-
-    fmap
-        (<>)
-        (   fmap
-            (\s (Attribution _ a) ->
-              (toLower <$> s) `isInfixOf` T.unpack (T.toLower a)
-            )
-        <$> authorS
-        )
-      <*> (   fmap
-              (\s (Attribution t _) ->
-                (toLower <$> s) `isInfixOf` T.unpack (T.toLower t)
-              )
-          <$> titleS
-          )
-  ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
-  ps    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
-  qs    <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
-  dials <-
-    switch
-    $  long "dialogues"
-    <> long "dias"
-    <> long "dia"
-    <> long "dial"
-    <> help "Collect dialogues."
-  cmts <- switch $ long "comments" <> long "cmts" <> help "Collect comments."
-  dmps     <- switch $ long "dumps" <> long "dmps" <> help "Collect dumps."
-  -- case fix: all search strings are set to lower case (add switch to perform
-  -- case *sensitive* search? tbd)
-  s        <- subRelDur today <$> (sinceAll <|> since)
-  dhw      <- (fmap . fmap) (isInfixOf . fmap toLower) defHW
-  dm       <- (fmap . fmap) (isInfixOf . fmap toLower) defMeaning
-  q        <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) quoteBody
-  phw      <- (fmap . fmap) (isInfixOf . fmap toLower) phraseHW
-  pm       <- (fmap . fmap) (isInfixOf . fmap toLower) phraseMeaning
-  dias     <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dialogueBody
-  comments <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) commentBody
-  dumps    <- (fmap . fmap) (T.isInfixOf . T.toLower . T.pack) dumpBody
-  return $ Variants
-    ( Store.Search s
-                   today
-                   attrs
-                   (BucketList dumps (dhw, dm) [] q dias (phw, pm) comments)
-    , ds
-    , ps
-    , qs
-    , dials
-    , cmts
-    , dmps
-    )
 
 searchR :: Day -> Parser SearchConfig
 searchR today = do
@@ -421,28 +267,6 @@ padForSqlLike s = '%':s++"%"
 
 -- mkSearchConfig since before checkDumps checkQuotes checkDialogues checkComments checkDefs check
 
-toInput :: TmpInput -> Input
-toInput (TmpInput s e ap tp preds) =
-  let ap' = flip guardStrSearch preds . convertAuthSearch <$> ap
-      tp' = flip guardStrSearch preds . convertTitleSearch <$> tp
-  in  Input s e ap' tp' preds
-
-search :: Day -> Parser Input
-search d = toInput <$> searchTmp d
-
-dispatchSearchType :: Eq a => SearchType -> [a] -> [a] -> Bool
-dispatchSearchType Prefix = isPrefixOf
-dispatchSearchType Infix  = isInfixOf
-dispatchSearchType Suffix = isSuffixOf
-
--- | Defaults to infix search on whole search string, otherwise parses search
--- mode, a single space, and the remainder is passed as the search string to
--- author/title predicate
-consumeSearchType :: String -> (String -> Bool)
-consumeSearchType s = case eitherToMaybe (searchPredOpt s) of
-  Just (fix, searchStr) -> dispatchSearchType fix searchStr
-  Nothing               -> isInfixOf s
-
 data InputType
   = File FilePath
   | StdIn String
@@ -485,12 +309,6 @@ fileInput =
       )
     <**> helper
 
-init :: Parser SubCommand
-init = Init <$> quiet <*> ignore
-
-init' :: Parser SubCommand'
-init' = Init' <$> quiet <*> ignore
-
 quiet :: Parser Bool
 quiet = switch
   (long "quiet" <> short 'q' <> help "Suppress log parser error messages")
@@ -506,49 +324,6 @@ color =
   switch (long "color" <> short 'c' <> help "Colorize output; off by default")
   --(infoOption "muse 0.1.5" $
   -- long "version" <> short 'V' <> help "Display version information") <*>
-
-toplevel' :: Day -> Parser Opts'
-toplevel' today = Opts' <$> color <*> subparser
-  (  command
-      "search"
-      (info
-        (Search' <$> search' today <**> helper)
-        (progDesc
-          "Search log entries by date, author, title, or predicate on entry contents.\
-             \ Inline definitions of headwords or phrases can be searched as well."
-        )
-      )
-  <> command
-       "parse"
-       (info
-         (Parse' <$> parse' <**> helper)
-         (progDesc "Parse entries; a bare invocation runs 'parse --all'")
-       )
-  <> command
-       "lastRead"
-       (info
-         (    FetchLastRead'
-         <$>  switch
-                (long "suppress-newline" <> help "Suppress trailing newline")
-         <**> helper
-         )
-         (progDesc "Fetches most recent \"read\" entry.")
-       )
-  <> command
-       "lint"
-       (info (pure Lint')
-             (progDesc "TBD; for, e.g., author attribution validation")
-       )
-  <> command
-       "init"
-       (info
-         (init' <**> helper)
-         (progDesc
-           "Initialize config file, cache directory, and entry log\
-             \ directory; parse all entries in 'log-dir'"
-         )
-       )
-  )
 
 toplevelR :: Day -> Parser OptsR
 toplevelR today = (OptsR <$> color <*> subparser
@@ -595,18 +370,6 @@ toplevelR today = (OptsR <$> color <*> subparser
 
 
 
-toplevel'' d =
-  toplevel' d
-    <|> (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
-
-data SubCommand'
-  = Search' (Variants Store.Search)
-  | Parse' InputType
-  | FetchLastRead' Bool -- toggles trailing newline suppression
-  | Lint'
-  | Init' Bool
-          Bool
-
 data SubCommandR
   = SearchR Sql.SearchConfig
   | ParseR InputType
@@ -616,69 +379,11 @@ data SubCommandR
           Bool
   deriving Show
 
-data Opts'
-  = Opts' { colorize' :: Bool
-          , subcommand' :: SubCommand' }
-  | Bare
-
 data OptsR
   = OptsR { colorizeR :: Bool
           , subcommandR :: SubCommandR }
   | BareR
   deriving Show
-
-toplevel :: Day -> Parser Opts
-toplevel today = Opts <$> color <*> subparser
-  (  command
-      "search"
-      (info
-        (Search <$> search today <**> helper)
-        (progDesc
-          "Search log entries by date, author, title, or predicate on entry contents.\
-             \ Inline definitions of headwords or phrases can be searched as well."
-        )
-      )
-  <> command
-       "parse"
-       (info
-         (Parse <$> parse' <**> helper)
-         (progDesc "Parse entries; a bare invocation runs 'parse --all'")
-       )
-  <> command
-       "lint"
-       (info (pure Lint)
-             (progDesc "TBD; for, e.g., author attribution validation")
-       )
-  <> command
-       "init"
-       (info
-         (init <**> helper)
-         (progDesc
-           "Initialize config file, cache directory, and entry log\
-             \ directory; parse all entries in 'log-dir'"
-         )
-       )
-  )
-
--- | Stores options applicable to all subcommands.
-data Opts = Opts
-  { colorize :: Bool
-  , subcommand :: SubCommand
-  }
-
-data SubCommand
-  = Search Input
-  | FetchLastRead
-  | Parse InputType
-  | Lint
-  | Init Bool Bool --  ^ [0] Suppress log parse errors; [1] reparse cached entries 
-
--- TODO add to `search'`
-defs :: Parser (Maybe (LogEntry -> Bool))
-defs = flag Nothing (Just isDef) $ long "definitions" <> short 'd' <> help
-  "Collect only definitions"
-
-
 
 -- | Definition parser in new style.
 --
@@ -733,24 +438,7 @@ defs = flag Nothing (Just isDef) $ long "definitions" <> short 'd' <> help
 -- We could supply @--dvs@, @--inline@, @--phrase@ options that each specify a
 -- different 'DefQueryVariant'.
 --
--- The boolean is 'checkDefinitions'.
-defSearchInput :: Parser (DefSearchInput, Bool)
-defSearchInput = (, True) <$> (uncurry DefPred <$> defR <|> defFlag) <|> pure
-  (DefVariants [], False)
-
--- NOTE this one is used in the current CLI parser
-parseDefSearch :: Parser DefSearch 
-parseDefSearch = 
-  ((\case
-    (Just hw, Just mn) -> DefSearch [InlineDef', DefVersus'] [hw] [mn]
-    (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] [] [mn]
-    (Just hw, Nothing) -> DefSearch  allDefVariants [hw] []
-    -- this is really an error, right? yes. see 'searchArgument' it's
-    -- impossible
-    (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
-  ) <$> defR) <|> pure (DefSearch [] [] [])
-
--- Proprosed replacement as part of search string padding deferral.
+-- REFACTOR NOTE: Proprosed replacement as part of search string padding deferral.
 parseDefSearchR :: Parser DefSearchR
 parseDefSearchR = 
   ((\case
@@ -778,34 +466,6 @@ defRR = option
   )
 
 
-defR :: Parser (Maybe (String -> Bool), Maybe (String -> Bool))
-defR = option
-  (eitherReader (parseEither searchArgument))
-  (  long "def-search"
-  <> long "ds"
-  <> help
-       "Consume \"<headword-preds> : <meaning-preds>, see README for search syntax."
-  )
-
--- | Expclicitly include definition entries of any variant.
-defFlag :: Parser DefSearchInput
-defFlag = flag'
-  (DefVariants allDefVariants)
-  (  --short 'd' <> 
-  long "def"
-  <> long "defs"
-  <> long "definition"
-  -- <> long "definitions"
-  <> help "Select only definition entries."
-  )
-
-
-
-testP p = execParserPure defaultPrefs pInfo . words
- where
-  pInfo =
-    --bimap length length <$> 
-      info p (fullDesc <> header "where does this go?")
 
 -- variant flag
 -- beginning of rewrite
@@ -872,16 +532,6 @@ commentBody =
     <> value []
     <> help "Collect satisfactory comments."
 
--- variant flag
-dumpBody :: Parser [String]
-dumpBody =
-  fmap (either (const []) id . parsePreds)
-    $  option str
-    $  long "dump-body"
-    <> long "db"
-    <> value []
-    <> help "Collect satisfactory dumps."
-
 -- end of rewrite
 authorS :: Parser [String]
 authorS =
@@ -919,43 +569,6 @@ parseEither p s = case parse p s of
   Tri.Success a   -> Right a
   Tri.Failure err -> Left $ "parseEither: error: " ++ show err
 
-quotes :: Parser (Maybe (LogEntry -> Bool))
-quotes = flag Nothing (Just isQuote) $ long "quotations" <> short 'q' <> help
-  "Collect only quotations"
-
-phrases' :: Parser (Maybe (LogEntry -> Bool))
-phrases' = flag Nothing (Just isPhrase) $ long "phrases" <> short 'p' <> help
-  "Collect only phrases"
-
-dialogues' :: Parser (Maybe (LogEntry -> Bool))
-dialogues' =
-  flag Nothing (Just isDialogue) $ long "dialogues" <> short 'l' <> help
-    "Collect only dialogue"
-
-author :: Parser (Maybe String)
-author = option
-  (fmap Just str)
-  (long "author" <> metavar "SUBSTR" <> short 'a' <> value Nothing <> help
-    "Substring/affix of author"
-  )
-
-title :: Parser (Maybe String)
-title = option
-  (fmap Just str)
-  (long "title" <> metavar "SUBSTR" <> short 't' <> value Nothing <> help
-    "Affix of title"
-  )
-
-within :: Parser RelDur
-within = option
-  relDurReader
-  (  long "within"
-  <> metavar "REL_DATE"
-  <> help "Lower bound of search filter range"
-  <> short 'w'
-  <> value (RelDur 0 6 0)
-  )
-
 -- | FIXME: cache date of first log file.
 sinceAll :: Parser RelDur
 sinceAll = flag' (RelDur 10 0 0) (short 'a' <> long "all")
@@ -972,50 +585,14 @@ since = option
 
 showDebug = False
 
-mainOld :: IO ()
-mainOld = do
-  today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch"))
-    >>= dispatch
-
--- main = main'
-main = execParser (info cli (fullDesc <> header "none")) >>= pPrint
-
-cli = do
-  dm <- defMeaning
-  dh <- defHW
-  d  <- switch (long "definitions" <> short 'd')
-  return (dm, dh, d)
-
-main' :: IO ()
-main' = do
-  today <- utctDay <$> getCurrentTime
-  execParser
-      (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch"))
-    >>= dispatch'
-
 -- | This is currently in use.
-mainR :: IO ()
-mainR = do
+main :: IO ()
+main = do
   today <- utctDay <$> getCurrentTime
   execParser (info (helper <*> toplevelR today) (fullDesc <> header "dispatch"))
     >>= dispatchR
 
--- | Test CLI parser from ghci.
-testMainOld :: String -> IO ()
-testMainOld s = do
-  today <- utctDay <$> getCurrentTime
-  let result =
-        execParserPure
-            defaultPrefs
-            (info (helper <*> toplevel'' today) (fullDesc <> header "dispatch"))
-          $ words s
-  case result of
-    Options.Applicative.Success opts -> dispatch' opts
-    _ -> putStrLn "err" --pPrint result
-
-
--- | Test CLI parser from ghci.
+-- | (For development purposes only.) Test CLI parser from ghci.
 testMain :: String -> IO ()
 testMain s = do
   today <- utctDay <$> getCurrentTime
@@ -1039,8 +616,6 @@ testMain s = do
 -- □  lint: run parse but don't write to DB
 -- 
 --
-dispatchR' = undefined
-
 dispatchR :: OptsR -> IO ()
 dispatchR BareR                           = putStrLn version
 dispatchR opts@(OptsR color (SearchR searchConfig)) = do
@@ -1067,12 +642,8 @@ dispatchR opts@(OptsR color (SearchR searchConfig)) = do
 
 dispatchR (OptsR color LintR                    ) = putStrLn "linting"
 dispatchR (OptsR color (InitR quiet ignoreCache)) = do
-  -- FIXME (complete sqlite) init with sql db: blocked on fetch last read
-  -- functionality
-  --
-  -- This still uses the acid state db to find the last read entry
   putStrLn "initializing...\n" -- ++ showMuseConf mc
-  void $ museInit quiet ignoreCache
+  void $ museInitR quiet ignoreCache
 dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
   mc <- loadMuseConf
   runSqlite (sqlDbPath mc) $ do
@@ -1082,16 +653,6 @@ dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
     liftIO $ case lastRead of
       Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
       Nothing     -> exitFailure
-  --bracket
-  --  (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-  --  closeAcidState -- acceptable for read only access?
-  --  (\acid -> do
-  --    let put = if suppressNewline then T.putStr else T.putStrLn -- default
-  --    res <- query acid LastRead
-  --    case res of
-  --      Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
-  --      Nothing     -> exitFailure
-  --  )
 dispatchR (OptsR color (ParseR it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
@@ -1102,8 +663,6 @@ dispatchR (OptsR color (ParseR it)) = do
     All silence ignore -> parseAllEntriesR silence ignore mc >> return ""
   putStrLn s
 
-
-ifNotNull l true false = if not (null l) then true else false
 
 -- config
 data MuseConf = MuseConf
@@ -1137,9 +696,6 @@ loadMuseConf = do
       cacheDir = lookupDefault "cache-dir" cacheDef config
   --  mapM_ T.putStrLn ["muse config: ", logDir, cacheDir]
   return $ MuseConf logDir cacheDir home
-
-showMuseConf :: MuseConf -> String
-showMuseConf = show
 
 writeMuseConf :: MuseConf -> IO MuseConf
 writeMuseConf mc = do
@@ -1187,125 +743,34 @@ prompt = do
 
 -- | Creates ~/.muse/{entries/,config.yaml} and ~/.cache/muse/entries.
 --
---  Checks whether the following exist before mutation:
---      
---      ▣  config file, `config.yaml`
---      □  `.muse{,entries}`
---      □  `.cache/muse{,parsedEntries}`
 --
-museInit :: Bool -> Bool -> IO MuseConf
-museInit quiet ignoreCache = do
+--  Creates default config directory, "$HOME/.muse/", only if it does not
+--  already exist.
+museInitR :: Bool -> Bool -> IO MuseConf
+museInitR quiet ignoreCache = do
   home' <- getEnv "HOME"
-  let home         = T.pack home'
-      defConfPath  = home <> "/.muse/config.yaml"
-      defConfPath' = T.unpack defConfPath
-      defCacheDir  = home <> "/.cache/muse/"
-      -- FIXME
-      stateDir     = home <> "/.muse/state/DB"
-      defLogDir    = home <> "/.muse/entries/"
-      defaults     = MuseConf defLogDir defCacheDir home
-  T.putStrLn $ "Expects configuration file at: " <> home <> defConfPath <> "\n"
-  -- create config & conf dir
-  doesExist <- doesFileExist defConfPath'
-  mc        <- if doesExist then loadMuseConf else writeMuseConf defaults
-  createDirectoryIfMissing True . T.unpack $ entryCache mc -- (cache mc) <> "/parsedEntries"
-  T.putStrLn $ entryCache mc <> " and " <> log mc <> " found or created."
-  createDirectoryIfMissing True $ T.unpack (log mc)
-  parseAllEntries quiet ignoreCache mc
-  return mc
+  -- TODO consistently prepend forwardslashes in 'MuseConf' paths
+  let home = T.pack home'
+      defaultConfigPath = home <> "/.muse/config.yaml"
+      defaultCacheDir = home <> "/.cache/muse/"
+      defaultLogDir = home <> "/.muse/entries/"
+      defaultMuseConf = MuseConf defaultLogDir defaultCacheDir home
+  T.putStrLn $ "Expects configuration file at: " <> defaultConfigPath <> "\n"
+  doesExist <- doesFileExist $ T.unpack defaultConfigPath
+  museConf <- if doesExist then loadMuseConf else writeMuseConf defaultMuseConf
+  createDirectoryIfMissing True . T.unpack $ entryCache museConf
+  T.putStrLn $ entryCache museConf <> " and " <> log museConf <> " found or created."
+  createDirectoryIfMissing True $ T.unpack (log museConf)
+  parseAllEntriesR quiet ignoreCache museConf
+  return museConf
+
+      
 
 -- | List file names in log source directory
 lsEntrySource :: MuseConf -> IO [FilePath]
 lsEntrySource = listDirectory . T.unpack . entrySource
 
--- | List file names (per day) of parsed `LogEntry`s.
-lsEntryCache :: MuseConf -> IO [FilePath]
-lsEntryCache = listDirectory . T.unpack . entryCache
-
--- | Load contents at file paths.
-loadFiles :: [FilePath] -> IO [BL.ByteString]
-loadFiles = traverse BL.readFile
-
--- | Load cached files.
-loadCachedEntries :: MuseConf -> IO [BL.ByteString]
-loadCachedEntries = lsEntryCache >=> loadFiles
-
-decodeEntries :: [BL.ByteString] -> [Maybe [LogEntry]]
-decodeEntries = fmap decode
-
-decodeCachedEntries :: MuseConf -> IO [Maybe [LogEntry]]
-decodeCachedEntries = fmap decodeEntries <$> loadCachedEntries
-
 -- | Parse all entries from logDir into cacheDir/entries.
-parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
-parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
-  fps <- sort <$> lsEntrySource mc
-  -- 
-  let
-    selectModified :: [FilePath] -> IO [FilePath]
-    -- | Check, if for a given log file a parsed file has been cached, 
-    --   whether the log's modification date is greater than the that of the 
-    --   cached json.
-    selectModified fps = if ignoreCache
-      then putStrLn "ignoring parsed entry cache" >> return fps
-      else foldr
-        (\fp rest
--- check for cache existence
-                  -> do
-          existsCache <- doesFileExist $ T.unpack (entryCache mc) ++ fp
-          if existsCache
-            -- compare  and log modification times
-            then do
-              logMd   <- getModificationTime $ T.unpack (entrySource mc) ++ fp
-              cacheMd <- getModificationTime $ T.unpack (entryCache mc) ++ fp
-              if cacheMd < logMd -- FIXME reparses today's log since filenames
-                then do
-                  putStrLn $ "Update/add: " ++ fp
-                  (fp :) <$> rest
-                else rest -- exclude unchanged
-            else (fp :) <$> rest
-        )
-        (return [])
-        fps
-    parse :: String -> IO (String, Either String [LogEntry])
-    parse fp =
-      (,)
-        <$> pure fp
-        <*> (showErr . Tri.parseByteString logEntries mempty <$> B.readFile
-              (T.unpack (entrySource mc) ++ "/" ++ fp)
-            )
-    invert :: (fp, Maybe e) -> Maybe (fp, e)
-    invert (fp, me) = case me of
-      Just e  -> Just (fp, e)
-      Nothing -> Nothing
-    -- TODO group `logEntry`s by day for use with 'addDay'
-    parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
-    parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
-    showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
-    showOrCollect =
-      let sideBar = unlines . fmap ("> " ++) . lines
-      in
-        foldr
-          (\(fp, e) rest -> case e of
-            Left err -> if quiet
-              then rest
-              else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
-            Right res -> do
-              when showDebug $ putStrLn $ "Success: " ++ fp
-              ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
-          )
-          (return [])
-  when quiet $ putStrLn "\nSuppressing entry parse error output"
-  entryGroups <- selectModified fps >>= parseAndShowErrs
-  -- TODO add to DB here
-  traverse_
-    (\(fp, eg) ->
-      BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg)
-    )
-    entryGroups
-  -- read in log file names; parse 'em
-  --putStrLn $ show mc
-
 -- TODO 
 --
 -- ▣  centralize file path generation--save yourself the headache later of
@@ -1314,87 +779,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
 --    See `entryCache` and `entrySource`
 -- on parse failure, show user err info
 -- | Parse all entries from logDir into cacheDir/entries.
-parseAllEntries' :: Bool -> Bool -> MuseConf -> IO ()
-parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
-  fps <- sort <$> lsEntrySource mc
-  -- 
-      --  Check, if for a given log file a parsed file has been cached, 
-      --   whether the log's modification date is greater than the that of the 
-      --   cached json.
-      --   
-      --   TODO write equivalent for 'DB'
-      --   1. if using cache, collect keys of modified entries from 'lastUpdated', otherwise use all
-      --      * for each log source, fetch last modification time. if there is
-      --        none, then add to list, otherwise compare the times: include only
-      --        if the source file's modification date is more recent than that
-      --        of 'lastUpdated`.
-      --   2. convert to list
-  let
-    selectModified' fps lastUpdated =
-      let lastModified :: Day -> Maybe ModRec
-          lastModified day = getOne $ lastUpdated @= (day :: Day)
-          compare :: FilePath -> ModRec -> IO (Maybe FilePath)
-          compare fp ModRec {..} = do
-            logMd <- getModificationTime $ T.unpack (entrySource mc) ++ fp
-            if logMd > modified then return $ Just fp else return Nothing
-          f :: FilePath -> IO (Maybe FilePath)
-          f fp = case pathToDay fp >>= lastModified of
-            Just mr -> compare fp mr
-            Nothing -> return $ Just fp
-      in  foldr (\a bs -> f a >>= maybe bs (\x -> fmap (x :) bs))
-                (return [] :: IO [FilePath])
-                fps
-      --filtermap pathToDay fps
-    parse :: String -> IO (String, Either String [LogEntry])
-    parse fp =
-      (,)
-        <$> pure fp
-        <*> (showErr . Tri.parseByteString logEntries mempty <$> B.readFile
-              (T.unpack (entrySource mc) ++ "/" ++ fp)
-            )
-    invert :: (fp, Maybe e) -> Maybe (fp, e)
-    invert (fp, me) = case me of
-      Just e  -> Just (fp, e)
-      Nothing -> Nothing
-    -- TODO group `logEntry`s by day for use with 'addDay'
-    parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
-    parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
-    showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
-    showOrCollect =
-      let sideBar = unlines . fmap ("> " ++) . lines
-      in
-        foldr
-          (\(fp, e) rest -> case e of
-            Left err -> if quiet
-              then rest
-              else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
-            Right res -> do
-              when showDebug $ putStrLn $ "Success: " ++ fp
-              ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
-          )
-          (return [])
-  when quiet $ putStrLn "\nSuppressing entry parse error output"
-  bracket
-    (openLocalStateFrom (T.unpack home ++ "/.muse/state/DB" :: String) initDB)
-    createCheckpointAndClose
-    (\acid -> do
-      utc         <- getCurrentTime
-      mod         <- query acid ViewLastUpdated
-      entryGroups <- selectModified' fps mod >>= parseAndShowErrs
-      -- TODO sqlite persistence
-      -- acid state persistence
-      traverse_ (\(d, le) -> update acid $ AddDay d utc le)
-        $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entryGroups
-     -- FIXME as yet writes to acid-state and file-system persistence solutions
-     -- file-based persistence
-      traverse_
-        (\(fp, eg) ->
-          BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg)
-        )
-        entryGroups
-    )
-  -- read in log file names; parse 'em
-  --putStrLn $ show mc
+
 
 -- | Parse all entries into sqlite database.
 --
@@ -1450,10 +835,6 @@ parseAllEntriesR quiet ignoreCache mc@(MuseConf log cache home) = do
         <*> (showErr . Tri.parseByteString logEntries mempty <$> B.readFile
               (T.unpack (entrySource mc) ++ "/" ++ fp)
             )
-    invert :: (fp, Maybe e) -> Maybe (fp, e)
-    invert (fp, me) = case me of
-      Just e  -> Just (fp, e)
-      Nothing -> Nothing
     -- TODO group `logEntry`s by day for use with 'addDay'
     parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
     parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
@@ -1483,16 +864,3 @@ parseAllEntriesR quiet ignoreCache mc@(MuseConf log cache home) = do
   --putStrLn $ show mc
 
 
-
-colView :: IO ()
-colView = do
-  mc <- loadMuseConf
-  r  <- bracket
-    (openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    createCheckpointAndClose
-    (\acid -> query acid FromDB >>= colRender True)
-  pPrint r
-
-exec p = execParserPure defaultPrefs (info p (fullDesc <> header "")) . words
-
-exec' p = execParserPure defaultPrefs (info p (fullDesc <> header "")) . words

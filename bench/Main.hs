@@ -29,7 +29,6 @@ main'' = defaultMain
     "CLI"
     [ bench "testMain \"search --all -q --qb unintelligible\""
       $ nfIO (testMain "search --all -q --qb unintelligible")
-    , bench "testMainOld" $ nfIO (testMainOld "search --all -q --qb unintelligible")
     ]
   ]
 

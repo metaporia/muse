@@ -27,8 +27,8 @@
 -----------------------------------------------------------------------------
 module Main where
 
-import qualified Lib
+import qualified Lib as Muse
 
-main = Lib.mainR
+main = Muse.main
 
 

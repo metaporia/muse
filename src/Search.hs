@@ -138,7 +138,7 @@ filterBy
 filterBy l u = filter (\d -> d >= l && d <= u)
 
 -- auto-complete
--- Qs: 
+-- Qs:
 --
 -- * add "canonical <auth>" entry to log seeds for entity recognition via
 --   `rate`?
@@ -146,8 +146,8 @@ filterBy l u = filter (\d -> d >= l && d <= u)
 --   thereby showing errors in (nearly) real-time which allows for on the spot
 --   user correction.
 --
---   This linter would: 
---  
+--   This linter would:
+--
 --      1. grab line at cursor
 --      2. try to extract entry w citation/attribution, a.t.m. only `Read`
 --      3. rate against last ~5 authors (take first match); otherwise lazily
@@ -200,7 +200,7 @@ filterWith' input (x : xs)
             (doesEntryBelongToParent tabs)
             (variantSatisfies input)
             xs
-              -- inside filter; include read entries 
+              -- inside filter; include read entries
               -- do not recurse to `filterWith`; lack of search preds holds.
       in  if null belong then go rest else (x : belong) ++ go rest
     | searchSatisfies' input x
@@ -212,7 +212,7 @@ filterWith' input (x : xs)
 compareRead :: (Title, Author) -> (Title, Author) -> Bool
 compareRead (t, a) (t', a') = t == t' && a' == a
 
--- TODO 
+-- TODO
 takeWhileRestWithFilter
   :: (a -> Bool) -- take until this fails
   -> (a -> Bool) -- skip those that fail this
@@ -269,7 +269,7 @@ isIndentedTo :: Int -> LogEntry -> Bool
 isIndentedTo depth (Dump       _                  ) = depth == 0
 isIndentedTo depth (TabTsEntry (indentation, _, _)) = indentation >= depth
 
--- | Checks whether a 'LogEntry' is indented _exactly_ to the given depth; 
+-- | Checks whether a 'LogEntry' is indented _exactly_ to the given depth;
 -- for 'Dump's returns @False@ unless the given depth is 0.
 isIndentedExactlyTo :: Int -> LogEntry -> Bool
 isIndentedExactlyTo depth (Dump _) = depth == 0

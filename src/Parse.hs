@@ -15,7 +15,7 @@
 --
 -- This module provides atomic parsers, as it were, for "Parsers.Entry".
 --
--- Note 'toDefVersus', 'inlineMeaning', and 
+-- Note 'toDefVersus', 'inlineMeaning', and
 -----------------------------------------------------------------------------
 module Parse where
 
@@ -80,7 +80,7 @@ import           Text.Trifecta           hiding ( Rendering
 --
 -- ▣  ignore indentation preserving/setting timestamps (see `Entry::Null`)
 --
--- ▣  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore 
+-- ▣  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore
 --    or ban elipsis for untimestamped entries
 --  [r|...
 --     [<abbr-ts>] - <activity>
@@ -103,7 +103,7 @@ import           Text.Trifecta           hiding ( Rendering
 --
 -- ▣  parse "dialogue"  of the form:
 --    > dialogue
---    > 
+--    >
 --    > <character>: <paragraph>
 --    >
 --    > <character>: <paragraph>
@@ -115,9 +115,9 @@ import           Text.Trifecta           hiding ( Rendering
 --
 -- □  (!!) allow empty quote body
 --
--- □  (!!) (hard) consume rest of log loudly; a.t.m. when, say, the quote parser 
---    fails, as above with a pair of empty quotes, do not silently consume, 
---    discard the rest of the log file if/when it's easily determined whether 
+-- □  (!!) (hard) consume rest of log loudly; a.t.m. when, say, the quote parser
+--    fails, as above with a pair of empty quotes, do not silently consume,
+--    discard the rest of the log file if/when it's easily determined whether
 --    there are further entries.
 --
 --
@@ -141,18 +141,18 @@ import           Text.Trifecta           hiding ( Rendering
 --    Example note at the end of a def. needs label; one of: "N.B.", "ref",
 --    etc., or quotation (perhaps add to Quotation a "clarificatory" bool?)
 --  [r| 19:32:42 λ. d adverse, averse
--- 
+--
 --    "Men have an aversion to what breaks in upon their habits; a reluctance and
 --    repugnance to what crosses their will; a disgust at what offends their
 --    sensibilities; and are often governed by antipathies for which they can
 --    give no good reason." - See {Dislike}
 --  |]
--- 
+--
 -- □  finish multiple books at once?
 --
 -- □  parse "read (book | article | play ) <title>, by <author>" to specify media
---    type; default to "book"?  
---    watch [(tv | movie)] <title>[, with <cast-names>, ...,] 
+--    type; default to "book"?
+--    watch [(tv | movie)] <title>[, with <cast-names>, ...,]
 --
 -- □  (?) chapter numbers, for instance, "ch <num"
 --
@@ -531,7 +531,7 @@ testlog' =
                 impossbile to dislike anyone if one looked at them."
 
                 In "To the Lighthouse", by Virginia Woolf
-  
+
 |]
 
 q =
@@ -710,13 +710,13 @@ second line
 ...
 
     12:10:01 λ. d sylvan
-...    
+...
 dump body
 multiple lines
-... 
-   
+...
+
 14:19:00 λ. read "Witches Abroad", by Terry Pratchett
- 
+
 
 |]
 
@@ -746,7 +746,7 @@ austen =
   [r|
 
 10:54:04 λ. read "Northanger Abbey", by Jane Austen
-    10:54:22 λ. q101 
+    10:54:22 λ. q101
 
     "To come with a well-informed mind, is to come with the inablity of
     administering to the vanity of others..."
@@ -756,8 +756,8 @@ austen =
     10:55:26 λ. d raillery, coppice, disquisition, dissertation
     13:33:55 λ. d scud, mizzle
     13:36:33 λ. d casement
-    13:39:59 λ. q123 
-    
+    13:39:59 λ. q123
+
     "I cannot speak well enough to be unintelligible."
 
     In "Northanger Abbey" by Jane Austen

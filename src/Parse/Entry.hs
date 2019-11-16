@@ -28,7 +28,7 @@
 -- Note that the tags themselvel /must/ be non-empty.
 --
 --    This will be done (this is a description of coarse granulariy) as follows:
---      
+--
 --      1. (DONE) Update the entry parser of each variant we mean to support tags with
 --      the 'tag' parser.
 --
@@ -41,7 +41,7 @@
 --      4. Include CLI subcommand to collect, within a date range, naturally,
 --      entries with a certain tag. How to serialize or expose this entries is
 --      as yet undetermined.
--- 
+--
 -----------------------------------------------------------------------------
 module Parse.Entry where
 
@@ -101,7 +101,7 @@ import           Text.Trifecta           hiding ( Rendering
 --  >  that..."
 --  >
 --  >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
---  
+--
 --  TODO: conditionally omit capture of attribution when it can be inferred
 --  from indentation context.
 quotation :: Parser Entry
@@ -167,7 +167,7 @@ book = do
     <|> try (symbol "finish reading")
     <|> symbol "finish"
   title       <- between quot quot (some $ noneOf "\"")
-  _           <- optional $ symbol "," -- 
+  _           <- optional $ symbol "," --
   _           <- symbol "by" <?> "expected attribution"
   -- what is this "canonical" business?
   isCanonical <- option False $ symbol "canonical" *> return True
@@ -182,11 +182,11 @@ def = do
   dq <- (try toDefVersus <|> try inlineMeaning <|> toDefn)
   return . Def . trimDefQuery $ dq
 
--- | Extracts page number as one of: 
+-- | Extracts page number as one of:
 --
---  > "p <num>" -- page number 
---  > "s <num>" -- pg at start of reading session 
---  > "e <num>" -- pg at end of reading session 
+--  > "p <num>" -- page number
+--  > "s <num>" -- pg at start of reading session
+--  > "e <num>" -- pg at end of reading session
 --  > "f <num>" -- pg at end of book; shorthand for completion of book
 page :: Parser Entry
 page = do
@@ -306,7 +306,7 @@ logEntry' (Just previousTimeStamp) = do
           ( return
           $ Leijen.vcat
           $ (Leijen.text "Unordered or duplicate timestamps:" :)
-      -- (Leijen.line :)
+  -- (Leijen.line :)
           $ fmap Leijen.text
           $ (wordSensitiveLineWrap
               55
@@ -404,7 +404,7 @@ logEntrySquawk previous current = case (>=) <$> previous <*> current of
 --            )
 --          )
 
--- | Inserts linebreaks intelligently. 
+-- | Inserts linebreaks intelligently.
 --
 -- It places them less than the given number of characters into a line if it
 -- the alternative is to include only part of a word.
@@ -422,14 +422,14 @@ wordSensitiveLineWrap n s =
   in  go (words s)
 
 
--- | Parse with context/state. 
+-- | Parse with context/state.
 --
 -- For example, in homage to the useful but utterly contrived, I show below how
 -- to parse a list of comma-separated digits and count the length of the list a
--- single pass.  
+-- single pass.
 --
 -- Given:
---  
+--
 -- @
 --  parse :: Parser a -> String -> Trifecta.Result a
 --
@@ -461,7 +461,7 @@ statefulMany initialState p = go initialState
 -- | 'threadMany' /basically/ suffices for efficient input validation (and
 -- if/when I prettify the error message by digging into the parsers delta,
 -- span, line information, it will be fully comparable to a normal "Trifecta"
--- error message--which is what we want). 
+-- error message--which is what we want).
 --
 -- However, I would prefer to write a greedy combinator like 'many' but that
 -- has two failure modes: the first parses until it fails and then the whole
@@ -554,7 +554,7 @@ ascendingDigits' previous = do
           mempty
           mempty
           mempty
-      in   -- trace (show err) $ 
+      in     -- trace (show err) $
           Left "expected ascending comma-separated digits"
 
 

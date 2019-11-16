@@ -521,7 +521,7 @@ spec' = do
 
 
 --        query acid FromDB>>=colRender True
--- TODO: 
+-- TODO:
 --
 -- # First Pass
 --
@@ -542,7 +542,7 @@ spec' = do
 -- # Second pass
 --
 -- cover:
--- * bucket dispatch/chrono 
+-- * bucket dispatch/chrono
 -- * more exhaustive per variant predicate combos
 --
 -- □  chronological filters (port `filterWith'` to use 'chrono')
@@ -552,8 +552,8 @@ spec' = do
 -- □  single predicate bucket dispatch (no list mode.
 --
 --    CLI defualt option: group output by type, since most query invocations will only
---    focus on a single entry variant. accordingly, entry variant specific query options 
---    have been expanded significantly. 
+--    focus on a single entry variant. accordingly, entry variant specific query options
+--    have been expanded significantly.
 --
 tDia =
   describe "dialogues: 4" $
@@ -567,7 +567,7 @@ tDia =
     NICOLE: (steps back embracingly; brushes away and downwards.) No. She's my lawyer.
     |]
     let d' =
-          [r| 
+          [r|
     (After ~1hr of unbridled loquacity, having mercifully dammed mom's torrent)
     MOM: Do you mind me telling all my favorite moments?
     (Without looking up from his guitar playing)
@@ -662,7 +662,7 @@ tQuote =
           filterQuotes db (Search s e [] initBucketList) quotes `shouldBe` [ o1 , e1 , e2 , o2 ]
           -- spade
           filterQuotes db search' quotes `shouldBe` [o1]
-          -- sarcasm 
+          -- sarcasm
           filterQuotes db search quotes `shouldBe` [e1]
           -- cheap disguise & child
           filterQuotes db search'' quotes `shouldBe` [e2]

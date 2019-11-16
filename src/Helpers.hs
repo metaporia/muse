@@ -31,7 +31,7 @@ print' = hPutStrLn stderr . show
 pPrint' :: Show a => a -> IO ()
 pPrint' = hPutStrLn stderr . ppShow
 
-double :: a -> (a, a) 
+double :: a -> (a, a)
 double a = (a,a)
 
 -- Like 'maybe' for lists.

@@ -12,7 +12,7 @@
 --
 -- This module provides the necessaries for muse's CLI.
 --
--- TODO 
+-- TODO
 --
 -- ▣  persist with "Data.Acid"
 --

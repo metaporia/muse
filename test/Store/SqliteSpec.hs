@@ -466,10 +466,10 @@ pSearch search = runSqlInMem $ do
   (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
   liftIO $ unless (null parseErrs) (pPrint' parseErrs)
   -- (searchErrs, results) <-  (searchAllBare before)
-  (searchErrs, results) <- dispatchSearch' search 
-  liftIO $ showAll $ fmap snd results 
+  (searchErrs, results) <- dispatchSearch' search
+  liftIO $ showAll $ fmap snd results
 
-  
+
 
 
   --it "multi-variant queries"

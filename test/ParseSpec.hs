@@ -121,7 +121,7 @@ spec = do
     $          toMaybe (parse (logEntries <* eof)tNoValidPrefix) -- FIXME example of poor error message
     `shouldBe` Nothing
   describe "square-bracketed, comma-separated tags" $ do
-    -- "assert that tagChar may only be one of [a-zA-Z0-9-]" 
+    -- "assert that tagChar may only be one of [a-zA-Z0-9-]"
     it
         "* tagChar: alpha-numeric characters, spaces, underscores, and hyphens are valid `tagChar`s"
       $ do
@@ -164,7 +164,7 @@ tDialogue =
     DAD: No, just get it over with.
 
 08:35:27 λ. read "Great Expectations" by Charles Dickens
- 
+
 |]
 
 tDialogueOut
@@ -321,10 +321,10 @@ second line
 ...
 dump body
 multiple lines
-... 
-   
+...
+
 14:19:00 λ. read "Witches Abroad", by Terry Pratchett
- 
+
 
 |]
 
@@ -344,7 +344,7 @@ testDumpOutput =
 testNull :: String
 testNull =
   [r|
-    12:10:01 λ. 
+    12:10:01 λ.
 |]
 
 testNullOutput :: [LogEntry]
@@ -353,13 +353,13 @@ testNullOutput = [TabTsEntry (0, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
 testLonelySpaces :: String
 testLonelySpaces =
   [r|
-    
+
 
 11:19:00 λ. read "Witches Abroad", by Terry Pratchett
- 
+
 
     12:10:01 λ. d sylvan
- 
+
 |]
 
 testLonelySpacesOutput :: [LogEntry]
@@ -450,7 +450,7 @@ output
 commentTs :: String
 commentTs =
   [r|20:30:00 λ. commentary
-    
+
 I found myself extremely aggravated by the claustrophobia-inducing parental
 harassment Alan and Buddy's Father--with his anger--, and the Mother--with
 her hypochondriacal whining. This repressive treatment--nay, parental
@@ -514,10 +514,10 @@ d word1 : meaning1; meaning2; meaning3;
 testPgNum :: String
 testPgNum =
   [r|
-08:38:20 λ. p38 
-08:38:21 λ. s 38 
+08:38:20 λ. p38
+08:38:21 λ. s 38
 08:38:22 λ. e38
-08:38:23 λ.  f38 
+08:38:23 λ.  f38
 08:38:24 λ. p  38
 |]
 
@@ -607,13 +607,13 @@ testlog =
     10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
                 distress; inimical; bent on evil.
                     --- vs ---
-                    malign : (adj.) having an evil disposition; spiteful; 
+                    malign : (adj.) having an evil disposition; spiteful;
                     medically trheatening; (v.) to slander; to asperse; to show
                     hatred toward.
     10:17:40 λ. d 38 inimical, traduce, virulent
     10:18:12 λ. d38 sublime, lintel
     10:24:02 λ. quotation
-        
+
                 "There was no treachery too base for the world to commit. She
                 knew this. No happiness lasted."
 
@@ -621,12 +621,12 @@ testlog =
     10:25:27 λ. q
 
                 "Her simplicity fathomed what clever people falsified."
-        
+
                 In "To the Lighthouse", by Virginia Woolf
     10:28:49 λ. d plover
     10:47:59 λ. d cosmogony
     10:49:58 λ. q38
-                
+
                 "But nevertheless, the fact remained, that is was nearly
                 impossbile to dislike anyone if one looked at them."
 
@@ -636,9 +636,9 @@ testlog =
 
 tNull =
   [r|
- 
 
-21:32:05 λ.  
+
+21:32:05 λ.
 
 22:31:38 λ. quotation
 
@@ -683,13 +683,13 @@ shit
 fuck with ssh-keygen (error: "sign_and_send_pubkey: signing failed ...")
 solution: `ssh-add` (the local agent simply needed a heads-up!).
 ...
-09:33:52 λ. muse-pre(the above) 
+09:33:52 λ. muse-pre(the above)
 09:36:48 λ. read "Anna Kerenina", by Leo Tolstoy
     09:45:21 λ. s312
     09:53:29 λ. d316 winnowing
     09:56:56 λ. e316: dict conf
         10:04:53 λ. done: dict conf (see ~/dot/dictrc)
-        
+
     10:05:13 λ. s316
     10:09:54 λ. d318 tarantas (sic). its really 'tarantass'
     10:27:58 λ. d329 interlocutor
@@ -719,7 +719,7 @@ She, as I in this aspect, has never intimated anything beyond herself. Perhaps
 this is a human failing.
 
 In any case, I beat the navy-blue garage door well-dented. My knuckles have
-swollen accordingly. 
+swollen accordingly.
 
 Hopefully Liam R. has shrooms.
 
@@ -729,14 +729,14 @@ drink gin 'n tonic (2 < shots)
     14:17:13 λ. done
 14:19:03 λ. read "Anna Kerenina", by Leo Tolstoy
     14:19:33 λ. s341
-    14:24:16 λ. q343 
-    
+    14:24:16 λ. q343
+
             "But neither of them dared speak of it, and not having
             expressed the one thing that occupied their thoughts, whatever they said
             rang false."
 
-    14:26:55 λ. q344 
-    
+    14:26:55 λ. q344
+
             "I am working, I want to do something, and I had forgotten it
             will all end in Death."
 
@@ -746,11 +746,11 @@ drink gin 'n tonic (2 < shots)
     14:53:12 λ. d350 injunction
     14:57:43 λ. d350 brougham
     15:03:25 λ. d353 rejoined
-    15:04:19 λ. q354 
-    
+    15:04:19 λ. q354
+
             "One can see that he has been educated only to have the
             right to despise education, as they despise everything except animal
-            pleasures." 
+            pleasures."
 
             Note: Is education not an animal pleasure, by our own bestiality and
             its inveterate tendency to promote education? Is not consciousness a form
@@ -878,7 +878,7 @@ broke = [r|
         "Your humility must disarm reproof."
 |]
 
- 
+
 af = [r|
 00:12:45 λ. d hermetic
 00:20:34 λ. d bona fide
@@ -942,7 +942,7 @@ broken = [r|
         "We must not be so ready to fancy ourselves intentionally injured."
 
     09:54:53 λ. q
-    
+
         "The stupidity with which he was favored by nature, must guard his
         courtship from any charm that could make a woman wish for its
         continuance."
@@ -958,7 +958,7 @@ broken = [r|
     14:21:21 λ. dvs celerity : rapidity of motion; swiftness
                     --- vs ---
                     alacrity : cheerful readiness; sprightliness; promptness
-                    
+
     15:03:36 λ. d rencontre, rencounter
     15:06:09 λ. d immure, durance, inure
     15:10:55 λ. d tractable
@@ -984,7 +984,7 @@ broken = [r|
                     contempt, disdain, or disgrace--not necessarily, but such
                     are present in its definition.)
 
-    16:38:23 λ. dvs confute : to quell to silence, stillness, or surrender; to allay; 
+    16:38:23 λ. dvs confute : to quell to silence, stillness, or surrender; to allay;
                     literally, to stop from boiling (both derive from "fuse" as "to melt")
                     --- vs ---
                     refute : to repel; to disprove by argument or evidence
@@ -1011,7 +1011,7 @@ broken = [r|
 
 
     22:08:02 λ. q
-    
+
         "How unlucky that you should have a reasonable answer to give, and that
         I should be so reasonable as to admit it!"
 
@@ -1298,7 +1298,7 @@ brokenOut
     ]
 
 -- The Problem: silently fails to parse broken timestamp and, oddly enough,
--- then skips the whole 'LogEntry'. 
+-- then skips the whole 'LogEntry'.
 --
 -- The Answer: first, this is an unrelated issue and since we now have
 -- successful timestamp uniqueness checking, we can proceed with the sqlite

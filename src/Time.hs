@@ -28,7 +28,7 @@ import           Parse                          ( TimeStamp(..) )
 dayToUTC :: Day -> UTCTime
 dayToUTC day = UTCTime day (secondsToDiffTime 0)
 
--- TODO 
+-- TODO
 -- □  use locale to convert timezone to correct UTC offset (see
 -- 'getCurrentTimeZone')
 toUTC :: Day -> TimeStamp -> UTCTime
@@ -39,7 +39,7 @@ toUTC d (TimeStamp h m s) =
   mins = 60 * m
 
 fromUTC :: UTCTime -> (Day, TimeStamp)
-fromUTC (UTCTime day dt) = 
+fromUTC (UTCTime day dt) =
   let seconds = floor $ toRational dt
       (rest, sec) = divMod seconds 60
       (hr, min) = divMod rest 60

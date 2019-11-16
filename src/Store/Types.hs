@@ -67,7 +67,7 @@ import           Parse.Entry                    ( Entry(..)
                                                 )
 import           Time
 
--- TODO 
+-- TODO
 -- ▣  (index) replace `[DayLog]` with `IxSet DayLog]`
 -- ▣  index by `(Day, TimeStamp)` (primary key?)
 -- ▣  index by `Day`

@@ -193,7 +193,7 @@ instance Indexable Dumps where
       ]
 
 -- | Logs are naturally indexed/bucketed by day, so we won't tamper with that.
--- 
+--
 -- TODO index!
 data DayLog = DayLog
   { day :: Day
@@ -258,7 +258,7 @@ deriveSafeCopy 0 'base ''DB
 data Result
   = DumpR Text
   | TsR UTCTime
-        Entry -- ^ N.B. doesn't use 'Entry' variant 'PN' 
+        Entry -- ^ N.B. doesn't use 'Entry' variant 'PN'
   deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''Result
@@ -289,7 +289,7 @@ instance ToResult ctx DumpWrapper where
   toResult _ = DumpR . T.pack . unDumpWrapper
 
 fromEntry :: UTCTime -> Entry -> Result
-fromEntry = TsR 
+fromEntry = TsR
 
 fromDumps :: Dumps -> [Result]
 fromDumps (Dumps _ set) = DumpR <$> (Set.toList set)
@@ -346,7 +346,7 @@ fromDB' DB { chrono, ..} = Results . go $ IxSet.toAscList
           Store.Types.Null -> xs
 
 fromDB :: Query DB Results
-fromDB = asks fromDB' 
+fromDB = asks fromDB'
 
 -- ** 'DB' management
 -- | Insert 'LogEntry' into 'DB'. For each, an entry is added to 'chrono' and,
@@ -419,7 +419,7 @@ addDay day utc le =
     = addLogEntry day x Nothing >> tagAndUpdate xs
   -- | Given id of parent read entry, @tagRest@ inserts tagged entries
   -- as long as their indentation level never drops below 1. Returns
-  -- untagged. 
+  -- untagged.
   -- FIXME take @AttrTag@ not @Maybe AttrTag@. @tagRest@ should not be
   -- invoked with @Nothing@.
   tagRest :: Maybe AttrTag -> [LogEntry] -> Update DB [LogEntry] -- rest
@@ -490,11 +490,11 @@ initBucketList = BucketList [] ([], []) [] [] [] ([], []) []
 --  i. check whether there all members of bucketlist are None or all are Maybe;
 --     if so, apply filters to chrono--this will save us time sorting filtered
 --     buckets--, otherwise, fetch entries from each requested bucket within
---     date range with @entries @>= s @=< e@ and package it up in a 'DB' 
+--     date range with @entries @>= s @=< e@ and package it up in a 'DB'
 --
---     (use some @collectHeads :: DB -> Maybe [Attribution -> Bool] -> Maybe AttrCache 
+--     (use some @collectHeads :: DB -> Maybe [Attribution -> Bool] -> Maybe AttrCache
 --     -> BucketList -> [Results]@ that takes the
---     first entry that satisfies from each non-empty bucket (unwanted buckets should 
+--     first entry that satisfies from each non-empty bucket (unwanted buckets should
 --     be empty at this point) and sorts them; repeat until all buckets are
 --     empty, and/or 'collectHeads' returns an empty set.)
 --
@@ -569,7 +569,7 @@ filterDefs db (Search s e authPreds BucketList { defsPreds }) defs
     -- preds the def entry is returned (as a match).
     and $ or <$> ((\pred -> pred <$> (fmap toLower <$> hws)) <$> hs) -- case fix
   satisfiesAll hs ms (InlineDef hw mn) =
-    -- case fix 
+    -- case fix
     and (hs <*> pure (toLower <$> hw)) && and (ms <*> pure (toLower <$> mn))
   satisfiesAll hs ms (DefVersus hw mn hw' mn') =
     satisfiesAll hs ms (InlineDef hw mn)
@@ -588,9 +588,9 @@ filterDefs db (Search s e authPreds BucketList { defsPreds }) defs
 -- However, if there are attributions but some attribution predicates present,
 -- then it returns 'False' as we shouldn't want to contaminate the output.
 readSatisfies :: Day -> Day -> DB -> TsIdxTag a -> [Attribution -> Bool] -> Bool
--- no auth/title preds, allows all entries to pass 
+-- no auth/title preds, allows all entries to pass
 readSatisfies _ _ _ _                        [] = True
--- no 'AttrTag' present, 
+-- no 'AttrTag' present,
 readSatisfies _ _ _ (TsIdxTag tsTag Nothing) _  = False
 readSatisfies s e DB { reads } (TsIdxTag tsTag (Just attr)) ps =
   case fmap (val . tsIdx) . getOne $ reads @>=<= (s, e) @= (attrId attr) of

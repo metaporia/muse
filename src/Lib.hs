@@ -13,7 +13,7 @@
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- This module merely exports modules "Diff", "Helpers", "Parse", "Parse.Entry", 
+-- This module merely exports modules "Diff", "Helpers", "Parse", "Parse.Entry",
 -- "Search", and "Render".
 --
 -- TODO
@@ -33,7 +33,7 @@
 --    CLI's prettified output.
 --
 -- □   (!!!) usablility: dispatch bucket filters so that a option for a given
---     flag, say, `--qb <word>`, implies the presence of its associated bucket type 
+--     flag, say, `--qb <word>`, implies the presence of its associated bucket type
 --     filter, in this
 --     case, `-q`.
 --
@@ -41,7 +41,7 @@
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
 --
--- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files 
+-- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files
 --    and/or update parser to accomodate desirable aspects of the old syntax.
 --
 --    DIRECTIVE: fail loudly: WE DO NOT WANT HALF-PARSED FILES ANY MORE
@@ -141,7 +141,7 @@ version = "muse 0.2.1"
 -- Questions:
 --
 -- * default date span?
--- * 
+-- *
 -- Flags:
 --
 -- * --after DATE, --before DATE: month, day, year
@@ -154,24 +154,24 @@ version = "muse 0.2.1"
 --        - when a date attribute, e.g., day, month, or year, is omitted, the
 --          that of the current date is used
 --
---        - relative dates: 
+--        - relative dates:
 --
 --           --relative <rdate>
---           <rdate> : (order agnostic, all but one field is optional) 'NNdNNmNNy', 
+--           <rdate> : (order agnostic, all but one field is optional) 'NNdNNmNNy',
 --                     e.g., '1m', '2m3d', '3d1m2y'.
 --
 --
 --
 -- * --filter (author | title | definition)
 --
--- muse [(--within | -w) relDATE ] [(--author | -a) AUTHOR] 
+-- muse [(--within | -w) relDATE ] [(--author | -a) AUTHOR]
 --      ([(--title | -t) TITLE] [--definitions | -d] | [(--quotation | -q) [SEARCH_STRING]])
 --
 -- For instance, 'muse -w 5d3m2y'
 -- TODO
 -- □  relative date parser
 -- | Reads `RelDur`.
--- (order agnostic, all but one field is optional) 'NNdNNmNNy', 
+-- (order agnostic, all but one field is optional) 'NNdNNmNNy',
 --          e.g., '1m', '2m3d', '3d1m2y'.
 --
 -- N.B.: ordered parsing on first pass
@@ -398,7 +398,7 @@ data Opts
 --
 --    Note that around the colon whitespace is discarded but within a search
 --    string list is kept and included in the search.
---  
+--
 --    <search-arg>              ::= <headword-meaning-search>
 --                                | <headword-search>
 --                                | <meaning-search>
@@ -409,7 +409,7 @@ data Opts
 --    <sep>                     ::= "&" | "|"
 --    <word>                    ::= <char>+
 --    <char>                    ::= [a-zA-Z]
---    
+--
 -- Applying only one search string to headword and/or meaning:
 --
 --    * @rep@ or @rep :@ : select entries whose headworsd contain "rep"
@@ -421,7 +421,7 @@ data Opts
 -- Searches with with conjunction/disjunction:
 --
 --    * @reprieve|respite@ : select entries whose headword matches either
---    * @re&oof@ : select entries whose headword matches both 
+--    * @re&oof@ : select entries whose headword matches both
 --    * @re&oof:latter|delay@ : select entries whose headword satisfy the
 --    above and whose meaning contains either "latter" or "delay"
 --
@@ -439,7 +439,7 @@ data Opts
 --
 -- REFACTOR NOTE: Proprosed replacement as part of search string padding deferral.
 parseDefSearch :: Parser DefSearch
-parseDefSearch = 
+parseDefSearch =
   ((\case
     (Just hw, Just mn) -> DefSearch [InlineDef', DefVersus'] (Just hw) (Just mn)
     (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] Nothing (Just mn)
@@ -613,7 +613,7 @@ testMain s = do
 -- □  wrap 'dispatchSearch' to pretty print output; see 'colRender'
 --
 -- □  lint: run parse but don't write to DB
--- 
+--
 --
 dispatch :: Opts -> IO ()
 dispatch Bare                           = putStrLn version
@@ -628,7 +628,7 @@ dispatch opts@(Opts color (Search searchConfig)) = do
     return ()
   return ()
 
-    -- FIXME 
+    -- FIXME
     -- bracket
     --(openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
     --createCheckpointAndClose
@@ -710,13 +710,13 @@ writeMuseConf mc = do
 --    i.  if both (a) and (b) hold, then proceed to (3)
 --    ii. otherwise prompt for missing locations, write choices to ~/.muse
 -- 3. parse log dir; serialize successful results ([Int, TS, Entry]) to
---    cacheDir/entries (bucket by month); collect filenames of parse failures 
---    into cacheDir/failures. 
+--    cacheDir/entries (bucket by month); collect filenames of parse failures
+--    into cacheDir/failures.
 --
 --    - write valid date range to config ?
 --    - tag generation based on entry grouping
--- 4. 
--- | Prompt user for log dir, cache dir, 
+-- 4.
+-- | Prompt user for log dir, cache dir,
 prompt :: IO MuseConf
 prompt = do
   home' <- getEnv "HOME"
@@ -763,14 +763,14 @@ museInit quiet ignoreCache = do
   parseAllEntries quiet ignoreCache museConf
   return museConf
 
-      
+
 
 -- | List file names in log source directory
 lsEntrySource :: MuseConf -> IO [FilePath]
 lsEntrySource = listDirectory . T.unpack . entrySource
 
 -- | Parse all entries from logDir into cacheDir/entries.
--- TODO 
+-- TODO
 --
 -- ▣  centralize file path generation--save yourself the headache later of
 --    mismatched paths!
@@ -782,7 +782,7 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 
 -- | Parse all entries into sqlite database.
 --
--- TODO 
+-- TODO
 --
 -- □  caching
 --
@@ -791,15 +791,15 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
-  -- 
+  --
       --  TODO rewrite this for sqlite
-      -- 
       --
-      -- 
-      -- Check, if for a given log file a parsed file has been cached, 
-      -- whether the log's modification date is greater than the that of the 
+      --
+      --
+      -- Check, if for a given log file a parsed file has been cached,
+      -- whether the log's modification date is greater than the that of the
       -- cached json.
-      --   
+      --
       --   1. if using cache, collect keys of modified entries from 'lastUpdated', otherwise use all
       --      * for each log source, fetch last modification time. if there is
       --        none, then add to list, otherwise compare the times: include only

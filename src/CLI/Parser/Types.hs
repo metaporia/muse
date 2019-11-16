@@ -1,7 +1,7 @@
 module CLI.Parser.Types where
 
-import Control.Applicative
-import Text.Trifecta
+import           Control.Applicative
+import           Text.Trifecta
 
 
 data BoolExpr a = AndE (BoolExpr a) (BoolExpr a)

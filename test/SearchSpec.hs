@@ -36,7 +36,7 @@ import qualified Text.Trifecta.Result          as Tri
 --  singly indented entries are attributed to the first Read entry, not the
 --  closest parent Read entry.
 
--- □  test `--title` filters: 
+-- □  test `--title` filters:
 --    □  by themselves,
 --    □  with type preds,
 --    □  with `--author` filters,
@@ -87,12 +87,12 @@ spec = do
         <$> input Nothing Nothing [Just isDialogue, Just isDef]
         )
         >>= (`shouldBe` True)
-  -- string search 
+  -- string search
   describe "satisfies auth \"Woolf\"" $ do
     it "satisfies w auth search" $ example $ do
       (flip satisfies tQuote <$> input (Just $ isInfixOf "Woolf") Nothing [])
         >>= (`shouldBe` True)
-  -- string search 
+  -- string search
   describe "satisfies auth \"Woolf\" but only return defs" $ do
     it "satisfies w auth search" $ example $ do
       (   flip satisfies tQuote
@@ -105,14 +105,14 @@ spec = do
         <$> input (Just $ isInfixOf "Woolf") Nothing []
         )
         >>= (`shouldBe` True)
-  -- string search 
+  -- string search
   describe "satisfies auth \"Woolf\" but only return quotes" $ do
     it "satisfies w auth search" $ example $ do
       (   flip satisfies tQuote
         <$> input (Just $ isInfixOf "Woolf") Nothing [Just isQuote]
         )
         >>= (`shouldBe` True)
-  -- string search 
+  -- string search
   describe "doesReadSatisfy `Read`" $ do
     it "doesReadSatisfy" $ example $ do
       (   flip doesReadSatisfy tRead
@@ -144,7 +144,7 @@ spec = do
   describe "author match (for this test data should return all)" $ do
     it "tAuthor" $ example $ do
       test'' (Just $ isInfixOf "Woolf") Nothing [] >>= (`shouldBe` tAuthor)
-  -- auth & type 
+  -- auth & type
   describe "-a Woolf -q" $ do
     it "tQuote" $ example $ do
       test' (Just $ isInfixOf "Woolf") Nothing [Just isQuote]
@@ -158,7 +158,7 @@ spec = do
   -- regressions upon changes to search code)
 
   --
-  -- title 
+  -- title
   --describe "-t Lighthouse Woolf" $ do
   --  it "tQuote" $
   --    example $ do
@@ -684,19 +684,19 @@ tTitleStr =
     10:37:30 λ. d recusant, recuse
     10:37:35 λ. d scuttle
     11:03:53 λ. d provender
-    14:15:58 λ. quotation 
-            
+    14:15:58 λ. quotation
+
             "If you trust a man, let him be a bachelor."
 
             "Adam Bede" by George Eliot (Mary Ann Evans)
- 
+
 13:37:15 λ. read "Thank You, Jeeves", by P.G. Wodehouse
     20:33:48 λ. d barmy
     20:33:56 λ. quotation
 
           "Thank you, Jeeves."
 
-          In "Thank You, Jeeves" by P.G. Wodehouse  
+          In "Thank You, Jeeves" by P.G. Wodehouse
 |]
 
 tTitle

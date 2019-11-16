@@ -17,7 +17,10 @@
 
 module Store.Sqlite where
 
-import           CLI.Parser.Types               ( BoolExpr, interpretBoolExpr, boolExprToList )
+import           CLI.Parser.Types               ( BoolExpr
+                                                , interpretBoolExpr
+                                                , boolExprToList
+                                                )
 import           Control.Exception              ( SomeException
                                                 , catch
                                                 )
@@ -34,14 +37,19 @@ import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Char8    as BLC
 import           Data.Either
-import           Data.Foldable                  ( foldl', traverse_ )
+import           Data.Foldable                  ( foldl'
+                                                , traverse_
+                                                )
 import           Data.Function                  ( (&) )
 import           Helpers
-import           Data.List                      ( isInfixOf, isPrefixOf, isSuffixOf )
+import           Data.List                      ( isInfixOf
+                                                , isPrefixOf
+                                                , isSuffixOf
+                                                )
 import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
                                                 )
-import qualified Data.Maybe as Maybe
+import qualified Data.Maybe                    as Maybe
 import           Data.Semigroup                 ( (<>) )
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
@@ -176,12 +184,12 @@ instance Tagged PageNumberEntry where
   getAttributionTag = pageNumberEntryAttributionTag
   getQuoteEntry _ = Nothing
 
--- Note that `headswords` is JSON text containing either: 
+-- Note that `headswords` is JSON text containing either:
 --  * a headword list: { "headwords" : [ <word>, .. ] }; or
---  * an inline definition/comparison: 
+--  * an inline definition/comparison:
 --        { "inlineDefinitioPns" : [ { "headword" : <word> , "meaning" : <meaning>}, .. ] }
 --   - a headword list:  { "headword" : <word>, "meaning": <meaning> }, .. ]; or
---   - a comparison: 
+--   - a comparison:
 --
 -- | An 'InlineDef' is a haskell representation of the JSON-encoded
 -- 'definitions' column of the 'DefEntry' table; that is, the string in an
@@ -197,7 +205,7 @@ instance ToJSON InlineDef where
 instance FromJSON InlineDef
 
 -- TODO speed up @--def-search@ (everything else is blazing fast)
---    
+--
 --    Why, you might ask? Well because we want muse to snap, and >1.5ms for a
 --    simple definition meaning search doesn't cut it. Luckily, the select and
 --    apply predicates all in one pass optimized (at least a little) by
@@ -216,12 +224,12 @@ instance FromJSON InlineDef
 --      into mutually referencing inline defs, all headword lists each into
 --      individual entries, each of which converted entry component wuold no
 --      longer have a timestamp as a primary key but some auto-incremented
---      internal integer. 
+--      internal integer.
 --
 --    Proposed DefEntry schema under option (i):
---      
+--
 --      A sparsely populated row for each definition entry would need fields to
---      support: 
+--      support:
 --        * headword lists
 --        * '--- vs ---'-separated inline definitions.
 --
@@ -247,14 +255,14 @@ instance FromJSON InlineDef
 --
 --
 --
---      
+--
 --
 -- TODO use CASE statements to short-circuit def search select queries when the
 -- current entity has the wrong variant tag--left-to-right evaluation, and
 -- short-circuiting of boolean expressions I don't think is guaranteed.
 --
-data DefEntry' = Headwords [TL.Text] 
-               | Inlines [InlineDef] 
+data DefEntry' = Headwords [TL.Text]
+               | Inlines [InlineDef]
                deriving (Eq, Show, Generic)
 
 instance ToJSON DefEntry' where
@@ -330,20 +338,20 @@ writeDay day
             -- should be immediately discarded if the next entry is not the
             -- child of the current read entry).
             Right readEntryKey -> go (Just $ AttrTag readEntryKey) t
-        | 
+        |
                  -- WARNING: this is impossible: it means that the entry is a Read
                  -- variant and a Dump variant, so if it occurs, it will have
                  -- been by programmer error. As such, we simply log the
-                 -- irregularity, 
-        -- b. toplevel and not read entry ->  insert without tag, recurse with accumulator := Nothing 
+                 -- irregularity,
+        -- b. toplevel and not read entry ->  insert without tag, recurse with accumulator := Nothing
           isTopLevel h
           -- discards accumulator should the last entry have been of the Read
           -- variant
         = (:) <$> writeLogEntry day h Nothing <*> go Nothing t
         |
-        -- d. indented one level or more, read entry -> 
-        --      insert untagged, log warning describing weird nested readings (now 
-        --      this may warrant future support, but since we're only replicating 
+        -- d. indented one level or more, read entry ->
+        --      insert untagged, log warning describing weird nested readings (now
+        --      this may warrant future support, but since we're only replicating
         --      the existing behavior of muse, this is out of scope.), and pass
         --      previous accumulator through.
           isIndentedTo 1 h && isRead h
@@ -382,54 +390,55 @@ writeLogEntry
   -> Maybe AttrTag
   -> DB m (Either String UTCTime)
 writeLogEntry day logEntry mAttrTag =
-  -- trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $ 
-    case logEntry of
-        Dump dumpContents ->
-          return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
-          -- FIXME add 'DumpEntry' type & table
-          --
-          --  with acid-state, we kept a list of dumps for each day. In order to
-          --  the same with sqlite and stay consistent with our JSON-based list
-          --  workaround, we will store a list of 'DumpEntry's as JSON, of the form
-          --  [ { "dumpBody" : <string>}, .. ].
-          --
-        TabTsEntry (indentation, timestamp, entry)
-          -> let utc = toUTC day timestamp
-             in
-               (case entry of
-                   Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag dq
-                   Read title author ->
-                     repsert (ReadEntryKey utc) $ ReadEntry title author
-                                 -- FIXME relies on empty attribution string when manual
-                                 -- attribution is omitted
-                   Quotation quoteBody manualAttribution mPgNum ->
-                     repsert (QuoteEntryKey utc) $ QuoteEntry
-                       quoteBody
-                       (if manualAttribution == ""
-                         then Nothing
-                         else Just manualAttribution
-                       )
-                       (fromAttrTag <$> mAttrTag)
-                   Commentary commentBody ->
-                     repsert (CommentaryEntryKey utc)
-                       $   CommentaryEntry commentBody
-                       $   fromAttrTag
-                       <$> mAttrTag
-                   PN pageNum ->
-                     let (pageTag, pgNum) = fromPageNum pageNum
-                     in
-                       -- trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $ 
-                         repsert (PageNumberEntryKey utc) $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
-                   Phr phrase ->
-                     repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
-                   Dialogue dialogueBody ->
-                     repsert (DialogueEntryKey utc)
-                       $   DialogueEntry dialogueBody
-                       $   fromAttrTag
-                       <$> mAttrTag
-                   Parse.Entry.Null -> return ()
+  -- trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $
+                                      case logEntry of
+  Dump dumpContents ->
+    return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
+    -- FIXME add 'DumpEntry' type & table
+    --
+    --  with acid-state, we kept a list of dumps for each day. In order to
+    --  the same with sqlite and stay consistent with our JSON-based list
+    --  workaround, we will store a list of 'DumpEntry's as JSON, of the form
+    --  [ { "dumpBody" : <string>}, .. ].
+    --
+  TabTsEntry (indentation, timestamp, entry)
+    -> let utc = toUTC day timestamp
+       in
+         (case entry of
+             Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag dq
+             Read title author ->
+               repsert (ReadEntryKey utc) $ ReadEntry title author
+                           -- FIXME relies on empty attribution string when manual
+                           -- attribution is omitted
+             Quotation quoteBody manualAttribution mPgNum ->
+               repsert (QuoteEntryKey utc) $ QuoteEntry
+                 quoteBody
+                 (if manualAttribution == ""
+                   then Nothing
+                   else Just manualAttribution
                  )
-                 >> return (Right utc)
+                 (fromAttrTag <$> mAttrTag)
+             Commentary commentBody ->
+               repsert (CommentaryEntryKey utc)
+                 $   CommentaryEntry commentBody
+                 $   fromAttrTag
+                 <$> mAttrTag
+             PN pageNum ->
+               let (pageTag, pgNum) = fromPageNum pageNum
+               in
+                 -- trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $
+                   repsert (PageNumberEntryKey utc)
+                     $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
+             Phr phrase ->
+               repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
+             Dialogue dialogueBody ->
+               repsert (DialogueEntryKey utc)
+                 $   DialogueEntry dialogueBody
+                 $   fromAttrTag
+                 <$> mAttrTag
+             Parse.Entry.Null -> return ()
+           )
+           >> return (Right utc)
 
 main :: IO ()
 main = runSqlite "test.db" $ do
@@ -439,8 +448,8 @@ main = runSqlite "test.db" $ do
   let wutheringHeightsId = ReadEntryKey now
   insertKey wutheringHeightsId $ ReadEntry "Wuthering Heights" "Emily Bronté"
   -- def entry
-  now' <- liftIO getCurrentTime
-  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+  now'  <- liftIO getCurrentTime
+  since <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
   let inline = TL.decodeUtf8 $ encode $ Inlines
         [InlineDef "mizzle" "a misty drizzle"]
       defEntryId = DefEntryKey now'
@@ -470,7 +479,7 @@ main = runSqlite "test.db" $ do
   --        xs = fmap (toEntry . entityVal) allDefs
   --    in  rights xs
   --liftIO $ pPrint $ fmap entityVal allReads
-  -- clean up 
+  -- clean up
   --deleteWhere [DefEntryId P.==. defEntryId]
   --deleteWhere [ReadEntryId P.==. wutheringHeightsId]
   --runSqlite ":memory:" $ do
@@ -483,7 +492,7 @@ main = runSqlite "test.db" $ do
   --reads <- select $ from $ \readEntry -> do
   --      orderBy [asc (readEntry ^. ReadEntryId)]
   reads <- fetchLastRead
-  liftIO $ pPrint  reads 
+  liftIO $ pPrint reads
   return ()
 
 -- # DB schema TODO list:
@@ -510,13 +519,13 @@ main = runSqlite "test.db" $ do
 --    □  convert
 --    □  write to db
 -- ## Read
--- □  read from db types to internal format  
+-- □  read from db types to internal format
 --
 schemaTODO = undefined
 
 entryToResult
   :: ToEntry String record => UTCTime -> record -> Either String Result
-entryToResult utc = fmap (TsR utc) . toEntry 
+entryToResult utc = fmap (TsR utc) . toEntry
 
 class Show err =>
       ToEntry err a where
@@ -622,7 +631,7 @@ toDefEntry mAttrTag dq = case dq of
     Nothing
     Nothing
 
--- | Like 'toDefEntry' but converts from 
+-- | Like 'toDefEntry' but converts from
 phraseToDefEntry :: Maybe AttrTag -> Phrase -> DefEntry
 phraseToDefEntry mAttrTag phrase = case phrase of
   Plural hws -> DefEntry
@@ -664,7 +673,7 @@ type Title  = String
 --
 -- The @*Search@ fields contain variant specific search configuration. As yet,
 -- all but 'DefSearch' are type aliases for @[String -> Bool]@.
--- 
+--
 data SearchConfig = SearchConfig
   { since :: Day
   , before :: Day
@@ -708,13 +717,13 @@ data SearchConfig = SearchConfig
 -- applicable are excluded.
 --
 -- Note that dumps are as yet excluded.
--- 
+--
 -- Note also that def variants should be generated by the CLI's parser.
 dispatchSearch
   :: MonadIO m => String -> SearchConfig -> DB m [Either String Result]
 dispatchSearch logPath SearchConfig {..}
-  = let -- x :: Int 
-      defSearch = definitionSearch -- if null (defVariants definitionSearch) then definitionSearch { defVariants = allDefVariants } else definitionSearch
+  = let -- x :: Int
+      defSearch               = definitionSearch -- if null (defVariants definitionSearch) then definitionSearch { defVariants = allDefVariants } else definitionSearch
       (authPreds, titlePreds) = attributionPreds
         --      search :: _
       search =
@@ -729,7 +738,11 @@ dispatchSearch logPath SearchConfig {..}
         then -- show all in date range matching attribution requirements
           join <$> sequence
             [ -- replaces 'DefSearch' with 'allDefVariants'.
-              filterDefs' since before authPreds titlePreds defSearch { defVariants = allDefVariants }
+              filterDefs' since
+                          before
+                          authPreds
+                          titlePreds
+                          defSearch { defVariants = allDefVariants }
             , filterQuotes' since before authPreds titlePreds quoteSearch
             , filterCommentaries' since
                                   before
@@ -751,13 +764,18 @@ dispatchSearch logPath SearchConfig {..}
                                        commentarySearch
               else return []
             , if not (isDefSearchNullR defSearch) || checkDefinitions
-              then filterDefs' since before authPreds titlePreds 
-                  -- when the definition flag is passed, but no def variants
-                  -- are specified, return all variants; otherwise, use the
-                  -- defSearch unmodified.
-                  (if null (defVariants defSearch) && checkDefinitions
-                      then defSearch { defVariants = allDefVariants }
-                      else defSearch)
+              then filterDefs'
+                since
+                before
+                authPreds
+                titlePreds
+  -- when the definition flag is passed, but no def variants
+  -- are specified, return all variants; otherwise, use the
+  -- defSearch unmodified.
+                (if null (defVariants defSearch) && checkDefinitions
+                  then defSearch { defVariants = allDefVariants }
+                  else defSearch
+                )
               else return []
             ]
     in
@@ -775,7 +793,7 @@ dispatchSearch logPath SearchConfig {..}
 --
 -- For instance, 'DefEntry`s will pass through the following filters in order:
 --    1. entry type inclusion/exclusion--this dispatch takes in the CLI options
---    and dispatches the requested entry-variant filters; 
+--    and dispatches the requested entry-variant filters;
 --    3. date filtration (based on query's date range)--see 'withinDateRange';
 --    3. read attribution--see 'applyReadPreds'; and
 --    4. definition variant :
@@ -849,10 +867,11 @@ applyReadPreds
   -> DB m [Entity record]
 applyReadPreds authorPreds titlePreds entities =
   fmap catMaybes
-    $ sequence
-    $ -- trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) $ 
-      taggedEntrySatisfies authorPreds titlePreds <$> entities
-      
+    $   sequence
+    $ -- trace ("applyReadPreds: \n" <> "# results: " <> show (length x)) $
+        taggedEntrySatisfies authorPreds titlePreds
+    <$> entities
+
 
 -- | Collects entries of from a single variant's table that were entered within
 -- the given inlusive date range. This amounts to a select query with
@@ -899,13 +918,13 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::  -- Esqueleto query expr backend => 
+  ::    -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
   (val True)
 
--- | Applies both 
+-- | Applies both
 attributionConstraints
   :: SqlExpr (Maybe (Entity ReadEntry))
   -> [String]
@@ -927,7 +946,7 @@ attributionConstraints readEntry authPreds titlePreds =
 
 
 
---- DEFINITION SEARCH 
+--- DEFINITION SEARCH
 
 -- | Search predicates specifically for definitions. See 'filterDef'\'s
 -- documentation for more details.
@@ -944,24 +963,24 @@ instance Functor StrSearch where
 
 fromStrSearch :: StrSearch s -> s
 fromStrSearch (PrefixSearch s) = s
-fromStrSearch (InfixSearch s) = s
+fromStrSearch (InfixSearch  s) = s
 fromStrSearch (SuffixSearch s) = s
 
 sqlPadStrSearch :: StrSearch String -> String
-sqlPadStrSearch (PrefixSearch s) = s++"%"
-sqlPadStrSearch (InfixSearch s) = '%':s++"%"
-sqlPadStrSearch (SuffixSearch s) = '%':s
+sqlPadStrSearch (PrefixSearch s) = s ++ "%"
+sqlPadStrSearch (InfixSearch  s) = '%' : s ++ "%"
+sqlPadStrSearch (SuffixSearch s) = '%' : s
 
 
 
 strSearchToPredicate :: StrSearch String -> (String -> Bool)
 strSearchToPredicate (PrefixSearch s) = isPrefixOf s
-strSearchToPredicate (InfixSearch s) = isInfixOf s
+strSearchToPredicate (InfixSearch  s) = isInfixOf s
 strSearchToPredicate (SuffixSearch s) = isSuffixOf s
 
 -- | When theere is no 'BoolExpr', return True (this result is usually ANDed
 -- and so we don't wish to declare an entry unsatisfactory when there is no
--- search expression. 
+-- search expression.
 applyBoolExpr :: Maybe (BoolExpr (StrSearch String)) -> String -> Bool
 applyBoolExpr Nothing   _ = True
 applyBoolExpr (Just be) s = interpretBoolExpr ((s &) . strSearchToPredicate) be
@@ -985,9 +1004,8 @@ isDefSearchNullR DefSearch {..} =
 
 defSearchConstraint
   :: SqlExpr (Value String) -> [String] -> SqlExpr (Value Bool)
-defSearchConstraint  body = foldr
-  (\searchStr rest -> (body `like` val searchStr) &&. rest)
-  (val True)
+defSearchConstraint body =
+  foldr (\searchStr rest -> (body `like` val searchStr) &&. rest) (val True)
 
 
 -- | Runs 'filterDef' on the results of 'selectDefs'.
@@ -1058,12 +1076,19 @@ filterDefs'
   -> DefSearch
   -> DB m [Either String Result]
 filterDefs' since before authPreds titlePreds defSearch = do
-  let mns = maybe [] (foldr ((:) . sqlPadStrSearch) [] ) (meaningPreds defSearch)
+  let mns =
+        maybe [] (foldr ((:) . sqlPadStrSearch) []) (meaningPreds defSearch)
       -- this extracts all the string searches and pads them as infix searches
       -- for use with SQL's LIKE operator.
-      infixSearches = maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPreds defSearch)
+      infixSearches =
+        maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPreds defSearch)
   -- liftIO $ traverse print infixSearches
-  defEntries <- selectDefs' since before authPreds titlePreds infixSearches (defVariants defSearch) -- collect all strings
+  defEntries <- selectDefs' since
+                            before
+                            authPreds
+                            titlePreds
+                            infixSearches
+                            (defVariants defSearch) -- collect all strings
   return
     $   filtermap
           (\e -> case e of
@@ -1088,15 +1113,15 @@ filterDefs' since before authPreds titlePreds defSearch = do
 -- Let's just ignore phrases to explore the performance gains of this approach.
 --
 jankyConvertDefQueryVariantToDefEntryTags :: P.DefQueryVariant -> DefTag
-jankyConvertDefQueryVariantToDefEntryTags P.Phrase' = Inline' -- inline or defn? unaccountable behavior; we've chosen to (temporarily) weather the false positives
-jankyConvertDefQueryVariantToDefEntryTags P.Defn' = Headwords'
+jankyConvertDefQueryVariantToDefEntryTags P.Phrase'    = Inline' -- inline or defn? unaccountable behavior; we've chosen to (temporarily) weather the false positives
+jankyConvertDefQueryVariantToDefEntryTags P.Defn'      = Headwords'
 jankyConvertDefQueryVariantToDefEntryTags P.InlineDef' = Inline'
 jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'
 
 
 -- | Revision of 'selectDefs'' that braves false positives by applying each
 -- string search predicates, viz., headword, meaning, to the json-encoded
--- definition entry. 
+-- definition entry.
 --
 -- This will eliminate many obviously undesirable candidate
 -- entries.
@@ -1111,12 +1136,12 @@ jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'
 --                     | SuffixSearch String
 --                     deriving (Eq, Generic, Show)
 --   @
--- 
+--
 -- And provide an sql-aware function pad the query appropriately; that is,
 -- surround with "%" for infix, prefix "%" for prefix, and suffix "%" for
 -- suffix. With this deferred search couching, 'selectDefs'' retains acesss to
 -- the raw query with which it can apply in infix fashion to each def entry's
--- JSON representation. 
+-- JSON representation.
 --
 -- 'selectDefs'' takes as list of search strings that will be dispatched as
 -- infix queries.
@@ -1162,15 +1187,18 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
           --  -- WARNING: this will return true when given an empty list
           --  variantConstraint
           --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
-          let variantConstraint _ [] = val True
-              variantConstraint defTag variants =
-                 foldl' (\res v -> (val v ==. defTag) ||. res) (val True) variants
+          let variantConstraint _      []       = val True
+              variantConstraint defTag variants = foldl'
+                (\res v -> (val v ==. defTag) ||. res)
+                (val True)
+                variants
 
           where_
             (   dateConstraint defEntry
             &&. matchesInfixSearches defEntry
             -- FIXME (blocked on tag refactor) JANK WORKAROUND
-            &&. variantConstraint (defEntry ^. DefEntryDefinitionTag) querysDefTags
+            &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
+                                  querysDefTags
 
             -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
             -- a tag than a structural distinction
@@ -1179,13 +1207,13 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
             --                       defVariants
             --    ) -- FIXME tag check here!
                  -- * each entry has a json encoded tag in its definitions
-                 -- field (one of Inlines, Headwords, (the string "headwords" 
+                 -- field (one of Inlines, Headwords, (the string "headwords"
                  -- occurs more than once for def versus comparison entries)
                  -- * and in the "phrase_or_def" field one of Definition' or
                  -- Phrase'
                  --
-                 -- we need a filter to take a list of DefQueryVariant 
-                 -- ( Phrase' | Defn' | InlineDef' | DefVersus'), 
+                 -- we need a filter to take a list of DefQueryVariant
+                 -- ( Phrase' | Defn' | InlineDef' | DefVersus'),
                  -- the entry's definition tag (Headwords' | Inline' | Comparison), and
                  -- the entry's phrase_or_def (Phrase' | Definiton')
             )
@@ -1204,7 +1232,7 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
 
 
 
--- | Definition filter. 
+-- | Definition filter.
 --
 -- This function converts the @Entity DefEntry' into a 'DefQuery' before
 -- applying any predicates.
@@ -1213,7 +1241,7 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
 -- Supports for all definition types the following
 -- predicates:
 --
---  * headword infix search; and 
+--  * headword infix search; and
 --  * meaning infix search.
 --
 --  Additionally, definition subtype filters allow for the selection
@@ -1266,9 +1294,7 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
         Right
           $ -- only one of the two compared definitions need satisfy
              variantSatisfies defVariants (Right x)
-          && (  (  applyBoolExpr headwordPreds hw
-                && applyBoolExpr meaningPreds  mn
-                )
+          && ((applyBoolExpr headwordPreds hw && applyBoolExpr meaningPreds mn)
              || (  applyBoolExpr headwordPreds hw'
                 && applyBoolExpr meaningPreds  mn'
                 )
@@ -1289,7 +1315,7 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
 
 
 
---- DUMP SEARCH 
+--- DUMP SEARCH
 --
 -- TODO We're leaving this unimplemented as I've never once felt the need to
 -- search dumps. The only reason dumps are a present is to prevent parse
@@ -1307,7 +1333,7 @@ filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
 
 
 filterDumps
-  ::  -- MonadIO m => 
+  ::    -- MonadIO m =>
      Day -> Day -> [String] -> DB m [String]
 filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump storage
 
@@ -1343,22 +1369,27 @@ filterDialogues since before authPreds titlePreds dialoguePreds
             )
           constraints dialogueEntry
           return dialogueEntry
-     in do ds <- selectWrapper $ \dialogueEntry -> do
-                            where_
-                              $   dateRangeConstraint DialogueEntryId
-                                                      DialogueEntryKey
-                                                      dialogueEntry
-                                                      since
-                                                      before
-                              &&. foldr
-                                    (\pred rest ->
-                                      (dialogueEntry ^. DialogueEntryBody `like` val pred) &&. rest
-                                    )
-                                    (val True)
-                                    dialoguePreds
-                            return dialogueEntry
+    in
+      do
+        ds <- selectWrapper $ \dialogueEntry -> do
+          where_
+            $   dateRangeConstraint DialogueEntryId
+                                    DialogueEntryKey
+                                    dialogueEntry
+                                    since
+                                    before
+            &&. foldr
+                  (\pred rest ->
+                    (dialogueEntry ^. DialogueEntryBody `like` val pred)
+                      &&. rest
+                  )
+                  (val True)
+                  dialoguePreds
+          return dialogueEntry
 
-           return $ fmap (\(Entity (DialogueEntryKey ts) entry) -> entryToResult ts entry) ds
+        return $ fmap
+          (\(Entity (DialogueEntryKey ts) entry) -> entryToResult ts entry)
+          ds
 
 
 
@@ -1395,35 +1426,36 @@ filterCommentaries
   -> [String]
   -> CommentarySearch
   -> DB m [Entity CommentaryEntry]
-filterCommentaries since before authPreds titlePreds commentaryPreds =
-  let
-    selectWrapper constraints = if null authPreds && null titlePreds
-      then select $ from $ \commentaryEntry -> constraints commentaryEntry
-      else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
-        on
-          (   commentaryEntry
-          ^.  CommentaryEntryAttributionTag
-          ==. readEntry
-          ?.  ReadEntryId
-          )
-        constraints commentaryEntry
-        return commentaryEntry
-  in  selectWrapper $ \commentaryEntry -> do
+filterCommentaries since before authPreds titlePreds commentaryPreds
+  = let
+      selectWrapper constraints = if null authPreds && null titlePreds
+        then select $ from $ \commentaryEntry -> constraints commentaryEntry
+        else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
+          on
+            (   commentaryEntry
+            ^.  CommentaryEntryAttributionTag
+            ==. readEntry
+            ?.  ReadEntryId
+            )
+          constraints commentaryEntry
+          return commentaryEntry
+    in
+      selectWrapper $ \commentaryEntry -> do
 
-      where_
-        $   dateRangeConstraint CommentaryEntryId
-                                CommentaryEntryKey
-                                commentaryEntry
-                                since
-                                before
-        &&. foldr
-              (\pred rest ->
-                (commentaryEntry ^. CommentaryEntryBody `like` val pred)
-                  &&. rest
-              )
-              (val True)
-              commentaryPreds
-      return commentaryEntry
+        where_
+          $   dateRangeConstraint CommentaryEntryId
+                                  CommentaryEntryKey
+                                  commentaryEntry
+                                  since
+                                  before
+          &&. foldr
+                (\pred rest ->
+                  (commentaryEntry ^. CommentaryEntryBody `like` val pred)
+                    &&. rest
+                )
+                (val True)
+                commentaryPreds
+        return commentaryEntry
 
 
 
@@ -1454,22 +1486,22 @@ genericSearchConstraintOr textToSearch =
 
 
 
--- | 
---  We want to produce sql that is a generalization of the below: 
+-- |
+--  We want to produce sql that is a generalization of the below:
 --
---  @ 
---  select re.id, title, author, manual_attribution, qe.body 
---    from read_entry re, quote_entry qe 
---    where qe.attribution_tag == re.id 
---      and (author like "%Woolf%" or manual_attribution like "%Woolf%") 
+--  @
+--  select re.id, title, author, manual_attribution, qe.body
+--    from read_entry re, quote_entry qe
+--    where qe.attribution_tag == re.id
+--      and (author like "%Woolf%" or manual_attribution like "%Woolf%")
 --      and qe.body like "%simplicity%";
 --
 -- @
--- or 
+-- or
 --
--- @ 
--- select title, author, manual_attribution, body 
---    from quote_entry  left join read_entry on read_entry.id=quote_entry.attribution_tag; 
+-- @
+-- select title, author, manual_attribution, body
+--    from quote_entry  left join read_entry on read_entry.id=quote_entry.attribution_tag;
 -- @
 --
 filterQuotes
@@ -1572,7 +1604,9 @@ filterQuotes'
   -> DB m [Either String Result]
 filterQuotes' since before auth title quoteBody = do
   qs <- filterQuotes since before auth title quoteBody
-  return $ fmap (\(Entity (QuoteEntryKey ts) quoteEntry) -> entryToResult ts quoteEntry) qs
+  return $ fmap
+    (\(Entity (QuoteEntryKey ts) quoteEntry) -> entryToResult ts quoteEntry)
+    qs
 
 clearDb :: T.Text -> IO ()
 clearDb db = runSqlite db $ do
@@ -1590,7 +1624,7 @@ clearDb db = runSqlite db $ do
 
 -- | Fetch the most recent read entry.
 --
--- TODO return @Maybe (Title, Author)@ 
+-- TODO return @Maybe (Title, Author)@
 fetchLastRead :: MonadIO m => DB m (Maybe (String, String))
 fetchLastRead = do
   first <- selectFirst ([] :: [P.Filter ReadEntry]) [P.Desc ReadEntryId]

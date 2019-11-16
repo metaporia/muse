@@ -21,7 +21,11 @@
 resolver: lts-14.3
 
 ghc-options:
-  "$locals" : -fwarn-incomplete-patterns -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns 
+   # rapid dev warnings
+   # "$locals" : -fwarn-incomplete-patterns -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns 
+
+   # post-refactor pruning warnings
+  "$locals" : -fwarn-incomplete-patterns -Wredundant-constraints -Wincomplete-record-updates -Wincomplete-uni-patterns -Wunused-binds -Wunused-imports
   #  "$locals" : -Wall -Wredundant-constraints -Wunused-binds -Wunused-imports -Wincomplete-record-updates -Wincomplete-uni-patterns -Wcompat
   "$everything" : -O2
 

@@ -22,81 +22,11 @@ import           Data.Maybe                     ( isJust )
 import           Parse.Entry                    ( DefQueryVariant(..)
                                                 , allDefVariants
                                                 )
-import           Store.Sqlite                   ( DefSearch(..)
-                                                , StrSearch(..)
+import           Store.Sqlite                   (StrSearch(..)
                                                 )
 import           Text.Trifecta
 
 --- CLI's custom search argument parser.
-
--- | Custom search interface. @muse search CMDS@ will hand @CMDS@ to this
--- for search config extraction.
---
--- Example searches:
---
--- > search d hw:mn2&mn2
---
-searchVariant :: Parser DefQueryVariant
-searchVariant =
-  try (Defn' <$ symbolic 'd')
-    <|> try (DefVersus' <$ symbol "dvs")
-    <|> try (Phrase' <$ symbolic 'p')
-    <|> (InlineDef' <$ symbol "inline")
-
-data DefSearchInput = DefPred (Maybe (String -> Bool)) (Maybe (String -> Bool))
-                    | DefVariants [DefQueryVariant]
-
-toDefSearch :: DefSearchInput -> DefSearch
-toDefSearch (DefVariants vs ) = DefSearch vs [] []
-toDefSearch (DefPred mHw mMn) = DefSearch [] (toList mHw) (toList mMn)
-  where toList = maybe [] return
-
-instance Show DefSearchInput where
-  show = summarize
-
-summarize (DefPred hw mn) =
-  "DefPred " <> show (isJust hw) <> " " <> show (isJust mn)
-summarize (DefVariants xs) = "DefVariants " <> show xs
-
---- (new style) SEARCH STRING ARGUMENT PARSER(S)
-
-
--- i -> inline def
--- v -> def verus
--- d -> all
-defQueryVariants :: Parser String -- [DefQueryVariant]
-defQueryVariants =  undefined
-
--- | For EBNF-eqsue grammar specification, see documentation of 'defR'.
---
-searchArgument :: Parser (Maybe (String -> Bool), Maybe (String-> Bool))
-searchArgument =
-  bimap Just Just
-    <$> (try headwordAndMeaning)
-    <|> ((Nothing, ) . Just <$> try meaningOnly)
-    <|> ((, Nothing) . Just <$> headwordOnly)
- where
-  headwordOnly :: Parser (String -> Bool)
-  headwordOnly = do
-    expr <- parseBoolExpr
-    skipOptional (symbolic ':')
-    return $ \s -> interpretBoolExpr (`isInfixOf` s) expr
-
-  meaningOnly :: Parser (String -> Bool)
-  meaningOnly = do
-    symbolic ':'
-    expr <- parseBoolExpr
-    return $ \s -> interpretBoolExpr (`isInfixOf` s) expr
-
-  headwordAndMeaning :: Parser (String -> Bool, String -> Bool)
-  headwordAndMeaning = do
-    hwExpr <- parseBoolExpr
-    symbolic ':'
-    meaningExpr <- parseBoolExpr
-    return
-      ( \s -> interpretBoolExpr (`isInfixOf` s) hwExpr
-      , \s -> interpretBoolExpr (`isInfixOf` s) meaningExpr
-      )
 
 -- Revised for 'StrSearch' refactor depended on by DefEntry search
 -- optimization. See 'selectDefs'' for refactor purpose statement and details.
@@ -113,12 +43,12 @@ searchArgument =
 --
 -- FIXME with the above deferral 
 -- FIXME as yet this supports only infix search
-searchArgumentRR
+searchArgument
   :: Parser
        ( Maybe (BoolExpr (StrSearch String))
        , Maybe (BoolExpr (StrSearch String))
        )
-searchArgumentRR =
+searchArgument =
   bimap Just Just
     <$> try headwordAndMeaning
     <|> ((Nothing, ) . Just <$> try meaningOnly)
@@ -144,41 +74,37 @@ searchArgumentRR =
     meaningExpr <- parseBoolExpr
     return (InfixSearch <$> hwExpr, InfixSearch <$> meaningExpr)
 
-data DefSearch' = DefSearch' [DefQueryVariant] 
-                             (Maybe (String -> Bool)) 
-                             (Maybe (String -> Bool))
+--- Definition Variant Parser (TODO integrate)
 
+-- | Custom search interface. @muse search CMDS@ will hand @CMDS@ to this
+-- for search config extraction.
+--
+-- Example searches:
+--
+-- > search d hw:mn2&mn2
+--
+searchVariant :: Parser DefQueryVariant
+searchVariant =
+  try (Defn' <$ symbolic 'd')
+    <|> try (DefVersus' <$ symbol "dvs")
+    <|> try (Phrase' <$ symbolic 'p')
+    <|> (InlineDef' <$ symbol "inline")
 
-searchArgumentR :: Parser DefSearch'
-searchArgumentR =
-    try headwordAndMeaning
-    <|> try meaningOnly
-    <|> headwordOnly
- where
-  headwordOnly :: Parser DefSearch'
-  headwordOnly = do
-    expr <- parseBoolExpr
-    skipOptional (symbolic ':')
-    return $ DefSearch' allDefVariants
-                        (Just $ \s -> interpretBoolExpr (`isInfixOf` s) expr)
-                        Nothing
+data DefSearchInput = DefPred (Maybe (String -> Bool)) (Maybe (String -> Bool))
+                    | DefVariants [DefQueryVariant]
 
-  meaningOnly :: Parser DefSearch'
-  meaningOnly = do
-    symbolic ':'
-    expr <- parseBoolExpr
-    return $ DefSearch' [InlineDef', DefVersus']
-                        Nothing
-                        (Just $ \s -> interpretBoolExpr (`isInfixOf` s) expr)
+instance Show DefSearchInput where
+  show = summarize
 
-  headwordAndMeaning :: Parser DefSearch'
-  headwordAndMeaning = do
-    hwExpr <- parseBoolExpr
-    symbolic ':'
-    meaningExpr <- parseBoolExpr
-    return $ DefSearch'
-      [InlineDef', DefVersus']
-      (Just $ \s -> interpretBoolExpr (`isInfixOf` s) hwExpr)
-      (Just $ \s -> interpretBoolExpr (`isInfixOf` s) meaningExpr)
+summarize (DefPred hw mn) =
+  "DefPred " <> show (isJust hw) <> " " <> show (isJust mn)
+summarize (DefVariants xs) = "DefVariants " <> show xs
 
+--- (new style) SEARCH STRING ARGUMENT PARSER(S)
 
+-- i -> inline def
+-- v -> def verus
+-- d -> all
+--  TODO 
+defQueryVariants :: Parser String -- [DefQueryVariant]
+defQueryVariants =  undefined

@@ -132,7 +132,7 @@ import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
 import           Store.Sqlite                   ( StrSearch(..)
-                                                , DefSearchR(..)
+                                                , DefSearch(..)
                                                 , fetchLastRead
                                                 )
 version :: String
@@ -197,8 +197,8 @@ subRelDur day (RelDur y m d) =
     . addDays (negate d)
     $ day
 
-searchR :: Day -> Parser SearchConfig
-searchR today = do
+search :: Day -> Parser SearchConfig
+search today = do
 
   authPreds  <- authorS
   titlePreds <- titleS
@@ -219,8 +219,7 @@ searchR today = do
           <$> titleS
           )
 
-  -- defSearch <- parseDefSearch
-  defSearchR <- parseDefSearchR
+  defSearch <- parseDefSearch
 
   dvs <- flag [] [DefVersus'] (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
 
@@ -257,7 +256,7 @@ searchR today = do
                         -- turn search strings into infx
                         -- searches for SQL's LIKE clause
                         (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
-                        ((\ds@DefSearchR { defVariantsR } -> ds { defVariantsR = defVariantsR ++ dvs} ) defSearchR)
+                        ((\ds@DefSearch { defVariants } -> ds { defVariants = defVariants ++ dvs} ) defSearch)
                         (padForSqlLike <$> q')
                         (padForSqlLike <$> comments')
                         (padForSqlLike <$> dias')
@@ -325,12 +324,12 @@ color =
   --(infoOption "muse 0.1.5" $
   -- long "version" <> short 'V' <> help "Display version information") <*>
 
-toplevelR :: Day -> Parser OptsR
-toplevelR today = (OptsR <$> color <*> subparser
+toplevel :: Day -> Parser Opts
+toplevel today = (Opts <$> color <*> subparser
   (  command
       "search"
       (info
-        (SearchR <$> searchR today <**> helper)
+        (Search <$> search today <**> helper)
         (progDesc
           "Search log entries by date, author, title, or predicate on entry contents.\
              \ Inline definitions of headwords or phrases can be searched as well."
@@ -339,13 +338,13 @@ toplevelR today = (OptsR <$> color <*> subparser
   <> command
        "parse"
        (info
-         (ParseR <$> parse' <**> helper)
+         (Parse <$> parse' <**> helper)
          (progDesc "Parse entries; a bare invocation runs Rparse --allR")
        )
   <> command
        "lastRead"
        (info
-         (    FetchLastReadR
+         (    FetchLastRead
          <$>  switch
                 (long "suppress-newline" <> help "Suppress trailing newline")
          <**> helper
@@ -354,35 +353,35 @@ toplevelR today = (OptsR <$> color <*> subparser
        )
   <> command
        "lint"
-       (info (pure LintR)
+       (info (pure Lint)
              (progDesc "TBD; for, e.g., author attribution validation")
        )
   <> command
        "init"
        (info
-         ((InitR <$> quiet <*> ignore) <**> helper)
+         ((Init <$> quiet <*> ignore) <**> helper)
          (progDesc
            "Initialize config file, cache directory, and entry log\
              \ directory; parse all entries in Rlog-dirR"
          )
        )
-  )) <|> (infoOption version (long "version" <> short 'V') <*> pure BareR) -- VERSION
+  )) <|> (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
 
 
 
-data SubCommandR
-  = SearchR Sql.SearchConfig
-  | ParseR InputType
-  | FetchLastReadR Bool -- toggles trailing newline suppression
-  | LintR
-  | InitR Bool
+data SubCommand
+  = Search Sql.SearchConfig
+  | Parse InputType
+  | FetchLastRead Bool -- toggles trailing newline suppression
+  | Lint
+  | Init Bool
           Bool
   deriving Show
 
-data OptsR
-  = OptsR { colorizeR :: Bool
-          , subcommandR :: SubCommandR }
-  | BareR
+data Opts
+  = Opts { colorize :: Bool
+          , subcommand :: SubCommand }
+  | Bare
   deriving Show
 
 -- | Definition parser in new style.
@@ -439,26 +438,26 @@ data OptsR
 -- different 'DefQueryVariant'.
 --
 -- REFACTOR NOTE: Proprosed replacement as part of search string padding deferral.
-parseDefSearchR :: Parser DefSearchR
-parseDefSearchR = 
+parseDefSearch :: Parser DefSearch
+parseDefSearch = 
   ((\case
-    (Just hw, Just mn) -> DefSearchR [InlineDef', DefVersus'] (Just hw) (Just mn)
-    (Nothing, Just mn) -> DefSearchR [InlineDef', DefVersus'] Nothing (Just mn)
-    (Just hw, Nothing) -> DefSearchR  allDefVariants (Just hw) Nothing
+    (Just hw, Just mn) -> DefSearch [InlineDef', DefVersus'] (Just hw) (Just mn)
+    (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] Nothing (Just mn)
+    (Just hw, Nothing) -> DefSearch  allDefVariants (Just hw) Nothing
     -- this is really an error, right? yes. see 'searchArgument' it's
     -- impossible
     (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
-  ) <$> defRR) <|> pure (DefSearchR [] Nothing Nothing)
+  ) <$> defSearchFlag) <|> pure (DefSearch [] Nothing Nothing)
 
 
 -- search string deferral revision
-defRR
+defSearchFlag
   :: Parser
        ( Maybe (BoolExpr (StrSearch String))
        , Maybe (BoolExpr (StrSearch String))
        )
-defRR = option
-  (eitherReader (parseEither searchArgumentRR))
+defSearchFlag = option
+  (eitherReader (parseEither searchArgument))
   (  long "def-search"
   <> long "ds"
   <> help
@@ -589,8 +588,8 @@ showDebug = False
 main :: IO ()
 main = do
   today <- utctDay <$> getCurrentTime
-  execParser (info (helper <*> toplevelR today) (fullDesc <> header "dispatch"))
-    >>= dispatchR
+  execParser (info (helper <*> toplevel today) (fullDesc <> header "dispatch"))
+    >>= dispatch
 
 -- | (For development purposes only.) Test CLI parser from ghci.
 testMain :: String -> IO ()
@@ -599,10 +598,10 @@ testMain s = do
   let result =
         execParserPure
             defaultPrefs
-            (info (helper <*> toplevelR today) (fullDesc <> header "dispatch"))
+            (info (helper <*> toplevel today) (fullDesc <> header "dispatch"))
           $ words s
   case result of
-    Options.Applicative.Success optsR -> dispatchR optsR
+    Options.Applicative.Success opts -> dispatch opts
     _ -> pPrint result
 
 
@@ -616,9 +615,9 @@ testMain s = do
 -- □  lint: run parse but don't write to DB
 -- 
 --
-dispatchR :: OptsR -> IO ()
-dispatchR BareR                           = putStrLn version
-dispatchR opts@(OptsR color (SearchR searchConfig)) = do
+dispatch :: Opts -> IO ()
+dispatch Bare                           = putStrLn version
+dispatch opts@(Opts color (Search searchConfig)) = do
   mc <- loadMuseConf
   runSqlite (sqlDbPath mc) $ do
     runMigration Sql.migrateAll
@@ -640,11 +639,11 @@ dispatchR opts@(OptsR color (SearchR searchConfig)) = do
     --  return ()
     --)
 
-dispatchR (OptsR color LintR                    ) = putStrLn "linting"
-dispatchR (OptsR color (InitR quiet ignoreCache)) = do
+dispatch (Opts color Lint                    ) = putStrLn "linting"
+dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
-  void $ museInitR quiet ignoreCache
-dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
+  void $ museInit quiet ignoreCache
+dispatch opts@(Opts color (FetchLastRead suppressNewline)) = do
   mc <- loadMuseConf
   runSqlite (sqlDbPath mc) $ do
     -- FIXME searches on
@@ -653,14 +652,14 @@ dispatchR opts@(OptsR color (FetchLastReadR suppressNewline)) = do
     liftIO $ case lastRead of
       Just (t, a) -> put $ "read \"" <> t <> "\" by " <> a
       Nothing     -> exitFailure
-dispatchR (OptsR color (ParseR it)) = do
+dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
   s <- case it of
     File  fp           -> readFile fp
     StdIn s            -> return s
     -- TODO update 'parseAllEntries'
-    All silence ignore -> parseAllEntriesR silence ignore mc >> return ""
+    All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
 
@@ -746,8 +745,8 @@ prompt = do
 --
 --  Creates default config directory, "$HOME/.muse/", only if it does not
 --  already exist.
-museInitR :: Bool -> Bool -> IO MuseConf
-museInitR quiet ignoreCache = do
+museInit :: Bool -> Bool -> IO MuseConf
+museInit quiet ignoreCache = do
   home' <- getEnv "HOME"
   -- TODO consistently prepend forwardslashes in 'MuseConf' paths
   let home = T.pack home'
@@ -761,7 +760,7 @@ museInitR quiet ignoreCache = do
   createDirectoryIfMissing True . T.unpack $ entryCache museConf
   T.putStrLn $ entryCache museConf <> " and " <> log museConf <> " found or created."
   createDirectoryIfMissing True $ T.unpack (log museConf)
-  parseAllEntriesR quiet ignoreCache museConf
+  parseAllEntries quiet ignoreCache museConf
   return museConf
 
       
@@ -789,8 +788,8 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 --
 -- □  overwrite vs insert 'wrteDay' mode
 --
-parseAllEntriesR :: Bool -> Bool -> MuseConf -> IO ()
-parseAllEntriesR quiet ignoreCache mc@(MuseConf log cache home) = do
+parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
   -- 
       --  TODO rewrite this for sqlite

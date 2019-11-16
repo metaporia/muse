@@ -90,6 +90,7 @@ import           Web.PathPieces                 ( PathPiece(..) )
 
 -- TODO (!!!) clean up source, remove revisions, document, reorder defs as necessary,
 -- purge old or inapplicable TODOs.
+-- TODO (!!!) update tests with for 'DefSearchR'
 
 ---------------
 --- STORAGE ---
@@ -673,7 +674,7 @@ data SearchConfig = SearchConfig
   , checkComments :: Bool
   , checkDefinitions :: Bool
   , attributionPreds :: ([String], [String]) -- tuple of search author, title search strings
-  , definitionSearch :: DefSearchR
+  , definitionSearch :: DefSearch
 
   , quoteSearch :: QuotationSearch
   , commentarySearch :: CommentarySearch
@@ -728,7 +729,7 @@ dispatchSearch logPath SearchConfig {..}
         then -- show all in date range matching attribution requirements
           join <$> sequence
             [ -- replaces 'DefSearch' with 'allDefVariants'.
-              filterDefs' since before authPreds titlePreds defSearch { defVariantsR = allDefVariants }
+              filterDefs' since before authPreds titlePreds defSearch { defVariants = allDefVariants }
             , filterQuotes' since before authPreds titlePreds quoteSearch
             , filterCommentaries' since
                                   before
@@ -754,8 +755,8 @@ dispatchSearch logPath SearchConfig {..}
                   -- when the definition flag is passed, but no def variants
                   -- are specified, return all variants; otherwise, use the
                   -- defSearch unmodified.
-                  (if null (defVariantsR defSearch) && checkDefinitions
-                      then defSearch { defVariantsR = allDefVariants }
+                  (if null (defVariants defSearch) && checkDefinitions
+                      then defSearch { defVariants = allDefVariants }
                       else defSearch)
               else return []
             ]
@@ -931,12 +932,6 @@ attributionConstraints readEntry authPreds titlePreds =
 -- | Search predicates specifically for definitions. See 'filterDef'\'s
 -- documentation for more details.
 
-data DefSearch = DefSearch
-  { defVariants :: [P.DefQueryVariant]
-  , headwordPreds :: [String -> Bool]
-  , meaningPreds :: [String -> Bool] }
-
-
 data StrSearch s = PrefixSearch s
                       | InfixSearch s
                       | SuffixSearch s
@@ -975,27 +970,17 @@ applyBoolExpr (Just be) s = interpretBoolExpr ((s &) . strSearchToPredicate) be
 
 -- Revision of 'DefSearch' to accomodate deferred string search type dispatch
 -- (prefix vs infix vs suffix).
-data DefSearchR = DefSearchR
-  { defVariantsR :: [P.DefQueryVariant]
-  , headwordPredsR :: Maybe (BoolExpr (StrSearch String))
-  , meaningPredsR :: Maybe (BoolExpr (StrSearch String)) }
+data DefSearch = DefSearch
+  { defVariants :: [P.DefQueryVariant]
+  , headwordPreds :: Maybe (BoolExpr (StrSearch String))
+  , meaningPreds :: Maybe (BoolExpr (StrSearch String)) }
   deriving Show
 
-instance Show DefSearch where
-  show (DefSearch variants hws mns) =
-    "DefSearch " <> show variants <> " " <> show (length hws) <> " " <>
-    show (length mns)
-
-
-
-isDefSearchNull :: DefSearch -> Bool
-isDefSearchNull DefSearch {..} = null defVariants && null headwordPreds && null meaningPreds
- 
-isDefSearchNullR :: DefSearchR -> Bool
-isDefSearchNullR DefSearchR {..} =
-  null defVariantsR
-    && Maybe.isNothing headwordPredsR
-    && Maybe.isNothing meaningPredsR
+isDefSearchNullR :: DefSearch -> Bool
+isDefSearchNullR DefSearch {..} =
+  null defVariants
+    && Maybe.isNothing headwordPreds
+    && Maybe.isNothing meaningPreds
 
 
 defSearchConstraint
@@ -1009,26 +994,26 @@ defSearchConstraint  body = foldr
 --
 -- If 'DefSearch' contains no definition variants, then all variants will be
 -- included in the output.
-filterDefs
-  :: MonadIO m
-  => Day
-  -> Day
-  -> [String]
-  -> [String]
-  -> DefSearchR
-  -> DB m [Either String Result]
-filterDefs since before authPreds titlePreds defSearch = do
-  defEntries <- selectDefs since before authPreds titlePreds
-  return
-    $   filtermap
-          (\e -> case e of
-            Left  err -> Just (Left err)
-            Right mr  -> do
-              r <- mr
-              Just (Right r)
-          )
-    $   filterDefR defSearch -- this costly af
-    <$> defEntries
+--filterDefs
+--  :: MonadIO m
+--  => Day
+--  -> Day
+--  -> [String]
+--  -> [String]
+--  -> DefSearchR
+--  -> DB m [Either String Result]
+--filterDefs since before authPreds titlePreds defSearch = do
+--  defEntries <- selectDefs since before authPreds titlePreds
+--  return
+--    $   filtermap
+--          (\e -> case e of
+--            Left  err -> Just (Left err)
+--            Right mr  -> do
+--              r <- mr
+--              Just (Right r)
+--          )
+--    $   filterDefR defSearch -- this costly af
+--    <$> defEntries
 
 -- | Since 'DefEntry's need to be unpacked before the 'DefSearch' can be
 -- applied, the filter entails first selecting all 'DefEntry's within the
@@ -1070,15 +1055,15 @@ filterDefs'
   -> Day
   -> [String]
   -> [String]
-  -> DefSearchR
+  -> DefSearch
   -> DB m [Either String Result]
 filterDefs' since before authPreds titlePreds defSearch = do
-  let mns = maybe [] (foldr ((:) . sqlPadStrSearch) [] ) (meaningPredsR defSearch)
+  let mns = maybe [] (foldr ((:) . sqlPadStrSearch) [] ) (meaningPreds defSearch)
       -- this extracts all the string searches and pads them as infix searches
       -- for use with SQL's LIKE operator.
-      infixSearches = maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPredsR defSearch)
+      infixSearches = maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPreds defSearch)
   -- liftIO $ traverse print infixSearches
-  defEntries <- selectDefs' since before authPreds titlePreds infixSearches (defVariantsR defSearch) -- collect all strings
+  defEntries <- selectDefs' since before authPreds titlePreds infixSearches (defVariants defSearch) -- collect all strings
   return
     $   filtermap
           (\e -> case e of
@@ -1259,83 +1244,43 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
 --  of the search functions might be easily factored out into one generic
 --  function.
 --
-filterDef :: DefSearch -> Entity DefEntry -> Either String (Maybe Result)
-filterDef DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal, entityKey }
-  = do
-    let variantSatisfies
-          :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
-        variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
-        (DefEntryKey ts) = entityKey 
-    entry <- toEntry entityVal :: Either String Entry
-    (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
-      Def x@(P.Defn mPg hws) ->
-        Right $ variantSatisfies defVariants (Right x) && and
-          (headwordPreds <*> hws)
-      Def x@(P.InlineDef hw mn) ->
-        Right
-          $  variantSatisfies defVariants (Right x)
-          && and (headwordPreds <*> pure hw)
-          && and (meaningPreds <*> pure mn)
-      Def x@(P.DefVersus hw mn hw' mn') ->
-        Right
-          $ -- only one of the two compared definitions need satisfy
-             variantSatisfies defVariants (Right x)
-          && (  (  and (headwordPreds <*> pure hw)
-                && and (meaningPreds <*> pure mn)
-                )
-             || (  and (headwordPreds <*> pure hw')
-                && and (meaningPreds <*> pure mn')
-                )
-             )
-      Phr x@(Plural hws) ->
-        Right $ variantSatisfies defVariants (Left x) && and
-          (headwordPreds <*> hws)
-      Phr x@(Defined hw mn) ->
-        Right
-          $  variantSatisfies defVariants (Left x)
-          && and (headwordPreds <*> pure hw)
-          && and (meaningPreds <*> pure mn)
-      _ ->
-        Left
-          "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\
-                       \           but found another 'Entry' variant."
-filterDefR :: DefSearchR -> Entity DefEntry -> Either String (Maybe Result)
-filterDefR DefSearchR { defVariantsR, headwordPredsR, meaningPredsR } Entity { entityVal, entityKey }
+filterDefR :: DefSearch -> Entity DefEntry -> Either String (Maybe Result)
+filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal, entityKey }
   = do
     let variantSatisfies
           :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
         (DefEntryKey ts)   = entityKey
-        applyHeadwordPreds = fmap (applyBoolExpr headwordPredsR)
+        applyHeadwordPreds = fmap (applyBoolExpr headwordPreds)
     entry <- toEntry entityVal :: Either String Entry
     (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
-        Right $ variantSatisfies defVariantsR (Right x) && and
-          (applyBoolExpr headwordPredsR <$> hws)
+        Right $ variantSatisfies defVariants (Right x) && and
+          (applyBoolExpr headwordPreds <$> hws)
       Def x@(P.InlineDef hw mn) ->
         Right
-          $  variantSatisfies defVariantsR (Right x)
-          && applyBoolExpr headwordPredsR hw
-          && applyBoolExpr meaningPredsR  mn
+          $  variantSatisfies defVariants (Right x)
+          && applyBoolExpr headwordPreds hw
+          && applyBoolExpr meaningPreds  mn
       Def x@(P.DefVersus hw mn hw' mn') ->
         Right
           $ -- only one of the two compared definitions need satisfy
-             variantSatisfies defVariantsR (Right x)
-          && (  (  applyBoolExpr headwordPredsR hw
-                && applyBoolExpr meaningPredsR  mn
+             variantSatisfies defVariants (Right x)
+          && (  (  applyBoolExpr headwordPreds hw
+                && applyBoolExpr meaningPreds  mn
                 )
-             || (  applyBoolExpr headwordPredsR hw'
-                && applyBoolExpr meaningPredsR  mn'
+             || (  applyBoolExpr headwordPreds hw'
+                && applyBoolExpr meaningPreds  mn'
                 )
              )
       Phr x@(Plural hws) ->
-        Right $ variantSatisfies defVariantsR (Left x) && and
+        Right $ variantSatisfies defVariants (Left x) && and
           (applyHeadwordPreds hws)
       Phr x@(Defined hw mn) ->
         Right
-          $  variantSatisfies defVariantsR (Left x)
-          && applyBoolExpr headwordPredsR hw
-          && applyBoolExpr meaningPredsR  mn
+          $  variantSatisfies defVariants (Left x)
+          && applyBoolExpr headwordPreds hw
+          && applyBoolExpr meaningPreds  mn
       _ ->
         Left
           "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\

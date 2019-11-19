@@ -113,7 +113,6 @@ import           Render
 import           Search
 import           Store                   hiding ( Author
                                                 , Search
-                                                , Search'
                                                 , Title
                                                 , defs
                                                 , quotes
@@ -616,7 +615,7 @@ testMain s = do
 --
 --
 dispatch :: Opts -> IO ()
-dispatch Bare                           = putStrLn version
+dispatch Bare = putStrLn version
 dispatch opts@(Opts color (Search searchConfig)) = do
   mc <- loadMuseConf
   runSqlite (sqlDbPath mc) $ do
@@ -625,20 +624,6 @@ dispatch opts@(Opts color (Search searchConfig)) = do
     -- FIXME only show successes
     liftIO $ pPrint searchConfig
     liftIO $ showAll results
-    return ()
-  return ()
-
-    -- FIXME
-    -- bracket
-    --(openLocalStateFrom (T.unpack (home mc) <> "/.muse/state/DB") initDB)
-    --createCheckpointAndClose
-    --(\acid -> do
-    --  db <- query acid ViewDB
-    --  putStrLn "searching...\n"
-    --  runSearch' showDebug color s db
-    --  return ()
-    --)
-
 dispatch (Opts color Lint                    ) = putStrLn "linting"
 dispatch (Opts color (Init quiet ignoreCache)) = do
   putStrLn "initializing...\n" -- ++ showMuseConf mc
@@ -852,10 +837,10 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
           )
           (return [])
   when quiet $ putStrLn "\nSuppressing entry parse error output"
+  -- TODO write each /modified/ entry (in json) to cacheDir
   runSqlite (home <> "/.muse/state/sqlite.db") $ do
-    runMigration Sql.migrateAll
-    let allFiles = return fps
-    entriesByDay <- liftIO $ allFiles >>= parseAndShowErrs
+    runMigration Sql.migrateAll -- FIXME remove before merging feature into master.
+    entriesByDay <- liftIO $ parseAndShowErrs fps
     traverse_ (uncurry Sql.writeDay)
       $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entriesByDay
   return ()

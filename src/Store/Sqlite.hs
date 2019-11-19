@@ -99,6 +99,7 @@ import           Web.PathPieces                 ( PathPiece(..) )
 -- TODO (!!!) clean up source, remove revisions, document, reorder defs as necessary,
 -- purge old or inapplicable TODOs.
 -- TODO (!!!) update tests with for 'DefSearchR'
+-- TODO (!!!) feature merge blocked on: dump support
 
 ---------------
 --- STORAGE ---

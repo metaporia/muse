@@ -55,7 +55,10 @@ incrMin UTCTime {..} =
   UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, ..}
 
 incrUTC :: UTCTime -> UTCTime
-incrUTC (UTCTime d dt) = UTCTime (incrDay d ) dt
+incrUTC = incrUTCBy 1
+
+incrUTCBy :: Int -> UTCTime -> UTCTime
+incrUTCBy n (UTCTime d dt) = UTCTime (incrDayBy n d) dt
 
 left :: Either a b -> Maybe a
 left = preview _Left
@@ -65,3 +68,4 @@ incrDay = succ
 
 incrDayBy :: Int -> Day -> Day
 incrDayBy = addDays . fromIntegral
+

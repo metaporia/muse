@@ -149,6 +149,11 @@ PageNumberEntry
 DumpEntry
     Id UTCTime default=CURRENT_TIME
     dumps String
+LastParse
+    parseTime UTCTime
+    lock String
+    ignoredCache Bool
+    UniqueLock lock
 |]
 
 
@@ -1633,3 +1638,28 @@ fetchLastRead = do
     Just ReadEntry { readEntryTitle, readEntryAuthor } ->
       return $ Just (readEntryTitle, readEntryAuthor)
     Nothing -> return Nothing
+
+---------------
+-- Parse Log --
+---------------
+
+-- | Fetch the date and time of the last parse.
+--
+-- In order to maintain a single row table, we enforce the uniqueness of the
+-- "lock" field, which we set to "lock".
+getLastParseTime :: MonadIO m => DB m (Maybe UTCTime)
+getLastParseTime = do
+  mLastParseTime <- selectFirst ([] :: [P.Filter LastParse])
+                                [P.Desc LastParseParseTime]
+  return $ lastParseParseTime . entityVal <$> mLastParseTime
+
+-- | After parsing log entries, update the record of parse log.
+setLastParseTime :: MonadIO m => UTCTime -> Bool -> DB m (Key LastParse)
+setLastParseTime lastParseUTC ignoreCache = do
+  -- remove old timestamp
+  deleteWhere [LastParseLock P.==. "lock"]
+  -- add new one
+  insert  (LastParse  lastParseUTC "lock" ignoreCache)
+
+
+

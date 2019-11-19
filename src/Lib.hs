@@ -792,6 +792,10 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
       --        of 'lastUpdated`.
       --   2. convert to list
   let
+    -- If we always cache (modified) parsed LogEntry groups then we need only
+    -- store last parse time. Then we select all logs modified since the last
+    -- parse and pass those into 'parseAndShowErrs' unless @ignoreCache ==
+    -- True@.
     selectModified' fps lastUpdated = undefined -- TODO
       --let lastModified :: Day -> Maybe ModRec
       --    lastModified day = getOne $ lastUpdated @= (day :: Day)
@@ -838,6 +842,20 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
           (return [])
   when quiet $ putStrLn "\nSuppressing entry parse error output"
   -- TODO write each /modified/ entry (in json) to cacheDir
+  -- 
+  -- Here is the relevant snippet from back when we persisted /soley/ with parsed json
+  -- in the file-system:
+  --
+  -- @
+  -- -- selectModified' will have to have DB access
+  -- entryGroups <- selectModified' fps mod >>= parseAndShowErrs
+  -- sequence_ $
+  --   fmap
+  --     (\(fp, eg) ->
+  --        BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
+  --     entryGroups)
+  -- @
+  --
   runSqlite (home <> "/.muse/state/sqlite.db") $ do
     runMigration Sql.migrateAll -- FIXME remove before merging feature into master.
     entriesByDay <- liftIO $ parseAndShowErrs fps

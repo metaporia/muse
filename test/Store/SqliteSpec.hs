@@ -596,6 +596,20 @@ demo = runSqlite "sqliteSpec.db" $ do
       >>= applyReadPreds ["Woolf"] ["Light"]
   before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
   since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+
+  olderTime <- incrUTCBy (-5) <$> liftIO getCurrentTime 
+  newerTime <- liftIO getCurrentTime 
+  -- FIXME printing the same time atm
+  liftIO $ pPrint (olderTime, newerTime)
+  allParseTimes <- selectList ([] :: [Filter LastParse]) []
+  liftIO $ traverse_ (pPrint . entityKey) allParseTimes
+  setLastParseTime olderTime True
+  t0 <- getLastParseTime
+  liftIO $ putStr "olderTime: " >> pPrint t0
+  setLastParseTime newerTime True
+  t1 <- getLastParseTime
+  liftIO $ putStr "newerTime: " >> pPrint t1
+
   matchingQuotes <- filterQuotes since
                                  before
                                  ["%Woolf%"]
@@ -627,6 +641,7 @@ clear' = do
   deleteWhere ([] :: [Filter CommentaryEntry])
   deleteWhere ([] :: [Filter DialogueEntry])
   deleteWhere ([] :: [Filter PageNumberEntry])
+  deleteWhere ([] :: [Filter LastParse])
 
 
 demoLogEntries :: [LogEntry]

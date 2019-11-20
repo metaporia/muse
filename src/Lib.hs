@@ -86,6 +86,7 @@ import           Data.Maybe                     ( fromJust
                                                 , isJust
                                                 , mapMaybe
                                                 , maybe
+                                                , fromMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
@@ -776,46 +777,26 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
-  --
-      --  TODO rewrite this for sqlite
-      --
-      --
-      --
-      -- Check, if for a given log file a parsed file has been cached,
-      -- whether the log's modification date is greater than the that of the
-      -- cached json.
-      --
-      --   1. if using cache, collect keys of modified entries from 'lastUpdated', otherwise use all
-      --      * for each log source, fetch last modification time. if there is
-      --        none, then add to list, otherwise compare the times: include only
-      --        if the source file's modification date is more recent than that
-      --        of 'lastUpdated`.
-      --   2. convert to list
   let
     -- If we always cache (modified) parsed LogEntry groups then we need only
     -- store last parse time. Then we select all logs modified since the last
     -- parse and pass those into 'parseAndShowErrs' unless @ignoreCache ==
     -- True@.
-    selectModified' fps lastUpdated = undefined -- TODO
-      --let lastModified :: Day -> Maybe ModRec
-      --    lastModified day = getOne $ lastUpdated @= (day :: Day)
-      --    compare :: FilePath -> ModRec -> IO (Maybe FilePath)
-      --    compare fp ModRec {..} = do
-      --      logMd <- getModificationTime $ T.unpack (entrySource mc) ++ fp
-      --      if logMd > modified
-      --        then return $ Just fp
-      --        else return Nothing
-      --    f :: FilePath -> IO (Maybe FilePath)
-      --    f fp =
-      --      case pathToDay fp >>= lastModified of
-      --        Just mr -> compare fp mr
-      --        Nothing -> return $ Just fp
-      --in foldr
-      --     (\a bs -> f a >>= maybe bs (\x -> fmap (x :) bs))
-      --     (return [] :: IO [FilePath])
-      --     fps
-      --filtermap pathToDay fps
-    -- TODO (!!!!!) exclude days with duplicate primary keys!
+    --
+    -- TODO Test that parse invocation with @ignoreCache == True@ i) reparses 
+    -- all logs and ii) replaces the entire cache.
+    selectModified :: [FilePath] -> UTCTime -> IO [FilePath]
+    selectModified fps lastParsed =
+      let hasBeenModified :: FilePath -> IO Bool
+          hasBeenModified baseName = do
+            dateModified <-
+              getModificationTime $ T.unpack (entrySource mc) ++ baseName
+            return (dateModified > lastParsed)
+      in  filterM
+            (\fp ->
+              (&&) <$> hasBeenModified fp <*> return (isJust (pathToDay fp))
+            )
+            fps
     parse :: String -> IO (String, Either String [LogEntry])
     parse fp =
       (,)
@@ -841,26 +822,33 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
           )
           (return [])
   when quiet $ putStrLn "\nSuppressing entry parse error output"
-  -- TODO write each /modified/ entry (in json) to cacheDir
-  -- 
-  -- Here is the relevant snippet from back when we persisted /soley/ with parsed json
-  -- in the file-system:
-  --
-  -- @
-  -- -- selectModified' will have to have DB access
-  -- entryGroups <- selectModified' fps mod >>= parseAndShowErrs
-  -- sequence_ $
-  --   fmap
-  --     (\(fp, eg) ->
-  --        BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode eg))
-  --     entryGroups)
-  -- @
-  --
   runSqlite (home <> "/.muse/state/sqlite.db") $ do
-    runMigration Sql.migrateAll -- FIXME remove before merging feature into master.
-    entriesByDay <- liftIO $ parseAndShowErrs fps
+    -- FIXME remove before merging feature into master.
+    -- Migration should be performed manually on both test and "production"
+    -- databases
+    runMigration Sql.migrateAll
+    now          <- liftIO getCurrentTime
+    entriesByDay <- if ignoreCache
+      then liftIO $ parseAndShowErrs $ filter (isJust . pathToDay) fps
+      else do
+        lastParseTime <- fromMaybe now <$> Sql.getLastParseTime
+        liftIO $ selectModified fps lastParseTime >>= parseAndShowErrs
+    -- write to sqlite db
     traverse_ (uncurry Sql.writeDay)
       $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entriesByDay
+    -- /Always/ update cache: when ignoreCache is true, this will
+    -- overwrite the lot; but when false, will overwrite only the modified.
+    --
+    -- That is, ignoreCache only indicates whether to use the cache to speed up
+    -- parsing, not that we should omit to /update/ the cache. 
+    liftIO $ traverse_
+      (\(fp, logs) ->
+        BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode logs)
+      )
+      entriesByDay
+    -- update LastParse
+    -- FIXME LastParse only reflects the time of the last successful parses.
+    Sql.setLastParseTime now ignoreCache
   return ()
   -- read in log file names; parse 'em
   --putStrLn $ show mc

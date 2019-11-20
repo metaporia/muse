@@ -306,7 +306,7 @@ logEntry' (Just previousTimeStamp) = do
           ( return
           $ Leijen.vcat
           $ (Leijen.text "Unordered or duplicate timestamps:" :)
-  -- (Leijen.line :)
+-- (Leijen.line :)
           $ fmap Leijen.text
           $ (wordSensitiveLineWrap
               55
@@ -554,7 +554,7 @@ ascendingDigits' previous = do
           mempty
           mempty
           mempty
-      in     -- trace (show err) $
+      in      -- trace (show err) $
           Left "expected ascending comma-separated digits"
 
 

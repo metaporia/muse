@@ -80,8 +80,12 @@ import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toLower )
-import           Data.Foldable                  ( fold , traverse_)
-import           Data.List                      ( isInfixOf , sort)
+import           Data.Foldable                  ( fold
+                                                , traverse_
+                                                )
+import           Data.List                      ( isInfixOf
+                                                , sort
+                                                )
 import           Data.Maybe                     ( fromJust
                                                 , isJust
                                                 , mapMaybe
@@ -118,7 +122,7 @@ import           Store                   hiding ( Author
                                                 , defs
                                                 , quotes
                                                 )
-import           Store.Render ()
+import           Store.Render                   ( )
 import qualified Store.Sqlite                  as Sql
 import           Store.Sqlite                   ( SearchConfig )
 import           System.Directory               ( createDirectoryIfMissing
@@ -127,7 +131,7 @@ import           System.Directory               ( createDirectoryIfMissing
                                                 , listDirectory
                                                 )
 import           System.Environment             ( getEnv )
-import           System.Exit                    ( exitFailure)
+import           System.Exit                    ( exitFailure )
 import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 import qualified Text.Trifecta.Result          as Tri
@@ -221,12 +225,15 @@ search today = do
 
   defSearch <- parseDefSearch
 
-  dvs <- flag [] [DefVersus'] (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
+  dvs       <- flag
+    []
+    [DefVersus']
+    (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
 
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
-  ps        <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
-  qs        <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
-  dials     <-
+  ps    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
+  qs    <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
+  dials <-
     switch
     $  long "dialogues"
     <> long "dias"
@@ -246,23 +253,26 @@ search today = do
   dias'     <- dialogueBody
   comments' <- commentBody
 
-  pure $ Sql.SearchConfig s
-                        today
-                        dmps
-                        qs
-                        dials
-                        cmts
-                        ds
+  pure $ Sql.SearchConfig
+    s
+    today
+    dmps
+    qs
+    dials
+    cmts
+    ds
                         -- turn search strings into infx
                         -- searches for SQL's LIKE clause
-                        (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
-                        ((\ds@DefSearch { defVariants } -> ds { defVariants = defVariants ++ dvs} ) defSearch)
-                        (padForSqlLike <$> q')
-                        (padForSqlLike <$> comments')
-                        (padForSqlLike <$> dias')
-                        []
+    (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
+    ((\ds@DefSearch { defVariants } -> ds { defVariants = defVariants ++ dvs })
+      defSearch
+    )
+    (padForSqlLike <$> q')
+    (padForSqlLike <$> comments')
+    (padForSqlLike <$> dias')
+    []
 
-padForSqlLike s = '%':s++"%"
+padForSqlLike s = '%' : s ++ "%"
 
 -- mkSearchConfig since before checkDumps checkQuotes checkDialogues checkComments checkDefs check
 
@@ -325,47 +335,52 @@ color =
   -- long "version" <> short 'V' <> help "Display version information") <*>
 
 toplevel :: Day -> Parser Opts
-toplevel today = (Opts <$> color <*> subparser
-  (  command
-      "search"
-      (info
-        (Search <$> search today <**> helper)
-        (progDesc
-          "Search log entries by date, author, title, or predicate on entry contents.\
+toplevel today
+  = (Opts <$> color <*> subparser
+      (  command
+          "search"
+          (info
+            (Search <$> search today <**> helper)
+            (progDesc
+              "Search log entries by date, author, title, or predicate on entry contents.\
              \ Inline definitions of headwords or phrases can be searched as well."
-        )
-      )
-  <> command
-       "parse"
-       (info
-         (Parse <$> parse' <**> helper)
-         (progDesc "Parse entries; a bare invocation runs Rparse --allR")
-       )
-  <> command
-       "lastRead"
-       (info
-         (    FetchLastRead
-         <$>  switch
-                (long "suppress-newline" <> help "Suppress trailing newline")
-         <**> helper
-         )
-         (progDesc "Fetches most recent \"read\" entry.")
-       )
-  <> command
-       "lint"
-       (info (pure Lint)
-             (progDesc "TBD; for, e.g., author attribution validation")
-       )
-  <> command
-       "init"
-       (info
-         ((Init <$> quiet <*> ignore) <**> helper)
-         (progDesc
-           "Initialize config file, cache directory, and entry log\
+            )
+          )
+      <> command
+           "parse"
+           (info
+             (Parse <$> parse' <**> helper)
+             (progDesc "Parse entries; a bare invocation runs Rparse --allR")
+           )
+      <> command
+           "lastRead"
+           (info
+             (    FetchLastRead
+             <$>  switch
+                    (  long "suppress-newline"
+                    <> help "Suppress trailing newline"
+                    )
+             <**> helper
+             )
+             (progDesc "Fetches most recent \"read\" entry.")
+           )
+      <> command
+           "lint"
+           (info (pure Lint)
+                 (progDesc "TBD; for, e.g., author attribution validation")
+           )
+      <> command
+           "init"
+           (info
+             ((Init <$> quiet <*> ignore) <**> helper)
+             (progDesc
+               "Initialize config file, cache directory, and entry log\
              \ directory; parse all entries in Rlog-dirR"
-         )
-       )
-  )) <|> (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
+             )
+           )
+      )
+    )
+    <|> (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
 
 
 
@@ -440,14 +455,18 @@ data Opts
 -- REFACTOR NOTE: Proprosed replacement as part of search string padding deferral.
 parseDefSearch :: Parser DefSearch
 parseDefSearch =
-  ((\case
-    (Just hw, Just mn) -> DefSearch [InlineDef', DefVersus'] (Just hw) (Just mn)
-    (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] Nothing (Just mn)
-    (Just hw, Nothing) -> DefSearch  allDefVariants (Just hw) Nothing
-    -- this is really an error, right? yes. see 'searchArgument' it's
-    -- impossible
-    (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
-  ) <$> defSearchFlag) <|> pure (DefSearch [] Nothing Nothing)
+  (   (\case
+        (Just hw, Just mn) ->
+          DefSearch [InlineDef', DefVersus'] (Just hw) (Just mn)
+        (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] Nothing (Just mn)
+        (Just hw, Nothing) -> DefSearch allDefVariants (Just hw) Nothing
+        -- this is really an error, right? yes. see 'searchArgument' it's
+        -- impossible
+        (Nothing, Nothing) -> error "searchArgument type signature violated" --DefSearch [] [] []
+      )
+    <$> defSearchFlag
+    )
+    <|> pure (DefSearch [] Nothing Nothing)
 
 
 -- search string deferral revision
@@ -642,6 +661,8 @@ dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
   s <- case it of
+    -- TODO factor out a function 'parseDay' which parses to json, with a
+    -- storage flag for debugging
     File  fp           -> readFile fp
     StdIn s            -> return s
     -- TODO update 'parseAllEntries'
@@ -735,16 +756,20 @@ museInit :: Bool -> Bool -> IO MuseConf
 museInit quiet ignoreCache = do
   home' <- getEnv "HOME"
   -- TODO consistently prepend forwardslashes in 'MuseConf' paths
-  let home = T.pack home'
+  let home              = T.pack home'
       defaultConfigPath = home <> "/.muse/config.yaml"
-      defaultCacheDir = home <> "/.cache/muse/"
-      defaultLogDir = home <> "/.muse/entries/"
-      defaultMuseConf = MuseConf defaultLogDir defaultCacheDir home
+      defaultCacheDir   = home <> "/.cache/muse/"
+      defaultLogDir     = home <> "/.muse/entries/"
+      defaultMuseConf   = MuseConf defaultLogDir defaultCacheDir home
   T.putStrLn $ "Expects configuration file at: " <> defaultConfigPath <> "\n"
   doesExist <- doesFileExist $ T.unpack defaultConfigPath
-  museConf <- if doesExist then loadMuseConf else writeMuseConf defaultMuseConf
+  museConf  <- if doesExist then loadMuseConf else writeMuseConf defaultMuseConf
   createDirectoryIfMissing True . T.unpack $ entryCache museConf
-  T.putStrLn $ entryCache museConf <> " and " <> log museConf <> " found or created."
+  T.putStrLn
+    $  entryCache museConf
+    <> " and "
+    <> log museConf
+    <> " found or created."
   createDirectoryIfMissing True $ T.unpack (log museConf)
   parseAllEntries quiet ignoreCache museConf
   return museConf
@@ -783,7 +808,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
     -- parse and pass those into 'parseAndShowErrs' unless @ignoreCache ==
     -- True@.
     --
-    -- TODO Test that parse invocation with @ignoreCache == True@ i) reparses 
+    -- TODO Test that parse invocation with @ignoreCache == True@ i) reparses
     -- all logs and ii) replaces the entire cache.
     selectModified :: [FilePath] -> UTCTime -> IO [FilePath]
     selectModified fps lastParsed =
@@ -840,7 +865,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
     -- overwrite the lot; but when false, will overwrite only the modified.
     --
     -- That is, ignoreCache only indicates whether to use the cache to speed up
-    -- parsing, not that we should omit to /update/ the cache. 
+    -- parsing, not that we should omit to /update/ the cache.
     liftIO $ traverse_
       (\(fp, logs) ->
         BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode logs)

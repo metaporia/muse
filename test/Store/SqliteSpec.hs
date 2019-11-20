@@ -597,8 +597,8 @@ demo = runSqlite "sqliteSpec.db" $ do
   before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
   since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
 
-  olderTime <- incrUTCBy (-5) <$> liftIO getCurrentTime 
-  newerTime <- liftIO getCurrentTime 
+  olderTime <- incrUTCBy (-5) <$> liftIO getCurrentTime
+  newerTime <- liftIO getCurrentTime
   -- FIXME printing the same time atm
   liftIO $ pPrint (olderTime, newerTime)
   allParseTimes <- selectList ([] :: [Filter LastParse]) []

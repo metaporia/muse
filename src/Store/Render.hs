@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -14,72 +14,22 @@
 module Store.Render where
 
 import           Control.Monad                  ( (>>) )
-import qualified Data.IxSet
-import           Data.IxSet                     ( IxSet(..) )
-import qualified Data.IxSet                    as IxSet
 import           Data.Monoid                    ( (<>) )
-import           Data.Set                       ( toList )
-import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
-import qualified Data.Text.IO                  as T
 import           Data.Time                      ( Day
                                                 , UTCTime(..)
                                                 , toGregorian
                                                 )
 import           Data.Time.LocalTime
 import           Render
-import           Store                          ( DB(..)
-                                                , Dumps(..)
-                                                , Result(..)
+import           Store                          ( Result(..)
                                                 , Results(..)
-                                                , getUTC
                                                 )
-import           Store.Types
-import           Text.Show.Pretty
 import           Text.Wrap
-
-instance  ColRender DB where
-  colRender col DB{..} = do
-    putStr "DB:\n"
-    colRender col dumped
-    putStrLn "" >> colRender col defs
-    putStrLn "" >> colRender col reads
-    putStrLn "" >> colRender col quotes
-    putStrLn "" >> colRender col dialogues
-    putStrLn "" >> colRender col phrases
-    putStrLn "" >> colRender col comments
-    putStrLn "" >> colRender col chrono
 
 instance (ColRender err, ColRender result) => ColRender (Either err result) where
   colRender col (Left err) = putStr "Error: " >> colRender col err >> putStr "\n"
   colRender col (Right result) = colRender col result
-
-instance (Ord v, ColRender v) => ColRender (IxSet v) where
-  colRender col ixSet = colRender col (IxSet.toList ixSet)
-
-instance ColRender Dumps where
-  colRender col (Dumps day set) = do
-    putStr "Dumps on "
-    colRender col day
-    putStr ":\n"
-    pPrint (toList set)
-
-instance (ColRender a, ColRender b) => ColRender (TsIdxTup a b) where
-  colRender col (TsIdxTup tsIdx) = colRender col tsIdx
-
-instance (ColRender a, ColRender b, ColRender c) => ColRender (TsIdxTrip a b c) where
-  colRender col (TsIdxTrip tsIdx) = colRender col tsIdx
-
-instance (ColRender v) => ColRender (TsIdxTag v) where
-  colRender col (TsIdxTag tsIdx tag) =
-    colRender col tsIdx >>
-    case tag of
-      Just (AttrTag utc) -> putStr "         tag: " >> colRender col utc
-      Nothing -> return ()
-
-instance ColRender v => ColRender (TsIdx v) where
-  colRender col idx =
-    colRender col (ts idx) >> colRender col (val idx)
 
 instance (ColRender a, ColRender b) => ColRender (a, b) where
   colRender col (a, b) =
@@ -107,18 +57,6 @@ instance ColRender Day where
 
 instance ColRender a => ColRender [a] where
   colRender col xs = mapM_ (\x -> colRender col x) xs
-
-instance ColRender Bucket where
-  colRender col Dmp = putStr "Dmp"
-  colRender col Rds = putStr "Rds"
-  colRender col Qts = putStr "Qts"
-  colRender col Dial = putStr "Dial"
-  colRender col Phrs = putStr "Phrs"
-  colRender col (Pgs pn)  = putStr $ "Pgs" <> show pn
-  colRender col Cmts = putStr "Cmts"
-  colRender col Defs = putStr "Defs"
-  colRender col Null = putStr "Null"
-
 
 fmt indent =
   T.unpack

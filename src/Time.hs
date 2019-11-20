@@ -1,7 +1,5 @@
 
-{-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, TupleSections, QuasiQuotes, FlexibleInstances,
-  MultiWayIf, RecordWildCards #-}
+{-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables, FlexibleInstances, MultiWayIf, RecordWildCards #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -14,12 +12,8 @@
 --
 -- Provides truncated 'UTCTime', called 'UTCTime'', and other time utilites.
 -----------------------------------------------------------------------------
-module Time where
+module Time (toUTC, dayToUTC, fromUTC, incrUTCBy) where
 
-import           Control.Lens                   ( _Left
-                                                , _Right
-                                                , preview
-                                                )
 import           Data.Time
 import           Parse                          ( TimeStamp(..) )
 
@@ -45,27 +39,20 @@ fromUTC (UTCTime day dt) =
       (hr, min) = divMod rest 60
    in (day, TimeStamp {..})
 
--- | Truncates pico seconds from 'DiffTime'.
-truncateUTC :: UTCTime -> UTCTime
-truncateUTC UTCTime {..} =
-  UTCTime {utctDayTime = (secondsToDiffTime . truncate $ utctDayTime), ..}
-
-incrMin :: UTCTime -> UTCTime
-incrMin UTCTime {..} =
-  UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, ..}
-
-incrUTC :: UTCTime -> UTCTime
-incrUTC = incrUTCBy 1
-
 incrUTCBy :: Int -> UTCTime -> UTCTime
 incrUTCBy n (UTCTime d dt) = UTCTime (incrDayBy n d) dt
 
-left :: Either a b -> Maybe a
-left = preview _Left
-
-incrDay :: Day -> Day
-incrDay = succ
-
 incrDayBy :: Int -> Day -> Day
 incrDayBy = addDays . fromIntegral
+
+--- UNUSED
+
+---- | Truncates pico seconds from 'DiffTime'.
+--truncateUTC :: UTCTime -> UTCTime
+--truncateUTC UTCTime {..} =
+--  UTCTime {utctDayTime = (secondsToDiffTime . truncate $ utctDayTime), ..}
+--
+--incrMin :: UTCTime -> UTCTime
+--incrMin UTCTime {..} =
+--  UTCTime {utctDayTime = (secondsToDiffTime 60) + utctDayTime, ..}
 

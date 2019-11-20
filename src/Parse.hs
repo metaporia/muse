@@ -20,18 +20,14 @@
 module Parse where
 
 import           Control.Applicative
-import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
 import           Data.Aeson              hiding ( Null
                                                 , (<?>)
                                                 )
-import           Data.Bifunctor                 ( bimap )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhile
                                                 , dropWhileEnd
                                                 , foldl'
-                                                , intercalate
-                                                , isInfixOf
                                                 )
 import           Data.Time
 import           GHC.Generics            hiding ( Infix
@@ -47,7 +43,6 @@ import           Text.Show.Pretty               ( pPrint )
 import           Text.Trifecta           hiding ( Rendering
                                                 , Span
                                                 )
-
 -- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
 -- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
 -- | TODO: triage TODOs!!!!!

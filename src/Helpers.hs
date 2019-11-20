@@ -21,18 +21,21 @@ import           Text.Trifecta           hiding ( Rendering
                                                 , rendered
                                                 )
 import qualified Text.Trifecta.Result          as Tri
-import System.IO (stderr, hPutStrLn)
+import           System.IO                      ( stderr
+                                                , hPutStrLn
+                                                , hPrint
+                                                )
 
 -- | Print 'show' output to stderr.
 print' :: Show a => a -> IO ()
-print' = hPutStrLn stderr . show
+print' = hPrint stderr
 
 -- | Pretty print to stderr.
 pPrint' :: Show a => a -> IO ()
 pPrint' = hPutStrLn stderr . ppShow
 
 double :: a -> (a, a)
-double a = (a,a)
+double a = (a, a)
 
 -- Like 'maybe' for lists.
 list :: b -> ([a] -> b) -> [a] -> b

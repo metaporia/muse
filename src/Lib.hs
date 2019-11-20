@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTSyntax, GADTs, InstanceSigs, ScopedTypeVariables,
-  OverloadedStrings, ApplicativeDo, RecordWildCards #-}
-{-# LANGUAGE TupleSections #-}
+  OverloadedStrings, ApplicativeDo #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
@@ -65,31 +64,19 @@ module Lib
   )
 where
 
-import           Control.Exception              ( bracket )
-import           Control.Monad                  ( (>=>)
-                                                , join
-                                                , void
-                                                )
+import           Control.Monad                  ( void )
 import           Control.Monad.State
 
 import           Data.Aeson              hiding ( Null )
-import           Data.Bifunctor                 ( bimap
-                                                , first
-                                                )
-import qualified Data.Monoid                   as M
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toLower )
-import           Data.Foldable                  ( fold
-                                                , traverse_
-                                                )
+import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( isInfixOf
                                                 , sort
                                                 )
-import           Data.Maybe                     ( fromJust
-                                                , isJust
+import           Data.Maybe                     ( isJust
                                                 , mapMaybe
-                                                , maybe
                                                 , fromMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
@@ -103,7 +90,6 @@ import           Data.Yaml.Config               ( load
 import           Database.Persist.Sqlite        ( runMigration
                                                 , runSqlite
                                                 )
-import           Debug.Trace                    ( trace )
 import           Helpers
 import           Options.Applicative
 import           Parse
@@ -124,7 +110,11 @@ import           Store                   hiding ( Author
                                                 )
 import           Store.Render                   ( )
 import qualified Store.Sqlite                  as Sql
-import           Store.Sqlite                   ( SearchConfig )
+import           Store.Sqlite                   ( SearchConfig
+                                                , StrSearch(..)
+                                                , DefSearch(..)
+                                                , fetchLastRead
+                                                )
 import           System.Directory               ( createDirectoryIfMissing
                                                 , doesFileExist
                                                 , getModificationTime
@@ -134,11 +124,7 @@ import           System.Environment             ( getEnv )
 import           System.Exit                    ( exitFailure )
 import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
-import qualified Text.Trifecta.Result          as Tri
-import           Store.Sqlite                   ( StrSearch(..)
-                                                , DefSearch(..)
-                                                , fetchLastRead
-                                                )
+
 version :: String
 version = "muse 0.2.1"
 
@@ -877,5 +863,3 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
   return ()
   -- read in log file names; parse 'em
   --putStrLn $ show mc
-
-

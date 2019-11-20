@@ -17,58 +17,37 @@ module Store.SqliteSpec where
 
 
 
-import           Control.Exception              ( bracket )
 import           Control.Monad                  ( when
                                                 , unless
                                                 )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
-import           Data.Bifunctor                 ( bimap )
-import           Data.Either                    ( lefts
-                                                , rights
+import           Data.Either                    ( rights
                                                 , partitionEithers
                                                 )
 import           Data.Foldable                  ( traverse_ )
-import           Data.List                      ( isInfixOf )
-import           Data.Maybe                     ( catMaybes
-                                                , fromJust
-                                                , isJust
-                                                , isNothing
+import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
 import           Data.Semigroup                 ( (<>) )
-import qualified Data.Text                     as T
 import           Data.Time                      ( UTCTime(..)
                                                 , addDays
                                                 )
 import           Data.Time.Calendar             ( Day )
 import           Data.Time.Clock                ( getCurrentTime )
-import qualified Database.Esqueleto            as E
-import           Database.Esqueleto             ( (^.)
-                                                , from
-                                                , like
-                                                , where_
-                                                )
 import           Database.Persist
 import           Database.Persist.Sqlite
-import           Debug.Trace
 import           Helpers
 import           Parse
 import qualified Parse                         as P
 import           Parse.Entry
-import qualified Parse.Entry                   as P
 import           Render                         ( showAll )
-import           Store                          ( Result(..)
-                                                , ToResult(..)
-                                                )
-import           Store.Render
+import           Store                          ( Result(..))
 import           Store.Sqlite            hiding ( InlineDef )
 import           Test.Hspec              hiding ( before )
 import           Text.RawString.QQ
-import           Text.Show.Pretty               ( pPrint
-                                                , ppShow
-                                                )
+import           Text.Show.Pretty               ( pPrint)
 import           Time
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Resource
@@ -538,7 +517,6 @@ resultsToEntry = mapMaybe resultToEntry
 run' :: IO ()
 run' = runSqlInMem $ do
   runMigrationSilent migrateAll
-  let entries = fromJust $ toMaybe $ parse logEntries defVar
   today <- liftIO $ utctDay <$> getCurrentTime
   writeDay today demoLogEntries
   before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime

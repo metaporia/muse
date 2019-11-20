@@ -48,25 +48,15 @@ module Parse.Entry where
 import           Control.Applicative
 import           Control.Lens.TH                ( makePrisms )
 import           Control.Monad                  ( void )
-import           Control.Monad.Trans.State
 import           Data.Aeson              hiding ( Null
                                                 , (<?>)
                                                 )
 import           Data.Bifunctor                 ( bimap
                                                 , first
-                                                , second
                                                 )
-import           Data.Bool                      ( bool )
-import           Data.Char                      ( isSpace )
-import           Data.List                      ( dropWhile
-                                                , dropWhileEnd
-                                                , intercalate
-                                                )
+import           Data.List                      ( intercalate )
 import           Data.List.Split                ( splitOn )
-import           Data.Maybe                     ( isJust )
 import           Data.Semigroup                 ( (<>) )
-import           Data.Time
-import           Debug.Trace                    ( trace )
 import           GHC.Generics            hiding ( Infix
                                                 , Prefix
                                                 )
@@ -77,8 +67,6 @@ import           Prelude                 hiding ( min
                                                 )
 import           Text.Parser.LookAhead
 import qualified Text.PrettyPrint.ANSI.Leijen  as Leijen
-import           Text.RawString.QQ
-import           Text.Show.Pretty               ( pPrint )
 import           Text.Trifecta           hiding ( Rendering
                                                 , Span
                                                 , double
@@ -538,36 +526,36 @@ ascendingDigits' previous = do
   return $ if previous < current
     then Right (current, current)
     else
-      let
-        err = explain emptyRendering $ Err
-          (  Just
-          $  Leijen.vcat
-          $  fmap Leijen.text
-          $  ("Unorderd or duplicate timestamps:" :)
-          $  wordSensitiveLineWrap 55
-          $  "Found current timestamp, t1 = "
-          <> show current
-          <> ", previous timestapm, t2 = "
-          <> show previous
-          <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
-          )
-          mempty
-          mempty
-          mempty
-      in      -- trace (show err) $
-          Left "expected ascending comma-separated digits"
+--let
+--  err = explain emptyRendering $ Err
+--    (  Just
+--    $  Leijen.vcat
+--    $  fmap Leijen.text
+--    $  ("Unorderd or duplicate timestamps:" :)
+--    $  wordSensitiveLineWrap 55
+--    $  "Found current timestamp, t1 = "
+--    <> show current
+--    <> ", previous timestapm, t2 = "
+--    <> show previous
+--    <> " where t0 >= t1, but timestamps MUST be unique and ordered smallest to greatest."
+--    )
+--    mempty
+--    mempty
+--    mempty
+--in      -- trace (show err) $
+         Left "expected ascending comma-separated digits"
 
 
-logEntries' :: Parser [LogEntry]
-logEntries' = do
-  try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof"
-  some logEntry
- where
-  go p = do
-    mLe <- try (Just <$> p) <|> return Nothing
-    case mLe of
-      Just le -> (le :) <$> go p
-      Nothing -> return []
+--logEntries' :: Parser [LogEntry]
+--logEntries' = do
+--  try (void $ many space) <|> try (void emptyLines) <|> try eof <?> "eat eof"
+--  some logEntry
+-- where
+--  go p = do
+--    mLe <- try (Just <$> p) <|> return Nothing
+--    case mLe of
+--      Just le -> (le :) <$> go p
+--      Nothing -> return []
 
 
 --some' :: Maybe s -> (Maybe s -> Parser (a, Maybe s)) -> Parser [a]

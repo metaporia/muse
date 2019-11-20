@@ -17,7 +17,6 @@
 module Diff where
 
 import           Data.List                      ( intercalate )
-import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
 import           Data.Text.Metrics              ( levenshtein )
 import           Parse
@@ -31,9 +30,9 @@ type TagPred = String -> Bool -- Tag predicate.
 --   * extract one tag from title/author attr despite variance
 genTag :: Entry -> Maybe Tag
 genTag (Read title author) = undefined
- where
-  initials = (++ ".") . intercalate "." . fmap (take 1 . trim) . words . trim
-genTag _ = Nothing
+-- where
+--  initials = (++ ".") . intercalate "." . fmap (take 1 . trim) . words . trim
+genTag _                   = Nothing
 
 -- | Trims whitespace, slides shorter string over longer, gets each pair's
 -- levenshtein distance, returns shortest.

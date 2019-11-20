@@ -14,10 +14,6 @@
 --
 -- TODO
 --
--- ▣  persist with "Data.Acid"
---
--- ▣  serialize w "Data.Serialize" and "SafeCopy"
---
 -- □  include locale time zone per file. for midday timezone change, create
 --    extra log file for each, with special name. add name handling .
 --
@@ -27,7 +23,7 @@
 -----------------------------------------------------------------------------
 module Main where
 
-import qualified Lib as Muse
+import qualified Lib                           as Muse
 
 main = Muse.main
 

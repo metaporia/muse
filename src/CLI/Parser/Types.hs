@@ -1,4 +1,9 @@
-module CLI.Parser.Types where
+module CLI.Parser.Types
+  ( BoolExpr
+  , parseBoolExpr
+  , interpretBoolExpr
+  )
+where
 
 import           Control.Applicative
 import           Text.Trifecta
@@ -20,17 +25,6 @@ instance Foldable BoolExpr where
   foldr f base (LitE a) = f a base
 
 
-boolExprToList :: BoolExpr a -> [a]
-boolExprToList = foldr (:) []
-
-evalBoolExpr :: (b -> b -> b) -> (b -> b -> b) -> (a -> b) -> BoolExpr a -> b
-evalBoolExpr andE orE litE = go
- where
-  go expr = case expr of
-    LitE a   -> litE a
-    OrE  l r -> orE (go l) (go r)
-    AndE l r -> andE (go l) (go r)
-
 -- | @evalMapBoolExpr f andOp orOp litOp@ applies @f@ to all 'LitE' leaves; and
 -- @andOp@ and @orOp to all 'AndE' and 'OrE' forks, respectively.
 evalMapBoolExpr
@@ -46,10 +40,6 @@ evalMapBoolExpr f andE orE litE = go
 -- values to 'Bool'.
 interpretBoolExpr :: (a -> Bool) -> BoolExpr a -> Bool
 interpretBoolExpr pred = evalMapBoolExpr pred (&&) (||) id
-
-interpretBoolExpr' :: BoolExpr Bool -> Bool
-interpretBoolExpr' = interpretBoolExpr id
-
 
 -- | Right-associative parser for boolean expressions.
 --
@@ -71,5 +61,21 @@ parseBoolExpr = expr
   litE   = LitE <$> token (some letter)
   andE   = AndE <$ symbolic '&'
   orE    = OrE <$ symbolic '|'
+
+--- UNUSED
+
+--boolExprToList :: BoolExpr a -> [a]
+--boolExprToList = foldr (:) []
+
+--evalBoolExpr :: (b -> b -> b) -> (b -> b -> b) -> (a -> b) -> BoolExpr a -> b
+--evalBoolExpr andE orE litE = go
+-- where
+--  go expr = case expr of
+--    LitE a   -> litE a
+--    OrE  l r -> orE (go l) (go r)
+--    AndE l r -> andE (go l) (go r)
+
+--interpretBoolExpr' :: BoolExpr Bool -> Bool
+--interpretBoolExpr' = interpretBoolExpr id
 
 

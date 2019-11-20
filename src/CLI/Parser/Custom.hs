@@ -15,14 +15,13 @@
 -----------------------------------------------------------------------------
 module CLI.Parser.Custom where
 
-import CLI.Parser.Types
-import Control.Applicative
-import Data.Bifunctor (bimap)
-import Data.List (isInfixOf)
-import Data.Maybe (isJust)
-import Parse.Entry (DefQueryVariant(..), allDefVariants)
-import Store.Sqlite (StrSearch(..))
-import Text.Trifecta
+import           CLI.Parser.Types
+import           Control.Applicative
+import           Data.Bifunctor                 ( bimap )
+import           Data.Maybe                     ( isJust )
+import           Parse.Entry                    ( DefQueryVariant(..) )
+import           Store.Sqlite                   ( StrSearch(..) )
+import           Text.Trifecta
 
 --- CLI's custom search argument parser.
 -- Revised for 'StrSearch' refactor depended on by DefEntry search
@@ -40,31 +39,34 @@ import Text.Trifecta
 --
 -- FIXME with the above deferral
 -- FIXME as yet this supports only infix search
-searchArgument ::
-     Parser ( Maybe (BoolExpr (StrSearch String))
-            , Maybe (BoolExpr (StrSearch String)))
+searchArgument
+  :: Parser
+       ( Maybe (BoolExpr (StrSearch String))
+       , Maybe (BoolExpr (StrSearch String))
+       )
 searchArgument =
-  bimap Just Just <$> try headwordAndMeaning <|>
-  ((Nothing, ) . Just <$> try meaningOnly) <|>
-  ((, Nothing) . Just <$> headwordOnly)
-  where
-    headwordOnly :: Parser (BoolExpr (StrSearch String))
-    headwordOnly = do
-      expr <- parseBoolExpr
-      skipOptional (symbolic ':')
-      return $ InfixSearch <$> expr
-    meaningOnly :: Parser (BoolExpr (StrSearch String))
-    meaningOnly = do
-      symbolic ':'
-      expr <- parseBoolExpr
-      return $ InfixSearch <$> expr
-    headwordAndMeaning ::
-         Parser (BoolExpr (StrSearch String), BoolExpr (StrSearch String))
-    headwordAndMeaning = do
-      hwExpr <- parseBoolExpr
-      symbolic ':'
-      meaningExpr <- parseBoolExpr
-      return (InfixSearch <$> hwExpr, InfixSearch <$> meaningExpr)
+  bimap Just Just
+    <$> try headwordAndMeaning
+    <|> ((Nothing, ) . Just <$> try meaningOnly)
+    <|> ((, Nothing) . Just <$> headwordOnly)
+ where
+  headwordOnly :: Parser (BoolExpr (StrSearch String))
+  headwordOnly = do
+    expr <- parseBoolExpr
+    skipOptional (symbolic ':')
+    return $ InfixSearch <$> expr
+  meaningOnly :: Parser (BoolExpr (StrSearch String))
+  meaningOnly = do
+    symbolic ':'
+    expr <- parseBoolExpr
+    return $ InfixSearch <$> expr
+  headwordAndMeaning
+    :: Parser (BoolExpr (StrSearch String), BoolExpr (StrSearch String))
+  headwordAndMeaning = do
+    hwExpr <- parseBoolExpr
+    symbolic ':'
+    meaningExpr <- parseBoolExpr
+    return (InfixSearch <$> hwExpr, InfixSearch <$> meaningExpr)
 
 --- Definition Variant Parser (TODO integrate)
 -- | Custom search interface. @muse search CMDS@ will hand @CMDS@ to this
@@ -76,9 +78,10 @@ searchArgument =
 --
 searchVariant :: Parser DefQueryVariant
 searchVariant =
-  try (Defn' <$ symbolic 'd') <|> try (DefVersus' <$ symbol "dvs") <|>
-  try (Phrase' <$ symbolic 'p') <|>
-  (InlineDef' <$ symbol "inline")
+  try (Defn' <$ symbolic 'd')
+    <|> try (DefVersus' <$ symbol "dvs")
+    <|> try (Phrase' <$ symbolic 'p')
+    <|> (InlineDef' <$ symbol "inline")
 
 data DefSearchInput
   = DefPred (Maybe (String -> Bool))

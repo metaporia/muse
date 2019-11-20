@@ -14,18 +14,12 @@
 -----------------------------------------------------------------------------
 module Render where
 
-import           Control.Monad                  ( (>=>)
-                                                , void
-                                                )
-import qualified Data.ByteString               as B
-import qualified Data.ByteString.Lazy          as BL
 import           Data.Char                      ( toUpper )
 import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( intercalate )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Helpers
 import           Parse
 import           Parse.Entry
 import           Prelude                 hiding ( log
@@ -33,8 +27,6 @@ import           Prelude                 hiding ( log
                                                 , min
                                                 )
 import           System.Console.ANSI
-import           Text.RawString.QQ
-import           Text.Show.Pretty               ( pPrint )
 import           Text.Wrap
 
 showAll :: ColRender a => [a] -> IO ()

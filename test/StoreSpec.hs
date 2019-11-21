@@ -20,15 +20,6 @@ import           Control.Monad                  ( (>=>)
                                                 )
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Data.Acid
-import           Data.Acid.Advanced             ( query'
-                                                , update'
-                                                )
-import           Data.Acid.Local                ( Checkpoint
-                                                , createCheckpointAndClose
-                                                )
-import           Data.Acid.Log
-import           Data.Acid.Remote
 import qualified Data.ByteString               as B
 import           Data.Foldable                  ( foldl' )
 import           Data.IxSet                     ( Indexable(..)
@@ -67,12 +58,7 @@ import           Search                         ( pathToDay )
 import           Store                   hiding ( Null )
 import           Store.Render
 import qualified Store.Sqlite                  as Sql
-import           Store.Types                    ( AttrTag(..)
-                                                , TsIdx(..)
-                                                , TsIdxTag(..)
-                                                , mkTsIdxTag
-                                                , tsIdx
-                                                )
+import           Store.Types                    ( AttrTag(..))
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
@@ -433,18 +419,6 @@ breakage
       )
     ]
 
---
---  describe "keyword \"dialogue\"" $ do
---    it "parse logEntries tDialogue" $
---      example $ do
---        (Nothing) `shouldBe` (Just tDialogueOut)
---
-withNewConnFrom :: FilePath -> (AcidState DB -> IO ()) -> IO ()
-withNewConnFrom fp action = bracket
-  (openLocalStateFrom fp initDB)
-  closeAcidState
-  (\acid -> update acid ReinitDB >> action acid)
-
 spec :: Spec
 spec =
   describe "Stub store test. TODO test sql storage."
@@ -453,68 +427,68 @@ spec =
     `shouldBe` True
 
 
-spec' :: Spec
-spec' = do
-  around (withNewConnFrom "testState/DB") $ do
-    describe "Add day's worth of logs to DB."
-      $ it
-          "converts and inserts logs to DB; compares with conversion directly to `Results`"
-      $ \acid -> do
-          utc <- getCurrentTime
-          let backupDay = utctDay . incrMin $ utc
-              day       = maybe backupDay id $ pathToDay "18.11.20"
-          update acid $ AddDay day utc breakage
-          let r' = Results $ fromLogEntry day <$> breakage
-          r    <- query acid FromDB
-          last <- query acid ViewDB >>= return . \DB { lastUpdated } ->
-            fromJust $ getOne lastUpdated
-          utc `shouldBe` modified last
-          r `shouldBe` r'
-          return ()
-    describe "Dump filtration."
-      $ it "Fetches dumps that contain the string \"dump\"."
-      $ \acid -> do
-          day <- utctDay <$> getCurrentTime
-          update acid $ InsertDump day "wasss"
-          update acid $ InsertDump day "hello dump"
-          update acid $ InsertDump day "goodbye dump"
-          let
-            s      = addDays (-182) day -- ~ six months
-            e      = day
-            search = Search s e []
-              $ BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
-          query acid ViewDB >>= \DB { dumped } ->
-            filterDumps search dumped
-              `shouldBe` [DumpR "goodbye dump", DumpR "hello dump"]
-    describe "Comment filtration."
-      $ it "applies single comment search pred"
-      $ \acid -> do
-          day   <- getCurrentTime
-          day'  <- incrMin <$> getCurrentTime
-          day'' <- incrMin . incrMin <$> getCurrentTime
-          update acid $ UpdateComment day "comment body 1" Nothing
-          update acid $ UpdateComment day' "synthesis" Nothing
-          update acid $ UpdateComment day'' "comment body 2" Nothing
-          let s      = addDays (-182) $ utctDay day -- ~ six months
-              e      = utctDay day
-              search = Search s e []
-                $ BucketList
-                    []
-                    ([], [])
-                    []
-                    []
-                    []
-                    ([], [])
-                    [T.isInfixOf "comment"]
-          query acid ViewDB >>= \db@DB { comments } -> do
-            filterComments db search comments
-              `shouldBe` [ TsR (truncateUTC day)   (Commentary "comment body 1")
-                         , TsR (truncateUTC day'') (Commentary "comment body 2")
-                         ]
-    tDia
-    tQuote
-    tDefs
-    tPhrases
+--spec' :: Spec
+--spec' = do
+--  around (withNewConnFrom "testState/DB") $ do
+--    describe "Add day's worth of logs to DB."
+--      $ it
+--          "converts and inserts logs to DB; compares with conversion directly to `Results`"
+--      $ \acid -> do
+--          utc <- getCurrentTime
+--          let backupDay = utctDay . incrMin $ utc
+--              day       = maybe backupDay id $ pathToDay "18.11.20"
+--          update acid $ AddDay day utc breakage
+--          let r' = Results $ fromLogEntry day <$> breakage
+--          r    <- query acid FromDB
+--          last <- query acid ViewDB >>= return . \DB { lastUpdated } ->
+--            fromJust $ getOne lastUpdated
+--          utc `shouldBe` modified last
+--          r `shouldBe` r'
+--          return ()
+--    describe "Dump filtration."
+--      $ it "Fetches dumps that contain the string \"dump\"."
+--      $ \acid -> do
+--          day <- utctDay <$> getCurrentTime
+--          update acid $ InsertDump day "wasss"
+--          update acid $ InsertDump day "hello dump"
+--          update acid $ InsertDump day "goodbye dump"
+--          let
+--            s      = addDays (-182) day -- ~ six months
+--            e      = day
+--            search = Search s e []
+--              $ BucketList [T.isInfixOf "dump"] ([], []) [] [] [] ([], []) []
+--          query acid ViewDB >>= \DB { dumped } ->
+--            filterDumps search dumped
+--              `shouldBe` [DumpR "goodbye dump", DumpR "hello dump"]
+--    describe "Comment filtration."
+--      $ it "applies single comment search pred"
+--      $ \acid -> do
+--          day   <- getCurrentTime
+--          day'  <- incrMin <$> getCurrentTime
+--          day'' <- incrMin . incrMin <$> getCurrentTime
+--          update acid $ UpdateComment day "comment body 1" Nothing
+--          update acid $ UpdateComment day' "synthesis" Nothing
+--          update acid $ UpdateComment day'' "comment body 2" Nothing
+--          let s      = addDays (-182) $ utctDay day -- ~ six months
+--              e      = utctDay day
+--              search = Search s e []
+--                $ BucketList
+--                    []
+--                    ([], [])
+--                    []
+--                    []
+--                    []
+--                    ([], [])
+--                    [T.isInfixOf "comment"]
+--          query acid ViewDB >>= \db@DB { comments } -> do
+--            filterComments db search comments
+--              `shouldBe` [ TsR (truncateUTC day)   (Commentary "comment body 1")
+--                         , TsR (truncateUTC day'') (Commentary "comment body 2")
+--                         ]
+--    tDia
+--    tQuote
+--    tDefs
+--    tPhrases
   -- Wipes test DB before each test. write another context setup/teardown
   -- function to persist (but don't; tests results ought to be replicable
   -- whenever possible)
@@ -555,426 +529,385 @@ spec' = do
 --    focus on a single entry variant. accordingly, entry variant specific query options
 --    have been expanded significantly.
 --
-tDia =
-  describe "dialogues: 4" $
-  it "dialogue single single searh pred; no preds returns all in date range" $ \acid -> do
-    day <- truncateUTC <$> getCurrentTime
-    day' <- truncateUTC . incrMin <$> getCurrentTime
-    day'' <- truncateUTC . incrMin . incrMin <$> getCurrentTime
-    let d =
-          [r|
-    MARGO: (rushes forward) I love my mom—she's perfect!
-    NICOLE: (steps back embracingly; brushes away and downwards.) No. She's my lawyer.
-    |]
-    let d' =
-          [r|
-    (After ~1hr of unbridled loquacity, having mercifully dammed mom's torrent)
-    MOM: Do you mind me telling all my favorite moments?
-    (Without looking up from his guitar playing)
-    DAD: No, just get it over with.
-    |]
-    update acid $ UpdateDialogue day' d
-    update acid $ UpdateDialogue day'' d'
-    let s = addDays (-182) $ utctDay day -- ~ six months
-        e = utctDay day
-        mkSearch = Search s e []
-        search =
-          mkSearch initBucketList {dialoguesPreds = [T.isInfixOf $ T.toCaseFold "MARGO"]}
-        search' = mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "mom"]}
-        search'' = mkSearch initBucketList
-    query acid ViewDB >>= \db@DB {dialogues}
-      --print $ T.isInfixOf "mom" d
-      --pPrint dialogues
-     -> do let first = TsR day' . Dialogue $ T.unpack d
-               second = TsR day'' . Dialogue $ T.unpack d'
-           filterDialogues db search dialogues `shouldBe` [first]
-           filterDialogues db search' dialogues `shouldBe` [first, second]
-           filterDialogues db search'' dialogues `shouldBe` [first, second]
 
+--tDia =
+--  describe "dialogues: 4" $
+--  it "dialogue single single searh pred; no preds returns all in date range" $ \acid -> do
+--    day <- truncateUTC <$> getCurrentTime
+--    day' <- truncateUTC . incrMin <$> getCurrentTime
+--    day'' <- truncateUTC . incrMin . incrMin <$> getCurrentTime
+--    let d =
+--          [r|
+--    MARGO: (rushes forward) I love my mom—she's perfect!
+--    NICOLE: (steps back embracingly; brushes away and downwards.) No. She's my lawyer.
+--    |]
+--    let d' =
+--          [r|
+--    (After ~1hr of unbridled loquacity, having mercifully dammed mom's torrent)
+--    MOM: Do you mind me telling all my favorite moments?
+--    (Without looking up from his guitar playing)
+--    DAD: No, just get it over with.
+--    |]
+--    update acid $ UpdateDialogue day' d
+--    update acid $ UpdateDialogue day'' d'
+--    let s = addDays (-182) $ utctDay day -- ~ six months
+--        e = utctDay day
+--        mkSearch = Search s e []
+--        search =
+--          mkSearch initBucketList {dialoguesPreds = [T.isInfixOf $ T.toCaseFold "MARGO"]}
+--        search' = mkSearch initBucketList {dialoguesPreds = [T.isInfixOf "mom"]}
+--        search'' = mkSearch initBucketList
+--    query acid ViewDB >>= \db@DB {dialogues}
+--      --print $ T.isInfixOf "mom" d
+--      --pPrint dialogues
+--     -> do let first = TsR day' . Dialogue $ T.unpack d
+--               second = TsR day'' . Dialogue $ T.unpack d'
+--           filterDialogues db search dialogues `shouldBe` [first]
+--           filterDialogues db search' dialogues `shouldBe` [first, second]
+--           filterDialogues db search'' dialogues `shouldBe` [first, second]
+--
+--
+--tQuote =
+--  describe "quotes: 6"
+--    $ it "applies single quote search pred"
+--    $ \acid -> do
+--        day   <- getCurrentTime
+--        day'  <- incrMin <$> getCurrentTime
+--        day'' <- incrMin . incrMin <$> getCurrentTime
+--        let
+--          q
+--            = "... nothing gave him more faith in the afterlife than the inexorable sarcasm of Fate."
+--          q'
+--            = "Above all, he wanted to stop being a child without using the cheap disguise of becoming a parent."
+--          q''
+--            = "He who could call a spade a spade should be compelled to use one."
+--          q'''   = "Three people said it. It must be true."
+--          edward = "Edward St. Aubyn"
+--          oscar  = "Oscar Wilde"
+--        update acid $ UpdateRead day "The Picture of Dorian Gray" "Oscar Wilde"
+--        update acid $ UpdateQuote day'
+--                                  q''
+--                                  oscar
+--                                  Nothing -- att attrTag
+--            -- FIXME truncate utctimes on entry to DB
+--                                  (Just . AttrTag $ truncateUTC day)
+--        update acid $ UpdateQuote day'' q edward Nothing -- att attrTag
+--                                                         Nothing
+--        update acid $ UpdateQuote (incrMin day'') q' edward Nothing -- att attrTag
+--                                                                    Nothing
+--        update acid $ UpdateQuote (incrMin $ incrMin day'')
+--                                  q'''
+--                                  oscar
+--                                  Nothing
+--                                  (Just . AttrTag $ truncateUTC day)
+--        let
+--          s = addDays (-182) $ utctDay day -- ~ six months
+--          e = utctDay . incrMin . incrMin . incrMin $ day''
+--          byWilde (Attribution _ a) =
+--            T.isInfixOf "oscar" a && T.isInfixOf "wilde" a
+--          search = Search
+--            s
+--            e
+--            []
+--            initBucketList { quotesPreds = [T.isInfixOf "sarcasm"] }
+--          search' =
+--            Search s e [] initBucketList { quotesPreds = [T.isInfixOf "spade"] }
+--          search'' = Search
+--            s
+--            e
+--            []
+--            initBucketList
+--              { quotesPreds = [ T.isInfixOf "child"
+--                              , T.isInfixOf "cheap disguise"
+--                              ]
+--              }
+--          search'''  = Search s e [byWilde] initBucketList { quotesPreds = [] }
+--          search'''' = Search
+--            s
+--            e
+--            [byWilde]
+--            initBucketList { quotesPreds = [T.isInfixOf "spade"] }
+--        query acid ViewDB >>= \db@DB { quotes, reads } -> do
+--          let tag = mkTsIdxTag day' (q'', oscar, Nothing) (Just . AttrTag . truncateUTC $ day)
+--              o1 = TsR (truncateUTC day') $ Quotation (T.unpack q'') (T.unpack oscar) Nothing
+--              o2 = TsR (truncateUTC (incrMin . incrMin $ day'')) $ Quotation (T.unpack q''') (T.unpack oscar) Nothing
+--              e1 = TsR (truncateUTC day'') $ Quotation (T.unpack q) (T.unpack edward) Nothing
+--              e2 = TsR (truncateUTC $ incrMin day'') $ Quotation (T.unpack q') (T.unpack edward) Nothing
+--              -- empty
+--          filterQuotes db (Search s e [] initBucketList) quotes `shouldBe` [ o1 , e1 , e2 , o2 ]
+--          -- spade
+--          filterQuotes db search' quotes `shouldBe` [o1]
+--          -- sarcasm
+--          filterQuotes db search quotes `shouldBe` [e1]
+--          -- cheap disguise & child
+--          filterQuotes db search'' quotes `shouldBe` [e2]
+--          -- auth pred: Oscar Wilde
+--          filterQuotes db search''' quotes `shouldBe` [o1, o2]
+--          -- auth pred (Oscar Wilde) & contains "spade"
+--          filterQuotes db search'''' quotes `shouldBe` [o1]
 
-tQuote =
-  describe "quotes: 6"
-    $ it "applies single quote search pred"
-    $ \acid -> do
-        day   <- getCurrentTime
-        day'  <- incrMin <$> getCurrentTime
-        day'' <- incrMin . incrMin <$> getCurrentTime
-        let
-          q
-            = "... nothing gave him more faith in the afterlife than the inexorable sarcasm of Fate."
-          q'
-            = "Above all, he wanted to stop being a child without using the cheap disguise of becoming a parent."
-          q''
-            = "He who could call a spade a spade should be compelled to use one."
-          q'''   = "Three people said it. It must be true."
-          edward = "Edward St. Aubyn"
-          oscar  = "Oscar Wilde"
-        update acid $ UpdateRead day "The Picture of Dorian Gray" "Oscar Wilde"
-        update acid $ UpdateQuote day'
-                                  q''
-                                  oscar
-                                  Nothing -- att attrTag
-            -- FIXME truncate utctimes on entry to DB
-                                  (Just . AttrTag $ truncateUTC day)
-        update acid $ UpdateQuote day'' q edward Nothing -- att attrTag
-                                                         Nothing
-        update acid $ UpdateQuote (incrMin day'') q' edward Nothing -- att attrTag
-                                                                    Nothing
-        update acid $ UpdateQuote (incrMin $ incrMin day'')
-                                  q'''
-                                  oscar
-                                  Nothing
-                                  (Just . AttrTag $ truncateUTC day)
-        let
-          s = addDays (-182) $ utctDay day -- ~ six months
-          e = utctDay . incrMin . incrMin . incrMin $ day''
-          byWilde (Attribution _ a) =
-            T.isInfixOf "oscar" a && T.isInfixOf "wilde" a
-          search = Search
-            s
-            e
-            []
-            initBucketList { quotesPreds = [T.isInfixOf "sarcasm"] }
-          search' =
-            Search s e [] initBucketList { quotesPreds = [T.isInfixOf "spade"] }
-          search'' = Search
-            s
-            e
-            []
-            initBucketList
-              { quotesPreds = [ T.isInfixOf "child"
-                              , T.isInfixOf "cheap disguise"
-                              ]
-              }
-          search'''  = Search s e [byWilde] initBucketList { quotesPreds = [] }
-          search'''' = Search
-            s
-            e
-            [byWilde]
-            initBucketList { quotesPreds = [T.isInfixOf "spade"] }
-        query acid ViewDB >>= \db@DB { quotes, reads } -> do
-          let tag = mkTsIdxTag day' (q'', oscar, Nothing) (Just . AttrTag . truncateUTC $ day)
-              o1 = TsR (truncateUTC day') $ Quotation (T.unpack q'') (T.unpack oscar) Nothing
-              o2 = TsR (truncateUTC (incrMin . incrMin $ day'')) $ Quotation (T.unpack q''') (T.unpack oscar) Nothing
-              e1 = TsR (truncateUTC day'') $ Quotation (T.unpack q) (T.unpack edward) Nothing
-              e2 = TsR (truncateUTC $ incrMin day'') $ Quotation (T.unpack q') (T.unpack edward) Nothing
-              -- empty
-          filterQuotes db (Search s e [] initBucketList) quotes `shouldBe` [ o1 , e1 , e2 , o2 ]
-          -- spade
-          filterQuotes db search' quotes `shouldBe` [o1]
-          -- sarcasm
-          filterQuotes db search quotes `shouldBe` [e1]
-          -- cheap disguise & child
-          filterQuotes db search'' quotes `shouldBe` [e2]
-          -- auth pred: Oscar Wilde
-          filterQuotes db search''' quotes `shouldBe` [o1, o2]
-          -- auth pred (Oscar Wilde) & contains "spade"
-          filterQuotes db search'''' quotes `shouldBe` [o1]
+--tDefs =
+--  describe "definitions: 6"
+--    $ it "definitions: headword, and meaning predicates"
+--    $ \acid -> do
+--        day     <- truncateUTC <$> getCurrentTime
+--        day'    <- truncateUTC . incrMin <$> getCurrentTime
+--        day''   <- truncateUTC . incrMin . incrMin <$> getCurrentTime
+--        day'''  <- truncateUTC . incrMin . incrMin . incrMin <$> getCurrentTime
+--        day'''' <-
+--          truncateUTC . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+--        day''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        day'''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        let
+--          envy    = Defn Nothing ["emulous", "invidious", "enviable"]
+--          serry   = InlineDef "serry" "to crowd; to press together"
+--          jostle  = InlineDef "jostle" "to crowd; to run against; to bump"
+--          jonquil = InlineDef "jonquil" "a yellow flower; a shade of yellow"
+--          jonquil' =
+--            InlineDef "jonquil plus" "a yellow flower; a shade of yellow"
+--          disen = DefVersus "dissent"
+--                            "verbal or civil contrariety"
+--                            "dissension"
+--                            "a more violent subversion, or opposition to"
+--        update acid $ UpdateDef day' envy Nothing
+--        update acid $ UpdateDef day'' serry Nothing
+--        update acid $ UpdateDef day''' jonquil Nothing
+--        update acid $ UpdateDef day'''' disen Nothing
+--        update acid $ UpdateDef day''''' jostle Nothing
+--        update acid $ UpdateDef day'''''' jonquil' Nothing
+--        let
+--          s       = addDays (-182) $ utctDay day -- ~ six months
+--          e       = utctDay (incrMin day'''''')
+--          search  = Search s e [] initBucketList { defsPreds = ([], []) }
+--          search' = Search
+--            s
+--            e
+--            []
+--            initBucketList { defsPreds = ([], [isInfixOf "crowd"]) }
+--          search''  = Search s e [] initBucketList
+--          search''' = Search
+--            s
+--            e
+--            []
+--            initBucketList { defsPreds = ([isInfixOf "jonquil"], []) }
+--          search'''' = Search
+--            s
+--            e
+--            []
+--            initBucketList { defsPreds = ([isInfixOf "e"], [isInfixOf "crowd"])
+--                           }
+--          searchVs = Search
+--            s
+--            e
+--            []
+--            initBucketList { defsPreds = ([isInfixOf "dissent"], []) }
+--          searchVs' = Search
+--            s
+--            e
+--            []
+--            initBucketList { defsPreds = ([], [isInfixOf "civil contrariety"]) }
+--          searchVs'' = Search
+--            s
+--            e
+--            []
+--            initBucketList
+--              { defsPreds = ( [isInfixOf "dissent"]
+--                            , [isInfixOf "civil contrariety"]
+--                            )
+--              }
+--        query acid ViewDB >>= \db@DB { defs } -> do
+--          let envy'      = TsR day' (Def envy)
+--              serry'     = TsR day'' (Def serry)
+--              jonquil''  = TsR day''' (Def jonquil)
+--              disen'     = TsR day'''' (Def disen)
+--              jostle'    = TsR day''''' (Def jostle)
+--              jonquil''' = TsR day'''''' (Def jonquil')
+--          filterDefs db search defs
+--            `shouldBe` [ TsR day'      (Def envy)
+--                       , TsR day''     (Def serry)
+--                       , TsR day'''    (Def jonquil)
+--                       , TsR day''''   (Def disen)
+--                       , TsR day'''''  (Def jostle)
+--                       , TsR day'''''' (Def jonquil')
+--                       ]
+--          -- no headword preds
+--          filterDefs db search' defs `shouldBe` [serry', jostle']
+--          -- no meaning preds
+--          filterDefs db search''' defs `shouldBe` [jonquil'', jonquil''']
+--          -- both
+--          filterDefs db search'''' defs `shouldBe` [envy', serry', jostle']
+--          -- versus no meaning preds
+--          filterDefs db searchVs defs `shouldBe` [disen']
+--          -- versus no headword preds
+--          filterDefs db searchVs' defs `shouldBe` [disen']
+--          -- both
+--          filterDefs db searchVs'' defs `shouldBe` [disen']
 
-tDefs =
-  describe "definitions: 6"
-    $ it "definitions: headword, and meaning predicates"
-    $ \acid -> do
-        day     <- truncateUTC <$> getCurrentTime
-        day'    <- truncateUTC . incrMin <$> getCurrentTime
-        day''   <- truncateUTC . incrMin . incrMin <$> getCurrentTime
-        day'''  <- truncateUTC . incrMin . incrMin . incrMin <$> getCurrentTime
-        day'''' <-
-          truncateUTC . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
-        day''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        day'''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        let
-          envy    = Defn Nothing ["emulous", "invidious", "enviable"]
-          serry   = InlineDef "serry" "to crowd; to press together"
-          jostle  = InlineDef "jostle" "to crowd; to run against; to bump"
-          jonquil = InlineDef "jonquil" "a yellow flower; a shade of yellow"
-          jonquil' =
-            InlineDef "jonquil plus" "a yellow flower; a shade of yellow"
-          disen = DefVersus "dissent"
-                            "verbal or civil contrariety"
-                            "dissension"
-                            "a more violent subversion, or opposition to"
-        update acid $ UpdateDef day' envy Nothing
-        update acid $ UpdateDef day'' serry Nothing
-        update acid $ UpdateDef day''' jonquil Nothing
-        update acid $ UpdateDef day'''' disen Nothing
-        update acid $ UpdateDef day''''' jostle Nothing
-        update acid $ UpdateDef day'''''' jonquil' Nothing
-        let
-          s       = addDays (-182) $ utctDay day -- ~ six months
-          e       = utctDay (incrMin day'''''')
-          search  = Search s e [] initBucketList { defsPreds = ([], []) }
-          search' = Search
-            s
-            e
-            []
-            initBucketList { defsPreds = ([], [isInfixOf "crowd"]) }
-          search''  = Search s e [] initBucketList
-          search''' = Search
-            s
-            e
-            []
-            initBucketList { defsPreds = ([isInfixOf "jonquil"], []) }
-          search'''' = Search
-            s
-            e
-            []
-            initBucketList { defsPreds = ([isInfixOf "e"], [isInfixOf "crowd"])
-                           }
-          searchVs = Search
-            s
-            e
-            []
-            initBucketList { defsPreds = ([isInfixOf "dissent"], []) }
-          searchVs' = Search
-            s
-            e
-            []
-            initBucketList { defsPreds = ([], [isInfixOf "civil contrariety"]) }
-          searchVs'' = Search
-            s
-            e
-            []
-            initBucketList
-              { defsPreds = ( [isInfixOf "dissent"]
-                            , [isInfixOf "civil contrariety"]
-                            )
-              }
-        query acid ViewDB >>= \db@DB { defs } -> do
-          let envy'      = TsR day' (Def envy)
-              serry'     = TsR day'' (Def serry)
-              jonquil''  = TsR day''' (Def jonquil)
-              disen'     = TsR day'''' (Def disen)
-              jostle'    = TsR day''''' (Def jostle)
-              jonquil''' = TsR day'''''' (Def jonquil')
-          filterDefs db search defs
-            `shouldBe` [ TsR day'      (Def envy)
-                       , TsR day''     (Def serry)
-                       , TsR day'''    (Def jonquil)
-                       , TsR day''''   (Def disen)
-                       , TsR day'''''  (Def jostle)
-                       , TsR day'''''' (Def jonquil')
-                       ]
-          -- no headword preds
-          filterDefs db search' defs `shouldBe` [serry', jostle']
-          -- no meaning preds
-          filterDefs db search''' defs `shouldBe` [jonquil'', jonquil''']
-          -- both
-          filterDefs db search'''' defs `shouldBe` [envy', serry', jostle']
-          -- versus no meaning preds
-          filterDefs db searchVs defs `shouldBe` [disen']
-          -- versus no headword preds
-          filterDefs db searchVs' defs `shouldBe` [disen']
-          -- both
-          filterDefs db searchVs'' defs `shouldBe` [disen']
-
-tPhrases =
-  describe "definitions: 6"
-    $ it "definitions: headword, and meaning predicates"
-    $ \acid -> do
-        day     <- truncateUTC <$> getCurrentTime
-        day'    <- truncateUTC . incrMin <$> getCurrentTime
-        day''   <- truncateUTC . incrMin . incrMin <$> getCurrentTime
-        day'''  <- truncateUTC . incrMin . incrMin . incrMin <$> getCurrentTime
-        day'''' <-
-          truncateUTC . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
-        day''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        day'''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        day''''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        day'''''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        day''''''''' <-
-          truncateUTC
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          .   incrMin
-          <$> getCurrentTime
-        let
-          ever    = Plural ["ever and anon"]
-          tacit   = Plural ["supercilious taciturnity"]
-          arbiter = Defined "arbiter elegantiarum"
-                            "a judge of artistic taste and etiquette."
-          amour = Defined "AMOUR PROPRE" "self-love, -esteem"
-          byWay = Defined "way of being"
-                          "via; in the condition of position of being"
-          sine = Defined "by sine qua non"
-                         "an essential condition; something necessary"
-          irony = Plural ["prophylactic irony"]
-          mezzo = Defined
-            "by mezzo del cammin di nostra vita"
-            "\"when i had journeyed half of our life's way\" -- \"dante's inferno\""
-          trompe =
-            Defined "trompe l'œil" "of art having an illusory third dimension."
-        update acid $ UpdatePhrase day' ever Nothing
-        update acid $ UpdatePhrase day'' tacit Nothing
-        update acid $ UpdatePhrase day''' arbiter Nothing
-        update acid $ UpdatePhrase day'''' amour Nothing
-        update acid $ UpdatePhrase day''''' byWay Nothing
-        update acid $ UpdatePhrase day'''''' sine Nothing
-        update acid $ UpdatePhrase day''''''' irony Nothing
-        update acid $ UpdatePhrase day'''''''' mezzo Nothing
-        update acid $ UpdatePhrase day''''''''' trompe Nothing
-        let s      = addDays (-182) $ utctDay day -- ~ six months
-            e      = utctDay (incrMin day'''''')
-            search = Search s e [] initBucketList
-        query acid ViewDB >>= \db@DB { phrases } -> do
-          --runSearch' True True (Search s e [] initBucketList {phrasesPreds = ([isInfixOf "TROMPE"],[])}) db
-          let ever'    = TsR day' $ Phr ever
-              tacit'   = TsR day'' $ Phr tacit
-              arbiter' = TsR day''' $ Phr arbiter
-              amour'   = TsR day'''' $ Phr amour
-              byWay'   = TsR day''''' $ Phr byWay
-              sine'    = TsR day'''''' $ Phr sine
-              irony'   = TsR day''''''' $ Phr irony
-              mezzo'   = TsR day'''''''' $ Phr mezzo
-              trompe'  = TsR day''''''''' $ Phr trompe
-          filterPhrases db search phrases
-            `shouldBe` [ ever'
-                       , tacit'
-                       , arbiter'
-                       , amour'
-                       , byWay'
-                       , sine'
-                       , irony'
-                       , mezzo'
-                       , trompe'
-                       ]
-          -- no headword preds
-          filterPhrases
-              db
-              (Search
-                s
-                e
-                []
-                initBucketList { phrasesPreds = ([], [isInfixOf "condition"]) }
-              )
-              phrases
-            `shouldBe` [byWay', sine']
-          -- no meaning preds
-          filterPhrases
-              db
-              (Search s
-                      e
-                      []
-                      initBucketList { phrasesPreds = ([isInfixOf "by"], []) }
-              )
-              phrases
-            `shouldBe` [sine', mezzo']
-          -- both
-          filterPhrases
-              db
-              (Search
-                s
-                e
-                []
-                initBucketList
-                  { phrasesPreds = ( [isInfixOf "trompe"]
-                                   , [isInfixOf "illusory third"]
-                                   )
-                  }
-              )
-              phrases
-            `shouldBe` [trompe']
+--tPhrases =
+--  describe "definitions: 6"
+--    $ it "definitions: headword, and meaning predicates"
+--    $ \acid -> do
+--        day     <- truncateUTC <$> getCurrentTime
+--        day'    <- truncateUTC . incrMin <$> getCurrentTime
+--        day''   <- truncateUTC . incrMin . incrMin <$> getCurrentTime
+--        day'''  <- truncateUTC . incrMin . incrMin . incrMin <$> getCurrentTime
+--        day'''' <-
+--          truncateUTC . incrMin . incrMin . incrMin . incrMin <$> getCurrentTime
+--        day''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        day'''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        day''''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        day'''''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        day''''''''' <-
+--          truncateUTC
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          .   incrMin
+--          <$> getCurrentTime
+--        let
+--          ever    = Plural ["ever and anon"]
+--          tacit   = Plural ["supercilious taciturnity"]
+--          arbiter = Defined "arbiter elegantiarum"
+--                            "a judge of artistic taste and etiquette."
+--          amour = Defined "AMOUR PROPRE" "self-love, -esteem"
+--          byWay = Defined "way of being"
+--                          "via; in the condition of position of being"
+--          sine = Defined "by sine qua non"
+--                         "an essential condition; something necessary"
+--          irony = Plural ["prophylactic irony"]
+--          mezzo = Defined
+--            "by mezzo del cammin di nostra vita"
+--            "\"when i had journeyed half of our life's way\" -- \"dante's inferno\""
+--          trompe =
+--            Defined "trompe l'œil" "of art having an illusory third dimension."
+--        update acid $ UpdatePhrase day' ever Nothing
+--        update acid $ UpdatePhrase day'' tacit Nothing
+--        update acid $ UpdatePhrase day''' arbiter Nothing
+--        update acid $ UpdatePhrase day'''' amour Nothing
+--        update acid $ UpdatePhrase day''''' byWay Nothing
+--        update acid $ UpdatePhrase day'''''' sine Nothing
+--        update acid $ UpdatePhrase day''''''' irony Nothing
+--        update acid $ UpdatePhrase day'''''''' mezzo Nothing
+--        update acid $ UpdatePhrase day''''''''' trompe Nothing
+--        let s      = addDays (-182) $ utctDay day -- ~ six months
+--            e      = utctDay (incrMin day'''''')
+--            search = Search s e [] initBucketList
+--        query acid ViewDB >>= \db@DB { phrases } -> do
+--          --runSearch' True True (Search s e [] initBucketList {phrasesPreds = ([isInfixOf "TROMPE"],[])}) db
+--          let ever'    = TsR day' $ Phr ever
+--              tacit'   = TsR day'' $ Phr tacit
+--              arbiter' = TsR day''' $ Phr arbiter
+--              amour'   = TsR day'''' $ Phr amour
+--              byWay'   = TsR day''''' $ Phr byWay
+--              sine'    = TsR day'''''' $ Phr sine
+--              irony'   = TsR day''''''' $ Phr irony
+--              mezzo'   = TsR day'''''''' $ Phr mezzo
+--              trompe'  = TsR day''''''''' $ Phr trompe
+--          filterPhrases db search phrases
+--            `shouldBe` [ ever'
+--                       , tacit'
+--                       , arbiter'
+--                       , amour'
+--                       , byWay'
+--                       , sine'
+--                       , irony'
+--                       , mezzo'
+--                       , trompe'
+--                       ]
+--          -- no headword preds
+--          filterPhrases
+--              db
+--              (Search
+--                s
+--                e
+--                []
+--                initBucketList { phrasesPreds = ([], [isInfixOf "condition"]) }
+--              )
+--              phrases
+--            `shouldBe` [byWay', sine']
+--          -- no meaning preds
+--          filterPhrases
+--              db
+--              (Search s
+--                      e
+--                      []
+--                      initBucketList { phrasesPreds = ([isInfixOf "by"], []) }
+--              )
+--              phrases
+--            `shouldBe` [sine', mezzo']
+--          -- both
+--          filterPhrases
+--              db
+--              (Search
+--                s
+--                e
+--                []
+--                initBucketList
+--                  { phrasesPreds = ( [isInfixOf "trompe"]
+--                                   , [isInfixOf "illusory third"]
+--                                   )
+--                  }
+--              )
+--              phrases
+--            `shouldBe` [trompe']
 
 data EntryType
   = Checkpoint
   | Event
-
--- | Fetches 'LogKey' of requested log type at the given acid-state path.
-logKey :: EntryType -> FilePath -> LogKey object
-logKey et fp = case et of
-  Checkpoint -> LogKey fp "checkpoints"
-  Event      -> LogKey fp "events"
-
-rollbackExample = do
-  let k = logKey Checkpoint "state/DB" :: LogKey Checkpoint
-  fl <- openFileLog k
-  id <- askCurrentEntryId fl
-  let prev = id - 2
-  print $ "rolling back from " <> show id <> " to " <> show prev
-  closeFileLog fl
-  --rollbackTo k prev
-
-
-dbTest = hspec . around (withNewConnFrom "testState/DB")
-
-scratch = do
-  day   <- getCurrentTime
-  day'  <- incrMin <$> getCurrentTime
-  day'' <- incrMin . incrMin <$> getCurrentTime
-  bracket
-    (openLocalStateFrom "state/DB" initDB)
-    createCheckpointAndClose
-    (\acid
-      --update acid $ InsertDump day "sayonara dump"
-           -> do
-      update acid ReinitDB
-      let s      = addDays (-182) $ utctDay day -- ~ six months
-          e      = utctDay day
-          search = Search s e []
-            $ BucketList [] ([], []) [] [] [] ([], []) [T.isInfixOf "comment"]
-      update acid $ AddDay (utctDay day) (truncateUTC day) read2
-      update acid
-        $ AddDay (incrDay $ utctDay day) (truncateUTC $ incrUTC day) read1
-      query acid LastRead >>= colRender True
-       --query acid FromDB >>= colRender True
-       --query acid ViewDB >>= \db -> pPrint db
-    )
-  return ()
 
 read2 =
   [ TabTsEntry

@@ -240,8 +240,10 @@ search today = do
   comments' <- commentBody
 
   pure $ Sql.SearchConfig
+    -- since
     s
-    today
+    -- before: since the time of today is truncated we search for entries occuring before tommorow to include today's logs.
+    (addDays 1 today)
     dmps
     qs
     dials

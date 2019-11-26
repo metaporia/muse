@@ -16,7 +16,7 @@
 module Store.SqliteSpec where
 
 
-
+import           CLI.Parser.Types               (BoolExpr(..))
 import           Control.Monad                  ( when
                                                 , unless
                                                 )
@@ -43,11 +43,11 @@ import           Parse
 import qualified Parse                         as P
 import           Parse.Entry
 import           Render                         ( showAll )
-import           Store                          ( Result(..))
+import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
 import           Test.Hspec              hiding ( before )
 import           Text.RawString.QQ
-import           Text.Show.Pretty               ( pPrint)
+import           Text.Show.Pretty               ( pPrint )
 import           Time
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Resource
@@ -168,19 +168,20 @@ testSearchDispatch = describe "dispatchSearch" $ do
 
         -- these are /only/ for explicitly set entry variant filters.
         -- They are expected to have been set by the parser.
-        let searchAllBare before' = SearchConfig since
-                                                 before'
-                                                 False -- dump support unimplemented as yet
-                                                 False -- quotes
-                                                 False -- dialogues
-                                                 False -- comments
-                                                 False -- definitions
-                                                 ([], []) -- (authPreds, titlePreds)
-                                                 (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
-                                                 [] -- quote body search strings
-                                                 [] -- commentary ^
-                                                 [] -- dialogue   ^
-                                                 [] -- dump       ^ (ignore)
+        let searchAllBare before' = SearchConfig
+              since
+              before'
+              False -- dump support unimplemented as yet
+              False -- quotes
+              False -- dialogues
+              False -- comments
+              False -- definitions
+              ([], []) -- (authPreds, titlePreds)
+              (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
+              [] -- quote body search strings
+              [] -- commentary ^
+              [] -- dialogue   ^
+              [] -- dump       ^ (ignore)
         (searchErrs, results) <- dispatchSearch' (searchAllBare before)
         when
           debug
@@ -201,19 +202,20 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search variants = SearchConfig since
-                                           before
-                                           False -- dump support unimplemented as yet
-                                           False -- quotes
-                                           False -- dialogues
-                                           False -- comments
-                                           True -- definitions
-                                           ([], []) -- (authPreds, titlePreds)
-                                           (DefSearch variants Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
-                                           [] -- quote body search strings
-                                           [] -- commentary ^
-                                           [] -- dialogue   ^
-                                           [] -- dump       ^ (ignore)
+        let search variants = SearchConfig
+              since
+              before
+              False -- dump support unimplemented as yet
+              False -- quotes
+              False -- dialogues
+              False -- comments
+              True -- definitions
+              ([], []) -- (authPreds, titlePreds)
+              (DefSearch variants Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
+              [] -- quote body search strings
+              [] -- commentary ^
+              [] -- dialogue   ^
+              [] -- dump       ^ (ignore)
         -- all variants
         (searchErrs, results) <- dispatchSearch' (search allDefVariants)
 
@@ -250,19 +252,20 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search auth title filters = SearchConfig since
-                                                     before
-                                                     False -- dump support unimplemented as yet
-                                                     True -- quotes
-                                                     False -- dialogues
-                                                     False -- comments
-                                                     False -- definitions
-                                                     (auth, title) -- (authPreds, titlePreds)
-                                                     (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
-                                                     filters -- quote body search strings
-                                                     [] -- commentary ^
-                                                     [] -- dialogue   ^
-                                                     [] -- dump       ^ (ignore)
+        let search auth title filters = SearchConfig
+              since
+              before
+              False -- dump support unimplemented as yet
+              True -- quotes
+              False -- dialogues
+              False -- comments
+              False -- definitions
+              (auth, title) -- (authPreds, titlePreds)
+              (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
+              filters -- quote body search strings
+              [] -- commentary ^
+              [] -- dialogue   ^
+              [] -- dump       ^ (ignore)
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -311,19 +314,20 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search auth title filters = SearchConfig since
-                                                     before
-                                                     False -- dump support unimplemented as yet
-                                                     True -- quotes
-                                                     False -- dialogues
-                                                     False -- comments
-                                                     False -- definitions
-                                                     (auth, title) -- (authPreds, titlePreds)
-                                                     (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
-                                                     filters -- quote body search strings
-                                                     [] -- commentary ^
-                                                     [] -- dialogue   ^
-                                                     [] -- dump       ^ (ignore)
+        let search auth title filters = SearchConfig
+              since
+              before
+              False -- dump support unimplemented as yet
+              True -- quotes
+              False -- dialogues
+              False -- comments
+              False -- definitions
+              (auth, title) -- (authPreds, titlePreds)
+              (DefSearch [] Nothing Nothing) -- defQueryVariants, headwordPreds, meaningPreds
+              filters -- quote body search strings
+              [] -- commentary ^
+              [] -- dialogue   ^
+              [] -- dump       ^ (ignore)
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -397,6 +401,46 @@ testSearchDispatch = describe "dispatchSearch" $ do
         (searchErrs, results) <- dispatchSearch' (search ["%lexical%"])
 
         liftIO $ results `shouldBe` globCommentLexical
+
+  it "definition and phrase headword search"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        let debug  = False
+            pretty = False
+        (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+        let search headwords defs defnVariants = SearchConfig
+              since
+              before
+              False
+              False
+              False
+              False
+              defs -- include defs?
+              ([], [])
+              (DefSearch defnVariants (Just headwords) Nothing)
+              []
+              []
+              []
+              []
+        (searchErrs, results) <- dispatchSearch'
+          (search (LitE (InfixSearch "twaddle")) True [Defn'])
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 19, min = 7, sec = 0}
+                       , Def (Defn Nothing ["twaddle", "twattle"])
+                       )
+                     ]
+        (searchErrs, results) <- dispatchSearch'
+          (search (LitE (InfixSearch "fail of")) False [Phrase'])
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 8, min = 51, sec = 44}
+                       , Phr (Plural ["\"omit to\"", "\"fail of\""])
+                       )
+                     ]
+
 
   it "phrases & quotes queries"
     $ asIO
@@ -1336,7 +1380,9 @@ globMultiPhrQt =
       Nothing
     )
   , (TimeStamp {hr = 8, min = 50, sec = 29}, Phr (Plural ["\"rapt in\""]))
-  , (TimeStamp {hr = 8, min = 51, sec = 44}, Phr (Plural ["\"omit to\""]))
+  , ( TimeStamp {hr = 8, min = 51, sec = 44}
+    , Phr (Plural ["\"omit to\"", "\"fail of\""])
+    )
   , ( TimeStamp {hr = 8, min = 53, sec = 16}
     , Phr (Plural ["\"be hindered of\""])
     )

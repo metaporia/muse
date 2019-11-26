@@ -1,5 +1,5 @@
 module CLI.Parser.Types
-  ( BoolExpr
+  ( BoolExpr(..)
   , parseBoolExpr
   , interpretBoolExpr
   )

@@ -1247,7 +1247,7 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
     entry <- toEntry entityVal :: Either String Entry
     (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
-        Right $ variantSatisfies defVariants (Right x) && and
+        Right $ variantSatisfies defVariants (Right x) && or
           (applyBoolExpr headwordPreds <$> hws)
       Def x@(P.InlineDef hw mn) ->
         Right
@@ -1264,7 +1264,7 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
                 )
              )
       Phr x@(Plural hws) ->
-        Right $ variantSatisfies defVariants (Left x) && and
+        Right $ variantSatisfies defVariants (Left x) && or
           (applyHeadwordPreds hws)
       Phr x@(Defined hw mn) ->
         Right

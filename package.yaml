@@ -59,6 +59,7 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
+    - CLI.Parser.Types
     - Diff
     - Lib
     - Parse.Entry

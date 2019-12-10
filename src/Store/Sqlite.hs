@@ -1331,6 +1331,7 @@ filterDialogues since before authPreds titlePreds dialoguePreds
             ==. readEntry
             ?.  ReadEntryId
             )
+          -- FIXME apply attribution predicates
           constraints dialogueEntry
           return dialogueEntry
     in
@@ -1395,6 +1396,7 @@ filterCommentaries since before authPreds titlePreds commentaryPreds
       selectWrapper constraints = if null authPreds && null titlePreds
         then select $ from $ \commentaryEntry -> constraints commentaryEntry
         else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
+          -- FIXME apply attribution predicates
           on
             (   commentaryEntry
             ^.  CommentaryEntryAttributionTag

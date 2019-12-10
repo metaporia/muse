@@ -741,6 +741,9 @@ dispatchSearch logPath SearchConfig {..}
                   else defSearch
                 )
               else return []
+            , if not (null dialogueSearch) || checkDialogues
+              then filterDialogues since before authPreds titlePreds dialogueSearch
+              else return []
             ]
     in
       search
@@ -1306,12 +1309,6 @@ filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump sto
 
 type DialogueSearch = [String]
 
--- | Apply predicates to a dialogue.
-filterDialogue :: DialogueSearch -> Entity DialogueEntry -> Bool
-filterDialogue dialoguePreds (Entity _ (DialogueEntry body _)) =
-  and (isInfixOf <$> dialoguePreds <*> pure body)
-
-
 filterDialogues
   :: MonadIO m
   => Day
@@ -1331,8 +1328,11 @@ filterDialogues since before authPreds titlePreds dialoguePreds
             ==. readEntry
             ?.  ReadEntryId
             )
-          -- FIXME apply attribution predicates
           constraints dialogueEntry
+          where_
+            $ attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
+            &&. attributionConstraint (readEntry ?. ReadEntryTitle)
+                                      titlePreds
           return dialogueEntry
     in
       do
@@ -1395,16 +1395,22 @@ filterCommentaries since before authPreds titlePreds commentaryPreds
   = let
       selectWrapper constraints = if null authPreds && null titlePreds
         then select $ from $ \commentaryEntry -> constraints commentaryEntry
-        else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
-          -- FIXME apply attribution predicates
-          on
-            (   commentaryEntry
-            ^.  CommentaryEntryAttributionTag
-            ==. readEntry
-            ?.  ReadEntryId
-            )
-          constraints commentaryEntry
-          return commentaryEntry
+        else
+          select
+          $ from
+          $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
+              on
+                (   commentaryEntry
+                ^.  CommentaryEntryAttributionTag
+                ==. readEntry
+                ?.  ReadEntryId
+                )
+              constraints commentaryEntry
+              where_
+                $ attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
+                &&. attributionConstraint (readEntry ?. ReadEntryTitle)
+                                          titlePreds
+              return commentaryEntry
     in
       selectWrapper $ \commentaryEntry -> do
 

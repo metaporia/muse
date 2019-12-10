@@ -70,9 +70,11 @@ setup writeAction = do
 spec :: Spec
 spec = do
   let filterQuotesSetup = setup (`writeDay` demoLogEntries)
-      defVarSetup = setup (\today -> do
-        let entries = fromJust $ toMaybe $ parse logEntries defVar
-        writeDay today entries)
+      defVarSetup       = setup
+        (\today -> do
+          let entries = fromJust $ toMaybe $ parse logEntries defVar
+          writeDay today entries
+        )
 
   describe "quote filtration" $ do
     it
@@ -87,11 +89,11 @@ spec = do
           liftIO $ length satisfactoryDefs `shouldBe` 3
     it "filterQuotes" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      matchingQuotes  <- filterQuotes since
-                                      before
-                                      ["%Woolf%", "%Virginia%"]
-                                      []
-                                      ["%simplicity%"]
+      matchingQuotes     <- filterQuotes since
+                                         before
+                                         ["%Woolf%", "%Virginia%"]
+                                         []
+                                         ["%simplicity%"]
       liftIO
         $          quoteEntryBody
         .          entityVal
@@ -106,7 +108,7 @@ spec = do
   describe "definition filtration" $ do
     it "all def variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs            <- filterDefs'
+      defs               <- filterDefs'
         since
         before
         []
@@ -115,7 +117,11 @@ spec = do
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs' since before [] [] (DefSearch [DefVersus'] Nothing Nothing)
+      defs               <- filterDefs' since
+                                        before
+                                        []
+                                        []
+                                        (DefSearch [DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
@@ -123,12 +129,20 @@ spec = do
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
-      defs <- filterDefs' since before [] [] (DefSearch [InlineDef'] Nothing Nothing)
+      defs               <- filterDefs' since
+                                        before
+                                        []
+                                        []
+                                        (DefSearch [InlineDef'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` varInline
     it "phrase definition variants" $ asIO $ runSqlInMem $ do
-       (since, before, _) <- defVarSetup
-       defs <- filterDefs' since before [] [] (DefSearch [Phrase'] Nothing Nothing)
-       liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
+      (since, before, _) <- defVarSetup
+      defs               <- filterDefs' since
+                                        before
+                                        []
+                                        []
+                                        (DefSearch [Phrase'] Nothing Nothing)
+      liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
   testSearchDispatch
 
 
@@ -372,35 +386,92 @@ testSearchDispatch = describe "dispatchSearch" $ do
               then liftIO $ showAll $ fmap snd results
               else liftIO $ pPrint' results
           )
+
+  it "dialogue"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        (since, before, (parseErrs, _)) <- setup'' "examples/18.11.24-corrected"
+        liftIO $ unless (null parseErrs) (pPrint' parseErrs)
+        let search filters auth title = SearchConfig
+              since
+              before
+              False
+              False
+              True
+              False
+              False
+              (auth, title)
+              (DefSearch [] Nothing Nothing)
+              []
+              []
+              filters
+              []
+
+        -- all dialogues
+        (searchErrs, results) <- dispatchSearch' (search [] [] [])
+        liftIO $ results `shouldBe` dialogueExp
+
+        -- dialogue body pred
+        (searchErrs, results) <- dispatchSearch' (search ["%sql%"] [] [])
+        liftIO $ results `shouldBe` dialogueExp
+
+
+        -- dialogues under catch 22
+        (searchErrs, results) <- dispatchSearch' (search [] ["%Heller%"] [])
+        liftIO $ results `shouldBe` dialogueExp
+
+        -- dialogues under catch 22 with body pred
+        (searchErrs, results) <- dispatchSearch' (search ["%sql%"] ["%Heller%"] [])
+        liftIO $ results `shouldBe` dialogueExp
+
+        -- dialogues under austen
+        (searchErrs, results) <- dispatchSearch' (search [] ["%Austen%"] [])
+        liftIO $ results `shouldBe` []
+
   it "commentary"
     $ asIO
     $ runSqlInMem
     $ do
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search filters = SearchConfig since
-                                          before
-                                          False
-                                          False
-                                          False
-                                          True
-                                          False
-                                          ([], [])
-                                          (DefSearch [] Nothing Nothing)
-                                          []
-                                          filters
-                                          []
-                                          []
+        let search filters auth title = SearchConfig
+              since
+              before
+              False
+              False
+              False
+              True
+              False
+              (auth, title)
+              (DefSearch [] Nothing Nothing)
+              []
+              filters
+              []
+              []
 
         -- all comments
-        (searchErrs, results) <- dispatchSearch' (search [])
+        (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
         liftIO $ results `shouldBe` globCommentLexical
 
         -- one comment body predicate
-        (searchErrs, results) <- dispatchSearch' (search ["%lexical%"])
+        (searchErrs, results) <- dispatchSearch' (search ["%lexical%"] [] [])
 
-        liftIO $ results `shouldBe` globCommentLexical
+        liftIO $ results `shouldBe` take 1 globCommentLexical
+
+        -- commentsby author
+        (searchErrs, results) <- dispatchSearch' (search [] ["%Robbins%"] [])
+        liftIO $ results `shouldBe` take 1 globCommentLexical
+
+        (searchErrs, results) <- dispatchSearch' (search [] [] ["%Northanger Abbey%"])
+        liftIO $ results `shouldBe` [globCommentLexical !! 1]
+
+        (searchErrs, results) <- dispatchSearch' (search ["%lexical%"] ["%Austen%"] [])
+        liftIO $ results `shouldBe` []
+
+        (searchErrs, results) <- dispatchSearch' (search ["%jettisoned%"] ["%Austen%"] [])
+        liftIO $ results `shouldBe` [globCommentLexical !! 1]
 
   it "definition and phrase headword search"
     $ asIO
@@ -1038,6 +1109,12 @@ dispatchAllBare =
     )
   ]
 
+dialogueExp = 
+ [ ( TimeStamp {hr = 19, min = 15, sec = 49}
+    , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
+    )
+ ]
+
 dispatchOnlyDefs =
   [ ( TimeStamp {hr = 10, min = 7, sec = 15}
     , Def
@@ -1363,6 +1440,9 @@ globAustenEmma =
 globCommentLexical =
   [ ( TimeStamp {hr = 17, min = 33, sec = 59}
     , Commentary "<Insightful lexical ejaculate /here/>\n"
+    )
+  , ( TimeStamp {hr = 17, min = 52, sec = 50}
+    , Commentary "<A second jettisoned insight /here/>\n"
     )
   ]
 

@@ -17,17 +17,19 @@ module ParseSpec where
 import           Control.Applicative
 import           Data.Maybe                     ( fromJust )
 import           Data.Text                     as T
-import           Data.Text.IO                  as T
 import           Data.Time
 import           Helpers
 import           Parse
-import           Parse.Entry hiding (logEntries)
+import           Parse.Entry             hiding ( logEntries )
 import           Prelude                 hiding ( min )
 import           Store.Sqlite
 import           Test.Hspec
 import           Text.RawString.QQ
-import           Text.Show.Pretty               ( pPrint )
+import           Text.Show.Pretty               ( pPrint
+                                                , ppShow
+                                                )
 import           Text.Trifecta
+import qualified System.IO                     as SysIO
 import qualified Text.Trifecta.Result          as Tri
 
 tparse :: String -> Result [LogEntry]
@@ -83,8 +85,10 @@ spec = do
   describe "parse null logEntries (those w only timestamps)"
     $          it "parse logEntries testNull"
     $          example
-    $          toMaybe (parse logEntries testNull)
-    `shouldBe` Just testNullOutput
+    $          do 
+                  let results = parse logEntries testNull
+                  SysIO.hPutStrLn SysIO.stderr $ ppShow results 
+                  toMaybe results `shouldBe` Just testNullOutput
   describe "parse dump: \"...\n<multi-line-dump-body>\n...\""
     $          it "parse logEntries testDump"
     $          example

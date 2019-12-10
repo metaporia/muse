@@ -218,12 +218,14 @@ instance ToJSON LogEntry where
 
 instance FromJSON LogEntry
 
+-- TODO factor out EOF parser, move to end `logEntries`, so that when
+-- `logEntry` yields successfully midway through a file, an error is thrown.
 logEntry :: Parser LogEntry
 logEntry = do
   _ <- skipOptional (try emptyLines)
   let null = do
         (indent, ts) <- timestamp'
-        _            <- void (skipOptional spacesNotNewline *> newline) <|> eof
+        _            <- void (skipOptional spacesNotNewline *> newline) <|> eof 
         return $ TabTsEntry (indent, ts, Null)
       entry' = do
         (indent, ts) <- timestamp' <?> "timestamp"
@@ -236,9 +238,8 @@ logEntry = do
           <|> try page
           <|> try phrase
         return $ TabTsEntry (indent, ts, e)
-  e <- try dump <|> try null <|> entry'
-  _ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
-  return e
+  try dump <|> try null <|> entry'
+  --_ <- void (skipOptional emptyLines <?> "emptyLines") <|> eof
 
 tmp = do
   x <- lpad nullE

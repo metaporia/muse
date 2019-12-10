@@ -126,7 +126,7 @@ import           Text.Show.Pretty               ( pPrint )
 import qualified Text.Trifecta                 as Tri
 
 version :: String
-version = "muse 0.2.1"
+version = "muse 0.3.0"
 
 -- Questions:
 --

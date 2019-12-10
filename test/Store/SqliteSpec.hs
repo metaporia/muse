@@ -1109,7 +1109,7 @@ dispatchAllBare =
     )
   ]
 
-dialogueExp = 
+dialogueExp =
  [ ( TimeStamp {hr = 19, min = 15, sec = 49}
     , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
     )

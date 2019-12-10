@@ -85,9 +85,9 @@ spec = do
   describe "parse null logEntries (those w only timestamps)"
     $          it "parse logEntries testNull"
     $          example
-    $          do 
+    $          do
                   let results = parse logEntries testNull
-                  SysIO.hPutStrLn SysIO.stderr $ ppShow results 
+                  SysIO.hPutStrLn SysIO.stderr $ ppShow results
                   toMaybe results `shouldBe` Just testNullOutput
   describe "parse dump: \"...\n<multi-line-dump-body>\n...\""
     $          it "parse logEntries testDump"

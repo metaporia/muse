@@ -225,7 +225,7 @@ logEntry = do
   _ <- skipOptional (try emptyLines)
   let null = do
         (indent, ts) <- timestamp'
-        _            <- void (skipOptional spacesNotNewline *> newline) <|> eof 
+        _            <- void (skipOptional spacesNotNewline *> newline) <|> eof
         return $ TabTsEntry (indent, ts, Null)
       entry' = do
         (indent, ts) <- timestamp' <?> "timestamp"

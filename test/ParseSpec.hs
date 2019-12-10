@@ -83,12 +83,12 @@ spec = do
     $          toMaybe (parse logEntries testLonelySpaces)
     `shouldBe` Just testLonelySpacesOutput
   describe "parse null logEntries (those w only timestamps)"
-    $          it "parse logEntries testNull"
-    $          example
-    $          do
-                  let results = parse logEntries testNull
-                  SysIO.hPutStrLn SysIO.stderr $ ppShow results
-                  toMaybe results `shouldBe` Just testNullOutput
+    $ it "parse logEntries testNull"
+    $ example
+    $ do
+        let results = parse logEntries testNull
+        SysIO.hPutStrLn SysIO.stderr $ ppShow results
+        toMaybe results `shouldBe` Just testNullOutput
   describe "parse dump: \"...\n<multi-line-dump-body>\n...\""
     $          it "parse logEntries testDump"
     $          example
@@ -122,7 +122,7 @@ spec = do
   describe "fail on entry without valid prefix"
     $          it "parse logEntry tNoValidPrefix"
     $          example
-    $          toMaybe (parse (logEntries <* eof)tNoValidPrefix) -- FIXME example of poor error message
+    $          toMaybe (parse (logEntries <* eof) tNoValidPrefix) -- FIXME example of poor error message
     `shouldBe` Nothing
   describe "square-bracketed, comma-separated tags" $ do
     -- "assert that tagChar may only be one of [a-zA-Z0-9-]"

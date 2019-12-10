@@ -419,9 +419,6 @@ type Author = String
 bookTs :: String
 bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
 
-bookTs' :: String
-bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
-
 emptyLines :: Parser [String]
 emptyLines = some . try $ manyTill space newline
 
@@ -456,87 +453,6 @@ instance ToJSON PageNum where
 
 instance FromJSON PageNum
 
-testLog' :: String
-testLog' =
-  [r|
-08:23:30 λ. d quiescence, quiescent, quiesce
-08:24:43 λ. d vouchsafed, another-word
-08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
-
-08:38:20 λ. d elegy : meaning
-08:45:37 λ. d tumbler
-
-08:23:30 λ. begin to read "To the Lighthouse", by Virginia Woolf
-
-08:49:57 λ. d disport : meaning
-      gibberish
-
-
-08:56:30 λ. d larder
-
-
-08:59:30 λ. quotation
-
-            "There was no treachery too for the world to commit. She knew that.
-            No happiness lasted."
-
-            Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
-
-
-08:57:29 λ. d wainscot
-09:12:16 λ. d fender
-        09:14:12 λ. d bleat
-        09:15:48 λ. d dissever
-        09:24:04 λ. d rhapsody
-09:15:48 λ. dvs deport : to transport, to carry away, to conduct (refl.)
-            --- vs ---
-            comport : to endure; carry together; to accord (with) |]
-
-testlog' :: String
-testlog' =
-  [r|
-09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
-    09:55:17 λ. dvs benignant : kind; gracious; favorable;
-                    --- vs ---
-                    benign : gentle, mild, or, medically, non-threatening
-    10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
-                distress; inimical; bent on evil.
-                    --- vs ---
-                    malign : (adj.) having an evil disposition; spiteful;
-                    medically trheatening; (v.) to slander; to asperse; to show
-                    hatred toward.
-    10:17:40 λ. d inimical, traduce, virulent
-    10:18:12 λ. d48 sublime, lintel
-    10:24:02 λ. quotation
-
-                "There was no treachery too base for the world to commit. She
-                knew this. No happiness lasted."
-
-                In "To the Lighthouse", by Virginia Woolf
-    10:25:27 λ. quotation
-
-                "Her simplicity fathomed what clever people falsified."
-
-                In "To the Lighthouse", by Virginia Woolf
-    10:28:49 λ. d plover
-    10:47:59 λ. d -let
-    10:49:58 λ. quotation
-
-                "But nevertheless, the fact remained, that is was nearly
-                impossbile to dislike anyone if one looked at them."
-
-                In "To the Lighthouse", by Virginia Woolf
-
-|]
-
-q =
-  [r|10:49:58 λ. quotation
-
-            "But nevertheless, the fact remained, that is was nearly
-            impossbile to dislike anyone if one looked at them."
-
-            In "To the Lighthouse", by Virginia Woolf
-|]
 
 -- | Relative duration, conversion from which expects rollover, not clipping,
 -- as this is meant as a container for user-entered years, months, and days.
@@ -696,24 +612,6 @@ preds :: Parser [String]
 preds = sepBy (some $ noneOf "^\n") (char '^')
 
 
-testDump' :: String
-testDump' =
-  [r|
-...
-dump aeouoaeu
-second line
-...
-
-    12:10:01 λ. d sylvan
-...
-dump body
-multiple lines
-...
-
-14:19:00 λ. read "Witches Abroad", by Terry Pratchett
-
-
-|]
 
 day' :: Parser (Maybe Day)
 day' = do
@@ -756,4 +654,108 @@ austen =
     "I cannot speak well enough to be unintelligible."
 
     In "Northanger Abbey" by Jane Austen
+|]
+
+bookTs' :: String
+bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
+
+testDump' :: String
+testDump' =
+  [r|
+...
+dump aeouoaeu
+second line
+...
+
+    12:10:01 λ. d sylvan
+...
+dump body
+multiple lines
+...
+
+14:19:00 λ. read "Witches Abroad", by Terry Pratchett
+
+
+|]
+
+testLog' :: String
+testLog' =
+  [r|
+08:23:30 λ. d quiescence, quiescent, quiesce
+08:24:43 λ. d vouchsafed, another-word
+08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
+
+08:38:20 λ. d elegy : meaning
+08:45:37 λ. d tumbler
+
+08:23:30 λ. begin to read "To the Lighthouse", by Virginia Woolf
+
+08:49:57 λ. d disport : meaning
+      gibberish
+
+
+08:56:30 λ. d larder
+
+
+08:59:30 λ. quotation
+
+            "There was no treachery too for the world to commit. She knew that.
+            No happiness lasted."
+
+            Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
+
+
+08:57:29 λ. d wainscot
+09:12:16 λ. d fender
+        09:14:12 λ. d bleat
+        09:15:48 λ. d dissever
+        09:24:04 λ. d rhapsody
+09:15:48 λ. dvs deport : to transport, to carry away, to conduct (refl.)
+            --- vs ---
+            comport : to endure; carry together; to accord (with) |]
+
+testlog' :: String
+testlog' =
+  [r|
+09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
+    09:55:17 λ. dvs benignant : kind; gracious; favorable;
+                    --- vs ---
+                    benign : gentle, mild, or, medically, non-threatening
+    10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
+                distress; inimical; bent on evil.
+                    --- vs ---
+                    malign : (adj.) having an evil disposition; spiteful;
+                    medically trheatening; (v.) to slander; to asperse; to show
+                    hatred toward.
+    10:17:40 λ. d inimical, traduce, virulent
+    10:18:12 λ. d48 sublime, lintel
+    10:24:02 λ. quotation
+
+                "There was no treachery too base for the world to commit. She
+                knew this. No happiness lasted."
+
+                In "To the Lighthouse", by Virginia Woolf
+    10:25:27 λ. quotation
+
+                "Her simplicity fathomed what clever people falsified."
+
+                In "To the Lighthouse", by Virginia Woolf
+    10:28:49 λ. d plover
+    10:47:59 λ. d -let
+    10:49:58 λ. quotation
+
+                "But nevertheless, the fact remained, that is was nearly
+                impossbile to dislike anyone if one looked at them."
+
+                In "To the Lighthouse", by Virginia Woolf
+
+|]
+
+q =
+  [r|10:49:58 λ. quotation
+
+            "But nevertheless, the fact remained, that is was nearly
+            impossbile to dislike anyone if one looked at them."
+
+            In "To the Lighthouse", by Virginia Woolf
 |]

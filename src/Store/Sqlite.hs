@@ -17,41 +17,63 @@
 
 module Store.Sqlite where
 
-import CLI.Parser.Types (BoolExpr, interpretBoolExpr)
-import Control.Monad (join)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.Reader (ReaderT(..))
-import Data.Aeson hiding (Result, Value)
-import qualified Data.ByteString.Lazy.Char8 as BLC
-import Data.Foldable (foldl')
-import Data.Function ((&))
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-import Data.Maybe (catMaybes, fromMaybe)
-import qualified Data.Maybe as Maybe
-import qualified Data.Text as T
-import Data.Text (Text)
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
-import Data.Time (Day, UTCTime(..), addDays)
-import Data.Time.Clock (getCurrentTime)
-import Database.Esqueleto
-import qualified Database.Persist as P
-import Database.Persist.Sqlite
-       (Entity(..), Key(..), SqlBackend, deleteWhere, get, insertKey,
-        repsert, runMigration, runSqlite, selectList)
-import Database.Persist.TH
-import GHC.Generics hiding (from)
-import Helpers
-import qualified Parse as P
-import Parse.Entry hiding (DefQueryVariant(..))
-import qualified Parse.Entry as P
-import Search
-import Store (Result(..))
-import Store.Sqlite.Types
-import Store.Types (AttrTag(..))
-import Text.Show.Pretty (pPrint)
-import Time
-import Web.PathPieces (PathPiece(..))
+import           CLI.Parser.Types               ( BoolExpr
+                                                , interpretBoolExpr
+                                                )
+import           Control.Monad                  ( join )
+import           Control.Monad.IO.Class         ( MonadIO
+                                                , liftIO
+                                                )
+import           Control.Monad.Trans.Reader     ( ReaderT(..) )
+import           Data.Aeson              hiding ( Result
+                                                , Value
+                                                )
+import qualified Data.ByteString.Lazy.Char8    as BLC
+import           Data.Foldable                  ( foldl' )
+import           Data.Function                  ( (&) )
+import           Data.List                      ( isInfixOf
+                                                , isPrefixOf
+                                                , isSuffixOf
+                                                )
+import           Data.Maybe                     ( catMaybes
+                                                , fromMaybe
+                                                )
+import qualified Data.Maybe                    as Maybe
+import qualified Data.Text                     as T
+import           Data.Text                      ( Text )
+import qualified Data.Text.Lazy                as TL
+import qualified Data.Text.Lazy.Encoding       as TL
+import           Data.Time                      ( Day
+                                                , UTCTime(..)
+                                                , addDays
+                                                )
+import           Data.Time.Clock                ( getCurrentTime )
+import           Database.Esqueleto
+import qualified Database.Persist              as P
+import           Database.Persist.Sqlite        ( Entity(..)
+                                                , Key(..)
+                                                , SqlBackend
+                                                , deleteWhere
+                                                , get
+                                                , insertKey
+                                                , repsert
+                                                , runMigration
+                                                , runSqlite
+                                                , selectList
+                                                )
+import           Database.Persist.TH
+import           GHC.Generics            hiding ( from )
+import           Helpers
+import qualified Parse                         as P
+import           Parse.Entry             hiding ( DefQueryVariant(..) )
+import qualified Parse.Entry                   as P
+import           Search
+import           Store                          ( Result(..) )
+import           Store.Sqlite.Types
+import           Store.Types                    ( AttrTag(..) )
+import           Text.Show.Pretty               ( pPrint )
+import           Time
+import           Web.PathPieces                 ( PathPiece(..) )
 
 
 -- TODO (!!!) clean up source, remove revisions, document, reorder defs as necessary,
@@ -742,7 +764,11 @@ dispatchSearch logPath SearchConfig {..}
                 )
               else return []
             , if not (null dialogueSearch) || checkDialogues
-              then filterDialogues since before authPreds titlePreds dialogueSearch
+              then filterDialogues since
+                                   before
+                                   authPreds
+                                   titlePreds
+                                   dialogueSearch
               else return []
             ]
     in
@@ -885,7 +911,7 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::     -- Esqueleto query expr backend =>
+  ::      -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
@@ -1300,7 +1326,7 @@ filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
 
 
 filterDumps
-  ::     -- MonadIO m =>
+  ::      -- MonadIO m =>
      Day -> Day -> [String] -> DB m [String]
 filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump storage
 
@@ -1330,9 +1356,8 @@ filterDialogues since before authPreds titlePreds dialoguePreds
             )
           constraints dialogueEntry
           where_
-            $ attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
-            &&. attributionConstraint (readEntry ?. ReadEntryTitle)
-                                      titlePreds
+            $   attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
+            &&. attributionConstraint (readEntry ?. ReadEntryTitle)  titlePreds
           return dialogueEntry
     in
       do
@@ -1395,22 +1420,18 @@ filterCommentaries since before authPreds titlePreds commentaryPreds
   = let
       selectWrapper constraints = if null authPreds && null titlePreds
         then select $ from $ \commentaryEntry -> constraints commentaryEntry
-        else
-          select
-          $ from
-          $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
-              on
-                (   commentaryEntry
-                ^.  CommentaryEntryAttributionTag
-                ==. readEntry
-                ?.  ReadEntryId
-                )
-              constraints commentaryEntry
-              where_
-                $ attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
-                &&. attributionConstraint (readEntry ?. ReadEntryTitle)
-                                          titlePreds
-              return commentaryEntry
+        else select $ from $ \(commentaryEntry `LeftOuterJoin` readEntry) -> do
+          on
+            (   commentaryEntry
+            ^.  CommentaryEntryAttributionTag
+            ==. readEntry
+            ?.  ReadEntryId
+            )
+          constraints commentaryEntry
+          where_
+            $   attributionConstraint (readEntry ?. ReadEntryAuthor) authPreds
+            &&. attributionConstraint (readEntry ?. ReadEntryTitle)  titlePreds
+          return commentaryEntry
     in
       selectWrapper $ \commentaryEntry -> do
 

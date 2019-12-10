@@ -58,7 +58,7 @@ import           Search                         ( pathToDay )
 import           Store                   hiding ( Null )
 import           Store.Render
 import qualified Store.Sqlite                  as Sql
-import           Store.Types                    ( AttrTag(..))
+import           Store.Types                    ( AttrTag(..) )
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )

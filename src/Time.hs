@@ -12,7 +12,13 @@
 --
 -- Provides truncated 'UTCTime', called 'UTCTime'', and other time utilites.
 -----------------------------------------------------------------------------
-module Time (toUTC, dayToUTC, fromUTC, incrUTCBy) where
+module Time
+  ( toUTC
+  , dayToUTC
+  , fromUTC
+  , incrUTCBy
+  )
+where
 
 import           Data.Time
 import           Parse                          ( TimeStamp(..) )
@@ -34,10 +40,10 @@ toUTC d (TimeStamp h m s) =
 
 fromUTC :: UTCTime -> (Day, TimeStamp)
 fromUTC (UTCTime day dt) =
-  let seconds = floor $ toRational dt
+  let seconds     = floor $ toRational dt
       (rest, sec) = divMod seconds 60
-      (hr, min) = divMod rest 60
-   in (day, TimeStamp {..})
+      (hr  , min) = divMod rest 60
+  in  (day, TimeStamp {..})
 
 incrUTCBy :: Int -> UTCTime -> UTCTime
 incrUTCBy n (UTCTime d dt) = UTCTime (incrDayBy n d) dt

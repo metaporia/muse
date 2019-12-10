@@ -16,7 +16,7 @@
 module Store.SqliteSpec where
 
 
-import           CLI.Parser.Types               (BoolExpr(..))
+import           CLI.Parser.Types               ( BoolExpr(..) )
 import           Control.Monad                  ( when
                                                 , unless
                                                 )
@@ -59,12 +59,12 @@ test :: IO ()
 test = hspec spec
 
 setup writeAction = do
-        runMigrationSilent migrateAll
-        today <- liftIO $ utctDay <$> getCurrentTime
-        xs <- writeAction today
-        before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
-        since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
-        return (since, before, xs)
+  runMigrationSilent migrateAll
+  today  <- liftIO $ utctDay <$> getCurrentTime
+  xs     <- writeAction today
+  before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+  return (since, before, xs)
 
 
 spec :: Spec
@@ -157,12 +157,12 @@ getDateRange = do
   return (since, before)
 
 setup'' file = setup $ \today -> do
-        exampleMuseLog <- liftIO $ readFile file
-        let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
-        partitionEithers <$> writeDay today entries
+  exampleMuseLog <- liftIO $ readFile file
+  let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
+  partitionEithers <$> writeDay today entries
 
 dispatchSearch'
-        :: MonadIO m => SearchConfig -> DB m ([String], [(TimeStamp, Entry)])
+  :: MonadIO m => SearchConfig -> DB m ([String], [(TimeStamp, Entry)])
 dispatchSearch' = -- fmap (fmap dropFirst . asTimestamped) .
   fmap (fmap (fmap dropFirst . asTimestamped) . partitionEithers)
     . dispatchSearch "/home/aporia/.muse/log"
@@ -422,7 +422,8 @@ testSearchDispatch = describe "dispatchSearch" $ do
         liftIO $ results `shouldBe` dialogueExp
 
         -- dialogues under catch 22 with body pred
-        (searchErrs, results) <- dispatchSearch' (search ["%sql%"] ["%Heller%"] [])
+        (searchErrs, results) <- dispatchSearch'
+          (search ["%sql%"] ["%Heller%"] [])
         liftIO $ results `shouldBe` dialogueExp
 
         -- dialogues under austen
@@ -464,13 +465,16 @@ testSearchDispatch = describe "dispatchSearch" $ do
         (searchErrs, results) <- dispatchSearch' (search [] ["%Robbins%"] [])
         liftIO $ results `shouldBe` take 1 globCommentLexical
 
-        (searchErrs, results) <- dispatchSearch' (search [] [] ["%Northanger Abbey%"])
+        (searchErrs, results) <- dispatchSearch'
+          (search [] [] ["%Northanger Abbey%"])
         liftIO $ results `shouldBe` [globCommentLexical !! 1]
 
-        (searchErrs, results) <- dispatchSearch' (search ["%lexical%"] ["%Austen%"] [])
+        (searchErrs, results) <- dispatchSearch'
+          (search ["%lexical%"] ["%Austen%"] [])
         liftIO $ results `shouldBe` []
 
-        (searchErrs, results) <- dispatchSearch' (search ["%jettisoned%"] ["%Austen%"] [])
+        (searchErrs, results) <- dispatchSearch'
+          (search ["%jettisoned%"] ["%Austen%"] [])
         liftIO $ results `shouldBe` [globCommentLexical !! 1]
 
   it "definition and phrase headword search"
@@ -617,14 +621,15 @@ dropFirst :: (a, b, c) -> (b, c)
 dropFirst (a, b, c) = (b, c)
 
 asTimestamped :: [Result] -> [(Day, TimeStamp, Entry)]
-asTimestamped = mapMaybe (\r -> case r of
-                                  TsR utc e -> let (day, ts) = fromUTC utc
-                                                in Just (day, ts, e)
-                                  _ -> Nothing)
+asTimestamped = mapMaybe
+  (\r -> case r of
+    TsR utc e -> let (day, ts) = fromUTC utc in Just (day, ts, e)
+    _         -> Nothing
+  )
 
 resultToEntry :: Result -> Maybe Entry
 resultToEntry (TsR _ entry) = Just entry
-resultToEntry _ = Nothing
+resultToEntry _             = Nothing
 
 resultsToEntry :: [Result] -> [Entry]
 resultsToEntry = mapMaybe resultToEntry
@@ -634,11 +639,15 @@ run' = runSqlInMem $ do
   runMigrationSilent migrateAll
   today <- liftIO $ utctDay <$> getCurrentTime
   writeDay today demoLogEntries
-  before <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
-  since  <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+  before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
 
   matchingQuotes <- rights <$> filterQuotes' since before [] [] []
-  defs <- rights <$> filterDefs' since before [] [] (DefSearch allDefVariants Nothing Nothing)
+  defs <- rights <$> filterDefs' since
+                                 before
+                                 []
+                                 []
+                                 (DefSearch allDefVariants Nothing Nothing)
 --  liftIO $ pPrint $ mapMaybe resultToEntry defs
   liftIO $ showAll $ mapMaybe resultToEntry defs
   return ()
@@ -687,8 +696,8 @@ demo = runSqlite "sqliteSpec.db" $ do
   satisfactoryDefs <-
     selectList ([] :: [Filter QuoteEntry]) []
       >>= applyReadPreds ["Woolf"] ["Light"]
-  before         <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
-  since          <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
+  before    <- liftIO $ addDays 1 . utctDay <$> getCurrentTime
+  since     <- liftIO $ addDays (-6 * 30) . utctDay <$> getCurrentTime
 
   olderTime <- incrUTCBy (-5) <$> liftIO getCurrentTime
   newerTime <- liftIO getCurrentTime
@@ -1110,10 +1119,10 @@ dispatchAllBare =
   ]
 
 dialogueExp =
- [ ( TimeStamp {hr = 19, min = 15, sec = 49}
+  [ ( TimeStamp {hr = 19, min = 15, sec = 49}
     , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
     )
- ]
+  ]
 
 dispatchOnlyDefs =
   [ ( TimeStamp {hr = 10, min = 7, sec = 15}
@@ -1359,61 +1368,59 @@ dispatchAuthBody =
   ]
 
 globLogAllQuotes =
-    [ ( TimeStamp {hr = 8, min = 47, sec = 48}
-      , Quotation
-        "What novelty is worth that sweet monotony where everything is known, and _loved_ because it is known?"
-        ""
-        Nothing
-      )
-    , ( TimeStamp {hr = 8, min = 48, sec = 52}
-      , Quotation
-        "...that fly-fishers fail in preparing their bait so as to make it alluring in the right quarter, for want of a due acquaintance with the subjectivity of fishes."
-        ""
-        Nothing
-      )
-    , ( TimeStamp {hr = 12, min = 19, sec = 51}
-      , Quotation "Lucid and ironic, she knew no merciful muddle." "" Nothing
-      )
-    , ( TimeStamp {hr = 17, min = 51, sec = 1}
-      , Quotation "You misunderstand me. I do not fear death. I _resent_ it."
-                  ""
-                  Nothing
-      )
-    , ( TimeStamp {hr = 17, min = 52, sec = 49}
-      , Quotation
-        "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
-        ""
-        Nothing
-      )
-    , ( TimeStamp {hr = 19, min = 31, sec = 2}
-      , Quotation
-        "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and we get very angry at people who don't."
-        ""
-        Nothing
-      )
-    , ( TimeStamp {hr = 20, min = 49, sec = 24}
-      , Quotation "...he had shown her the holiness of direct desire."
-                  ""
-                  Nothing
-      )
-    , ( TimeStamp {hr = 21, min = 28, sec = 18}
-      , Quotation
-        "{There's no,What} better antidote to respect than hypocrisy{.,?}"
-        "Keane Yahn-Krafft"
-        Nothing
-      )
-    , ( TimeStamp {hr = 21, min = 44, sec = 21}
-      , Quotation "Better be without sense, than misapply it as you do."
-                  ""
-                  Nothing
-      )
-    , ( TimeStamp {hr = 23, min = 33, sec = 42}
-      , Quotation
-        "Rationalization isn't just a river in Egyt\8212wait, that's denial."
-        "IZombie"
-        Nothing
-      )
-    ]
+  [ ( TimeStamp {hr = 8, min = 47, sec = 48}
+    , Quotation
+      "What novelty is worth that sweet monotony where everything is known, and _loved_ because it is known?"
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 8, min = 48, sec = 52}
+    , Quotation
+      "...that fly-fishers fail in preparing their bait so as to make it alluring in the right quarter, for want of a due acquaintance with the subjectivity of fishes."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 12, min = 19, sec = 51}
+    , Quotation "Lucid and ironic, she knew no merciful muddle." "" Nothing
+    )
+  , ( TimeStamp {hr = 17, min = 51, sec = 1}
+    , Quotation "You misunderstand me. I do not fear death. I _resent_ it."
+                ""
+                Nothing
+    )
+  , ( TimeStamp {hr = 17, min = 52, sec = 49}
+    , Quotation
+      "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 19, min = 31, sec = 2}
+    , Quotation
+      "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and we get very angry at people who don't."
+      ""
+      Nothing
+    )
+  , ( TimeStamp {hr = 20, min = 49, sec = 24}
+    , Quotation "...he had shown her the holiness of direct desire." "" Nothing
+    )
+  , ( TimeStamp {hr = 21, min = 28, sec = 18}
+    , Quotation
+      "{There's no,What} better antidote to respect than hypocrisy{.,?}"
+      "Keane Yahn-Krafft"
+      Nothing
+    )
+  , ( TimeStamp {hr = 21, min = 44, sec = 21}
+    , Quotation "Better be without sense, than misapply it as you do."
+                ""
+                Nothing
+    )
+  , ( TimeStamp {hr = 23, min = 33, sec = 42}
+    , Quotation
+      "Rationalization isn't just a river in Egyt\8212wait, that's denial."
+      "IZombie"
+      Nothing
+    )
+  ]
 
 globAustenQs =
   [ ( TimeStamp {hr = 17, min = 52, sec = 49}

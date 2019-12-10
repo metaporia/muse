@@ -12,7 +12,13 @@
 --
 -- This module exposes search predicate application functions.
 -----------------------------------------------------------------------------
-module Search (isTopLevel, isRead, isIndentedTo, pathToDay) where
+module Search
+  ( isTopLevel
+  , isRead
+  , isIndentedTo
+  , pathToDay
+  )
+where
 
 import           Control.Lens                   ( _Right
                                                 , preview
@@ -154,7 +160,7 @@ projectDialogue = getEntry >=> getDialogue
 
 project :: LogEntry -> Maybe DefQuery
 project (TabTsEntry (_, _, Def dq)) = Just dq
-project _                             = Nothing
+project _                           = Nothing
 
 projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
 projectDef (TabTsEntry (_, _, Def dq)) = case dq of

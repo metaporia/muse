@@ -18,6 +18,7 @@ import           Data.Time
 import           Helpers
 import           Parse
 import           Parse.Entry
+import           Parse.Types
 import           Prelude                 hiding ( min )
 import           Render
 import           Search

@@ -111,9 +111,6 @@ data Written =
         (Maybe ISBN)
   deriving (Eq, Show)
 
-type Headword = String
-
-type Meaning = String
 
 --type PgNum = Integer
 -- ISBN for pgNumbers?

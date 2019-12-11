@@ -19,7 +19,7 @@ import           CLI.Parser.Types
 import           Control.Applicative
 import           Data.Bifunctor                 ( bimap )
 import           Data.Maybe                     ( isJust )
-import           Parse.Entry                    ( DefQueryVariant(..) )
+import           Parse.Types                    ( DefQueryVariant(..) )
 import           Store.Sqlite                   ( StrSearch(..) )
 import           Text.Trifecta
 

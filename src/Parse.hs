@@ -34,6 +34,7 @@ import           GHC.Generics            hiding ( Infix
                                                 , Prefix
                                                 )
 import           Helpers
+import           Parse.Types
 import           Prelude                 hiding ( min
                                                 , quot
                                                 )
@@ -178,17 +179,6 @@ import           Text.Trifecta           hiding ( Rendering
 --    BLOCKED: `entryBody` can't be factored out a.t.m.
 todo = undefined
 
--- | Represents log timestamp (likely) parsed from the following format: "hh:mm:ss λ."
-data TimeStamp = TimeStamp
-  { hr :: Int
-  , min :: Int
-  , sec :: Int
-  } deriving (Eq, Generic, Ord, Show)
-
-instance ToJSON TimeStamp where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON TimeStamp
 
 skipOptColon :: Parser ()
 skipOptColon = skipOptional (char ':')
@@ -216,42 +206,6 @@ timestamp' = do
   s      <- twoDigit <* space <* char 'λ' <* char '.' <* space
   return (indent, TimeStamp h m s)
 
-data DefQuery
-  = Defn (Maybe PgNum)
-         [Headword]
-  | InlineDef Headword
-              Meaning
-  | DefVersus Headword
-              Meaning
-              Headword
-              Meaning
-  deriving (Eq, Generic, Show)
-
-instance ToJSON DefQuery where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON DefQuery
-
-type PgNum = Integer
-
-trimDefQuery :: DefQuery -> DefQuery
-trimDefQuery (Defn      pg hws    ) = Defn pg (fmap trim hws)
-trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
-trimDefQuery (DefVersus hw m h' m') =
-  DefVersus (trim hw) (trim' m) (trim h') (trim' m')
-
-
-isInlineDef :: DefQuery -> Bool
-isInlineDef (InlineDef _ _) = True
-isInlineDef _               = False
-
-isDefVersus :: DefQuery -> Bool
-isDefVersus DefVersus{} = True
-isDefVersus _           = False
-
-
-trim' :: String -> String
-trim' = unwords . fmap trim . lines
 
 -- Parses one or more headwords in a comma separated list; e.g.,
 --
@@ -406,15 +360,21 @@ pad = rpad . lpad
 trim :: String -> String
 trim = dropWhileEnd isSpace . dropWhile isSpace
 
+trimDefQuery :: DefQuery -> DefQuery
+trimDefQuery (Defn      pg hws    ) = Defn pg (fmap trim hws)
+trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
+trimDefQuery (DefVersus hw m h' m') =
+  DefVersus (trim hw) (trim' m) (trim h') (trim' m')
+
+trim' :: String -> String
+trim' = unwords . fmap trim . lines
+
 quot :: Parser ()
 quot = void $ pad (char '"')
 
 quote :: Parser ()
 quote = void $ char '"'
 
-type Title = String
-
-type Author = String
 
 bookTs :: String
 bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
@@ -435,23 +395,6 @@ unused = undefined
   _ = hr >> min >> sec >> pPrint
   _ = bookTs >> bookTs' >> testLog'
 
-type Quote = String
-
-type Body = String
-
-type Attr = String
-
-data PageNum
-  = Page PgNum
-  | PStart PgNum
-  | PEnd PgNum
-  | PFinish PgNum
-  deriving (Eq, Show, Generic)
-
-instance ToJSON PageNum where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON PageNum
 
 
 -- | Relative duration, conversion from which expects rollover, not clipping,

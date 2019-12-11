@@ -20,8 +20,11 @@ import           Data.List                      ( intercalate )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Parse
-import           Parse.Entry
+import           Parse.Types
+import           Parse                          ( trim
+                                                , trim'
+                                                )
+--import           Parse.Entry
 import           Prelude                 hiding ( log
                                                 , lookup
                                                 , min

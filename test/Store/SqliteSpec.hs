@@ -17,14 +17,16 @@ module Store.SqliteSpec where
 
 
 import           CLI.Parser.Types               ( BoolExpr(..) )
-import           Control.Monad                  ( when
-                                                , unless
+import           Control.Monad                  ( unless
+                                                , when
                                                 )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
-import           Data.Either                    ( rights
-                                                , partitionEithers
+import           Control.Monad.Logger
+import           Control.Monad.Trans.Resource
+import           Data.Either                    ( partitionEithers
+                                                , rights
                                                 )
 import           Data.Foldable                  ( traverse_ )
 import           Data.Maybe                     ( fromJust
@@ -39,9 +41,13 @@ import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Helpers
-import           Parse
-import qualified Parse                         as P
-import           Parse.Entry
+import           Parse.Entry                    ( logEntries
+                                                , logEntryPassNewestTimeStamp
+                                                , logEntrySquawk
+                                                , statefulValidatedMany
+                                                )
+import           Parse.Types
+import qualified Parse.Types                   as P
 import           Render                         ( showAll )
 import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
@@ -49,8 +55,6 @@ import           Test.Hspec              hiding ( before )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Time
-import           Control.Monad.Logger
-import           Control.Monad.Trans.Resource
 
 asIO :: IO a -> IO a
 asIO a = a
@@ -481,8 +485,6 @@ testSearchDispatch = describe "dispatchSearch" $ do
     $ asIO
     $ runSqlInMem
     $ do
-        let debug  = False
-            pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
         let search headwords defs defnVariants = SearchConfig

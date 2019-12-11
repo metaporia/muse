@@ -30,6 +30,7 @@ import           Control.Monad                  ( (>=>)
 import           Data.Maybe                     ( isJust )
 import           Data.Time
 import           Helpers
+import           Parse.Types
 import           Parse
 import           Parse.Entry
 import           Prelude                 hiding ( log

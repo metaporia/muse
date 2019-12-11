@@ -92,8 +92,13 @@ import           Database.Persist.Sqlite        ( runMigration
                                                 )
 import           Helpers
 import           Options.Applicative
+import           Parse.Types                    ( allDefVariants
+                                                , LogEntry
+                                                , DefQueryVariant(..)
+                                                , DefQuery
+                                                )
 import           Parse
-import           Parse.Entry
+import           Parse.Entry                    ( logEntries )
 import           CLI.Parser.Custom
 import           CLI.Parser.Types
 import           Prelude                 hiding ( init

@@ -33,6 +33,7 @@ import           Data.Time.Clock
 import           Helpers
 import           Parse
 import           Parse.Entry
+import           Parse.Types
 import           Prelude                 hiding ( min
                                                 , reads
                                                 )

@@ -64,9 +64,8 @@ import           Database.Persist.Sqlite        ( Entity(..)
 import           Database.Persist.TH
 import           GHC.Generics            hiding ( from )
 import           Helpers
-import qualified Parse                         as P
-import           Parse.Entry             hiding ( DefQueryVariant(..) )
-import qualified Parse.Entry                   as P
+import qualified Parse.Types                   as P
+import           Parse.Types             hiding ( DefQueryVariant(..), DefQuery(..))
 import           Search
 import           Store                          ( Result(..) )
 import           Store.Sqlite.Types
@@ -422,7 +421,7 @@ writeLogEntry day logEntry mAttrTag =
                  $   DialogueEntry dialogueBody
                  $   fromAttrTag
                  <$> mAttrTag
-             Parse.Entry.Null -> return ()
+             P.Null -> return ()
            )
            >> return (Right utc)
 

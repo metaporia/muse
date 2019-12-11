@@ -18,7 +18,8 @@
 --
 -- □  (!!) store quote as @Quotation Quote (Maybe Attr) (Maybe PgNum)@
 --
--- □  add 'Poem' 'Entry' variant
+-- □  add 'Poem' 'Entry' variant--actually, allow verbatim text variant with
+--    tags. Then custom variants like this only syntactic sugar.
 --
 -- □  Support entry tags. The proposed tags would be included inside square
 -- brackets, e.g., @d 34 [<tag0>, ..., <tagN>] headword : meaning@. A tag
@@ -35,7 +36,7 @@
 --      2. (DONE) Add a tag list (@Maybe [String]@ or @[String]@?) to each entry
 --      variant.
 --
---      3. (YOU ARE HERE) Complete migration sqlite (write the damnable search function
+--      3. (DONE) Complete migration sqlite (write the damnable search function
 --      already) and then store tags in each variant's table.
 --
 --      4. Include CLI subcommand to collect, within a date range, naturally,
@@ -62,6 +63,7 @@ import           GHC.Generics            hiding ( Infix
                                                 )
 import           Helpers
 import           Parse
+import           Parse.Types
 import           Prelude                 hiding ( min
                                                 , quot
                                                 )
@@ -74,11 +76,11 @@ import           Text.Trifecta           hiding ( Rendering
 
 -- | Parse an quotation entry (body, without timestamp) of the form:
 --
---  > "quotation [<page-number>]
+--  > quotation [<page-number>]
 --  >
---  >  <quotation-content>
+--  > "<quotation-content>"
 --  >
---  > <attribution>"
+--  > <attribution>
 --
 --  Meant to store quotable excerpts for retrieval.
 --
@@ -203,20 +205,6 @@ dump = Dump <$> (many space *> el *> manyTill anyChar (try $ newline <* el))
 nullE :: Parser Entry
 nullE =
   const Null <$> skipOptional (many space *> (newline <?> "newline here"))
-
-data LogEntry
-  = Dump String
-  | TabTsEntry (Int, TimeStamp, Entry)
-  deriving (Eq, Show, Generic)
-
-getTimeStamp :: LogEntry -> Maybe TimeStamp
-getTimeStamp (TabTsEntry (_, ts, _)) = Just ts
-getTimeStamp _                       = Nothing
-
-instance ToJSON LogEntry where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON LogEntry
 
 -- TODO factor out EOF parser, move to end `logEntries`, so that when
 -- `logEntry` yields successfully midway through a file, an error is thrown.
@@ -564,72 +552,7 @@ ascendingDigits' previous = do
 --                               (a:) <$> many' ms parser
 --
 
--- TODO add N.B. field to as many variants as possible (poss. by adding (N.B |
--- n.b. | nota bene) parser to `untilP` in entryBody
-data Entry
-  = Def DefQuery
-  | Read Title
-         Author
-  | Quotation Quote
-              Attr
-              (Maybe PgNum)
-  | Commentary Body
-  | PN PageNum
-  | Phr Phrase
-  | Dialogue String
-  | Null -- ^ represents entry of only a timestamp
-  deriving (Eq, Generic, Show)
-instance ToJSON Entry where
-  toEncoding = genericToEncoding defaultOptions
 
-instance FromJSON Entry
-
-isQuotation :: Entry -> Bool
-isQuotation (Quotation _ _ _) = True
-isQuotation _                 = False
-
--- TODO TAG REFACTOR (Phrase and Def unification)
-data DefQueryVariant
-  = Phrase'
-  | Defn'
-  | InlineDef'
-  | DefVersus'
-  deriving (Eq, Show)
-
-allDefVariants :: [DefQueryVariant]
-allDefVariants = [Phrase', Defn', InlineDef', DefVersus']
-
--- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
--- are unified under a single type with a tag list (the tags refactor will
--- allow this), the below jank will treat defined phrases as inline
--- definititions.
---
--- Should 'DefVersus' count as inline definitions?
-defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
-defHasType InlineDef' (Left (Defined _ _)) = True
---defHasType InlineDef' (Right (DefVersus _ _ _ _)) = True
-defHasType variant    dq                   = variant == defQueryVariant dq
-
-defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant
-defQueryVariant (Right (Defn      _ _    )) = Defn'
-defQueryVariant (Right (InlineDef _ _    )) = InlineDef'
-defQueryVariant (Right (DefVersus _ _ _ _)) = DefVersus'
-defQueryVariant (Left  _                  ) = Phrase'
-
-isDefn :: DefQuery -> Bool
-isDefn (Defn _ _) = True
-isDefn _          = False
-
-data Phrase
-  = Plural [Headword]
-  | Defined Headword
-            Meaning
-  deriving (Eq, Show, Generic)
-
-instance ToJSON Phrase where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON Phrase
 
 phrase :: Parser Entry
 phrase = do
@@ -660,6 +583,3 @@ dialogue = do
     <$> entryBody
   return $ Dialogue eb
 
-makePrisms ''Entry
-
-makePrisms ''LogEntry

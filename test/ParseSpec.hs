@@ -19,6 +19,7 @@ import           Data.Maybe                     ( fromJust )
 import           Data.Text                     as T
 import           Data.Time
 import           Helpers
+import           Parse.Types
 import           Parse
 import           Parse.Entry             hiding ( logEntries )
 import           Prelude                 hiding ( min )

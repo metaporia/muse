@@ -40,7 +40,7 @@ where
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
 import           Data.Time
-import           Parse.Entry                    ( Entry(..)
+import           Parse.Types                    ( Entry(..)
                                                 , LogEntry(..)
                                                 )
 import           Prelude

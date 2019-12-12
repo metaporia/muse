@@ -1,6 +1,3 @@
-{-# LANGUAGE QuasiQuotes, NamedFieldPuns, OverloadedStrings,
-  RecordWildCards #-}
-
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  StoreSpec
@@ -22,23 +19,9 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.ByteString               as B
 import           Data.Foldable                  ( foldl' )
-import           Data.IxSet                     ( Indexable(..)
-                                                , IxSet(..)
-                                                , Proxy(..)
-                                                , (@<)
-                                                , (@=)
-                                                , (@>)
-                                                , (@>=<=)
-                                                , getOne
-                                                , ixFun
-                                                , ixSet
-                                                , updateIx
-                                                )
-import qualified Data.IxSet                    as IxSet
 import           Data.List                      ( isInfixOf )
 import           Data.Maybe                     ( fromJust )
 import           Data.Monoid                    ( (<>) )
-import           Data.SafeCopy
 import           Data.Set                       ( Set )
 import qualified Data.Set                      as Set
 import           Data.Text                      ( Text )

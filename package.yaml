@@ -32,7 +32,6 @@ dependencies:
 - directory
 - esqueleto
 - hspec
-- ixset
 - lens
 - monad-logger
 - mtl >= 2.2.2
@@ -46,7 +45,6 @@ dependencies:
 - QuickCheck
 - raw-strings-qq
 - resourcet
-- safecopy
 - split
 - text
 - text-metrics

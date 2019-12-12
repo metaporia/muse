@@ -111,7 +111,7 @@ timestamp = do
   char ':'
   s <- twoDigitNatural
   space1
-  symbol' "λ."
+  symbol "λ."
   return (h, m, s)
 
 -- | Parses a two digit decimal integer.
@@ -129,11 +129,7 @@ type Parser = Parsec Void String
 
 type ParserM e s m = (MonadParsec e s m, Token s ~ Char)
 
-symbol :: (MonadParsec e s m, Token s ~ Char) => Tokens s -> m (Tokens s)
-symbol = L.symbol sc
-
-symbol' :: String -> Parser String
-symbol' = L.symbol spaceWithoutNewline
+symbol = L.symbol spaceWithoutNewline
 
 lexeme = L.lexeme spaceWithoutNewline
 
@@ -183,3 +179,5 @@ indented = L.nonIndented sc (L.indentBlock sc p)
 --qItem :: Parser String
 qItem = L.lexeme spaceWithoutNewline p
   where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
+
+curr = "curr"

@@ -2,7 +2,11 @@
 
 module ParseRSpec where
 
-import           ParseR                         ( quotation, emptyLine , quoteContent)
+import           ParseR                         ( quotation
+                                                , emptyLine
+                                                , quoteContent
+                                                )
+import           Parse.Types                    ( Entry(..) )
 import           Test.Hspec
 import           Text.Megaparsec
 import           Text.RawString.QQ
@@ -33,13 +37,13 @@ spec = do
   describe "quotation" $ do
     it "multiline, skip space, no attr, pg"
       $          pt quotation multiSkipNoAttrPg
-      `shouldBe` Right (Just 23, "quote \n\nk\n\nbody \ncont.", Nothing)
+      `shouldBe` Right (Quotation "quote \n\nk\n\nbody \ncont." "" (Just 23))
     it "multiline, no skip, no attr"
       $          pt quotation multiNoSkipNoAttrNoPg
-      `shouldBe` Right (Nothing, "quote \nk\nbody \ncont.", Nothing)
+      `shouldBe` Right (Quotation "quote \nk\nbody \ncont." "" Nothing)
     it "multiline, skip, attr, no pg"
       $          pt quotation multiSkipAttrNoPg
-      `shouldBe` Right (Nothing, "quote\n\nbody\ncont.", Just "attr")
+      `shouldBe` Right (Quotation "quote\n\nbody\ncont." "attr" Nothing)
     it "quote content, multi, skip"
       $          pt quoteContent qcMultiSkipTrim
       `shouldBe` Right

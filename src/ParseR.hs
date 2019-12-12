@@ -22,8 +22,10 @@ import           Control.Applicative     hiding ( many
                                                 )
 import           Control.Monad                  ( void )
 import           Data.Char                      ( digitToInt )
+import Data.Maybe (fromMaybe)
 import           Data.Semigroup                 ( (<>) )
 import           Data.Void                      ( Void )
+import           Parse.Types                    ( Entry(..) )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
@@ -58,7 +60,7 @@ import qualified Text.Megaparsec.Char.Lexer    as L
 --   searches.
 -- * The entry variant prefix parser is expected not to have leading
 --   whitespace.
-quotation :: Parser (Maybe Int, String, Maybe String)
+quotation :: Parser Entry
 quotation = do
   quotePrefix
   pg <- optional (lexeme L.decimal)
@@ -73,7 +75,7 @@ quotation = do
     $  count indentLevel (satisfy isTabOrSpace)
     *> someTill anySingle newline
     <* newline
-  return (pg, body, attr)
+  return $ Quotation body (fromMaybe "" attr) pg
 
 -- | Parses quoted content. Assumes that whitespace preceding the opening
 -- double quote has been preserved.

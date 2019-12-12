@@ -1,7 +1,9 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  ParseR
@@ -22,14 +24,92 @@ import           Control.Applicative     hiding ( many
                                                 )
 import           Control.Monad                  ( void )
 import           Data.Char                      ( digitToInt )
-import Data.Maybe (fromMaybe)
+import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Void                      ( Void )
 import           Parse.Types                    ( Entry(..) )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
+import           Text.RawString.QQ
 --import           Text.Megaparsec.Debug          ( dbg )
+
+---------------------------
+-- Commentary & Dialogue --
+---------------------------
+
+-- TODO add multiline string literal syntax, e.g., use ``` to delimit raw
+-- strings. Otherwise, the commentary must be indented, which messes up the
+-- line wrap.
+--
+-- FIXME indentation-sensitive comment parsing will break, e.g., that 
+-- inline-markdown comment on /Carry On, Jeeves/.
+commentaryPrefix :: Parser String
+commentaryPrefix = cp <?> "commentary prefix"
+  where cp = try (symbol "commentary") <|> symbol "synthesis"
+
+commentary :: Parser Entry
+commentary = textBlockEntry commentaryPrefix Commentary
+
+dialogue :: Parser Entry
+dialogue = textBlockEntry dialoguePrefix Dialogue
+
+dialoguePrefix :: Parser String
+dialoguePrefix = cp <?> "dialogue prefix"
+  where cp = symbol "dialogue" 
+
+
+textBlockEntry :: Parser String -> (String -> Entry) -> Parser Entry 
+textBlockEntry prefix toEntry = do
+  prefix
+  many (try emptyLine)
+  toEntry <$> textBlock
+
+
+-- | Parse a text block. A text block may be either indented more than its
+-- parent timestamp or fenced with triple-backticks (```).
+--
+-- Note that this is /not/ backwards-compatible and that older log files will
+-- have to be corrected. My hope is that they will be rejected by the new
+-- parser loudly and with precision, so ensuring compliance  with the new 
+-- spec shouldn't be too much work.
+textBlock = try fencedTextBlock <|> fst <$> indentedTextBlock
+
+-- | Parses indented blocks of text. It will succeed with whatever it has when
+-- it first encounters insufficiently indented input, so its well-formedness
+-- may be reported as a failure the next applied parser.
+--
+-- Newlines after the block are discarded.
+indentedTextBlock :: Parser (String, Int)
+indentedTextBlock = do
+  let
+    lines indent = do
+      line       <- many (satisfy (/= '\n'))
+      emptyLines <- concat <$> many (try (indentedEmptyLine indent))
+      rest       <-
+        try
+            (  count indent (satisfy (== ' '))
+            *> fmap (emptyLines <>) (lines indent)
+            )
+          <|> pure ""
+      return $ line <> rest
+  indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  (, indentLevel) <$> lines indentLevel
+
+-- | A triple-backtick-fenced block of raw text. The fences may be placed
+-- directly after the entry variant prefix, on a line of their own, or at the
+-- start or end a of line; the three forms /should/ be equivalent. In any case, this 
+-- parser expects the first chunk of its input stream to be a fence.
+--
+-- If present after the opening fence, a single newline dropped.
+--
+-- Newlines after the block are discarded.
+fencedTextBlock :: Parser String
+fencedTextBlock = do
+  let fence = symbol "```"
+  fence <* optional (newline)
+  manyTill anySingle fence <* many emptyLine
+
 
 ------------
 -- Quotes --
@@ -79,6 +159,8 @@ quotation = do
 
 -- | Parses quoted content. Assumes that whitespace preceding the opening
 -- double quote has been preserved.
+--
+-- FIXME proper tab handling. Debar them or process them correctly.
 quoteContent :: Parser (String, Int)
 quoteContent = do
   let isDelimiter x = x == '\n' || x == '"'
@@ -180,4 +262,6 @@ indented = L.nonIndented sc (L.indentBlock sc p)
 qItem = L.lexeme spaceWithoutNewline p
   where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
 
-curr = "curr"
+pt = flip parse ""
+
+curr = "" 

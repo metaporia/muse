@@ -33,6 +33,7 @@ dependencies:
 - esqueleto
 - hspec
 - lens
+- megaparsec
 - monad-logger
 - mtl >= 2.2.2
 - optparse-applicative
@@ -61,6 +62,7 @@ library:
     - Diff
     - Lib
     - Parse
+    - ParseR
     - Parse.Entry
     - Parse.Types
     - Helpers

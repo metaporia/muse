@@ -1198,10 +1198,10 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
             --                       (defEntry ^. DefEntryDefinitionTag)
             --                       defVariants
             --    ) -- FIXME tag check here!
-                 -- * each entry has a json encoded tag in its definitions
+                 -- - each entry has a json encoded tag in its definitions
                  -- field (one of Inlines, Headwords, (the string "headwords"
                  -- occurs more than once for def versus comparison entries)
-                 -- * and in the "phrase_or_def" field one of Definition' or
+                 -- - and in the "phrase_or_def" field one of Definition' or
                  -- Phrase'
                  --
                  -- we need a filter to take a list of DefQueryVariant

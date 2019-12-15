@@ -14,6 +14,7 @@
 -- Portability :  portable
 --
 -- Rewrite of 'Parse' and 'Parse.Entry'.
+-- Contains non-greedy entry body parsers.
 --
 -----------------------------------------------------------------------------
 module ParseR where
@@ -27,7 +28,9 @@ import           Data.Char                      ( digitToInt )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Void                      ( Void )
-import           Parse.Types                    ( Entry(..) )
+import           Parse.Types                    ( Entry(..)
+                                                , DefQuery(..)
+                                                )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
@@ -42,7 +45,7 @@ import           Text.RawString.QQ
 -- strings. Otherwise, the commentary must be indented, which messes up the
 -- line wrap.
 --
--- FIXME indentation-sensitive comment parsing will break, e.g., that 
+-- FIXME indentation-sensitive comment parsing will break, e.g., that
 -- inline-markdown comment on /Carry On, Jeeves/.
 commentaryPrefix :: Parser String
 commentaryPrefix = cp <?> "commentary prefix"
@@ -55,11 +58,12 @@ dialogue :: Parser Entry
 dialogue = textBlockEntry dialoguePrefix Dialogue
 
 dialoguePrefix :: Parser String
-dialoguePrefix = cp <?> "dialogue prefix"
-  where cp = symbol "dialogue" 
+dialoguePrefix = cp <?> "dialogue prefix" where cp = symbol "dialogue"
 
 
-textBlockEntry :: Parser String -> (String -> Entry) -> Parser Entry 
+-- | Parameterizes construction of the two isomorphic 'Entry' variants,
+-- 'Commentary' and 'Dialogue'.
+textBlockEntry :: Parser String -> (String -> Entry) -> Parser Entry
 textBlockEntry prefix toEntry = do
   prefix
   many (try emptyLine)
@@ -71,7 +75,7 @@ textBlockEntry prefix toEntry = do
 --
 -- Note that this is /not/ backwards-compatible and that older log files will
 -- have to be corrected. My hope is that they will be rejected by the new
--- parser loudly and with precision, so ensuring compliance  with the new 
+-- parser loudly and with precision, so ensuring compliance  with the new
 -- spec shouldn't be too much work.
 textBlock = try fencedTextBlock <|> fst <$> indentedTextBlock
 
@@ -96,23 +100,108 @@ indentedTextBlock = do
   indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
   (, indentLevel) <$> lines indentLevel
 
+
+-- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
+-- should expect no leading whitespace and to consume the rest of the line
+-- (newline included) but none of the proceeding line.
+indentedTextBlockUntil :: Maybe (Parser String) -> Parser (String, Int)
+indentedTextBlockUntil Nothing             = indentedTextBlock
+indentedTextBlockUntil (Just terminalLine) = do
+  let
+    lines indent = do
+      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n'))
+      case line of
+        Just ln -> do
+          emptyLines <- concat <$> many (try (indentedEmptyLine indent))
+          rest       <-
+            try
+                (  count indent (satisfy (== ' '))
+                *> fmap (emptyLines <>) (lines indent)
+                )
+              <|> pure ""
+          return $ ln <> rest
+        Nothing -> return ""
+  indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  (, indentLevel) <$> lines indentLevel
+
 -- | A triple-backtick-fenced block of raw text. The fences may be placed
 -- directly after the entry variant prefix, on a line of their own, or at the
--- start or end a of line; the three forms /should/ be equivalent. In any case, this 
+-- start or end a of line; the three forms /should/ be equivalent. In any case, this
 -- parser expects the first chunk of its input stream to be a fence.
 --
--- If present after the opening fence, a single newline dropped.
+-- If present after the opening fence, a single newline is dropped.
 --
 -- Newlines after the block are discarded.
 fencedTextBlock :: Parser String
 fencedTextBlock = do
   let fence = symbol "```"
-  fence <* optional (newline)
+  fence <* optional newline
   manyTill anySingle fence <* many emptyLine
 
 
+----------------
+-- Definition --
+----------------
+
+-- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
+-- 'DefVersus').
+definition :: Parser Entry
+definition = do
+  let prefix =
+        try (symbol "d") <|> try (symbol "def") <|> try (symbol "definition")
+      inline = prefix *> (uncurry InlineDef <$> inlineMeaning False)
+      hws    = prefix *> hws
+      dvs    = symbol "dvs" *> defVersus
+  fmap Def $ try dvs <|> try inline <|> hws
+
+-- | Parses a list of comma separated headwords. It must not exceed one line.
+headwords :: Parser DefQuery
+headwords = do
+  pg  <- optional (lexeme L.decimal)
+  hws <- lexeme
+    $ sepBy1 (some $ satisfy (\x -> x /= '\n' && x /= ',')) (lexeme (char ','))
+  many (try emptyLine)
+  return $ Defn pg hws
+
+-- TODO optional page nmuber
+inlineMeaning
+  :: Bool -- ^ Whether to for definition comparison separator.
+  -> Parser (String, String)
+inlineMeaning inDefComparison = do
+  let indentedTextBlock' = if inDefComparison
+        then indentedTextBlockUntil $ Just (defVersusSeparator <* newline)
+        else indentedTextBlock
+  -- TODO parse list of words: sequence of non-space characters separated by
+  -- spaces. This would obivate the need to trim trailing whitespace from the
+  -- headword.
+  headword <- manyTill
+    anySingle
+    (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
+  meaningLine1 <- (++ "\n") <$> many (satisfy (/= '\n')) <* newline
+  (restOfMeaning, indentLevel) <- try indentedTextBlock' <|> return ("", 0)
+  return (headword, meaningLine1 ++ restOfMeaning)
+  --meaning <- _ --
+
+
+-- | List of inline comparisions separated by "--- vs ---", properly indented
+-- and on a line of its own.
+--
+-- TODO extend defversus to allow n-way comparisons. As regards this parser,
+-- all that need be done is replace @count 2@ with 'some'.
+--
+-- FIXME figure out how to rely on 'count' invariant without partial function.
+defVersus :: Parser DefQuery
+defVersus = do
+  xs <- count 2 (inlineMeaning True)
+  case xs of
+    ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw mn hw' mn'
+    _ -> error "defVersus: `count 2` succeeded but did not parse two elements"
+
+defVersusSeparator :: Parser String
+defVersusSeparator = lexeme (string "--- vs ---")
+
 ------------
--- Quotes --
+-- Quote --
 ------------
 
 -- Parses a quotation entry body (its timestamp should have been already
@@ -263,5 +352,3 @@ qItem = L.lexeme spaceWithoutNewline p
   where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
 
 pt = flip parse ""
-
-curr = "" 

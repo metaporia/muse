@@ -111,6 +111,7 @@ tests:
     dependencies:
     - muse
     - hspec
+    - hspec-megaparsec
     - QuickCheck
     - trifecta
     - optparse-applicative

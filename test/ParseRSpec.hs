@@ -8,6 +8,7 @@ import           ParseR                  hiding ( pt
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
                                                 )
+import           Prelude                 hiding ( read )
 import           Test.Hspec
 import           Text.Megaparsec.Char           ( newline )
 import           Test.Hspec.Megaparsec
@@ -20,6 +21,27 @@ pt = flip parse ""
 
 spec :: Spec
 spec = do
+  describe "read" $ do
+    let eagleton = Read "The Ideology of the Aesthetic" "Terry Eagleton"
+    it "read by"
+      $ pt read "read \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
+      `shouldParse` eagleton
+    it "begin by"
+      $ pt read "begin \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
+      `shouldParse` eagleton
+    it "finish by"
+      $ pt read "finish \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
+      `shouldParse` eagleton
+    it "begin to read by"
+      $             pt
+                      read
+                      "begin to read \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
+      `shouldParse` eagleton
+    it "finish reading by"
+      $             pt
+                      read
+                      "finish reading \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
+      `shouldParse` eagleton
   describe "textBlock" $ do
     it "indented text block"
       $             pt indentedTextBlock indentedV0
@@ -123,11 +145,6 @@ spec = do
                       )
 
 
-
-
-curr = pPrint $ pt
-  (some $ indentedTextBlockUntil $ Just (defVersusSeparator <* newline))
-  threeTextBlocks
 
 emptyLineEx = [r|
 

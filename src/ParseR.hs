@@ -31,6 +31,7 @@ import           Data.Void                      ( Void )
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
                                                 )
+import           Prelude                 hiding ( read )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
@@ -272,6 +273,29 @@ quotePrefix :: Parser String
 quotePrefix = L.lexeme spaceWithoutNewline qp <?> "quote prefix"
   where qp = try (string "quotation") <|> string "q"
 
+
+----------
+-- READ --
+----------
+
+-- | Parse (top-level) entry containing attribution for book or other similarly
+-- cited written media.
+read :: Parser Entry
+read = do
+  let quote = char '"'
+  try (symbol "read")
+    <|> try (symbol "finish reading")
+    <|> try (symbol "begin to read")
+    <|> try (symbol "finish")
+    <|> symbol "begin"
+  title <- lexeme $ between quote quote (some (satisfy (/= '"')))
+  optional $ symbol ","
+  symbol "by"
+  author <- someTill (satisfy (/= '\n')) newline
+  return $ Read title author
+
+curr =
+  parseTest read "read \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
 
 -- Assumes no leading whitespace.
 timestamp :: Parser (Int, Int, Int)

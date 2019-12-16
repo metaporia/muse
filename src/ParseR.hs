@@ -23,20 +23,60 @@ module ParseR where
 import           Control.Applicative     hiding ( many
                                                 , some
                                                 )
-import           Control.Monad                  ( void )
+import           Control.Monad                  ( void
+                                                , unless
+                                                , when
+                                                )
+import           Control.Monad.State            ( State
+                                                , runState
+                                                , modify
+                                                , gets
+                                                )
 import           Data.Char                      ( digitToInt )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Void                      ( Void )
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
+                                                , LogEntry(..)
+                                                , TimeStamp(..)
                                                 )
 import           Prelude                 hiding ( read )
-import           Text.Megaparsec
+import           Text.Megaparsec         hiding ( State )
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
 import           Text.RawString.QQ
---import           Text.Megaparsec.Debug          ( dbg )
+import           Text.Show.Pretty               ( pPrint )
+import           Text.Megaparsec.Debug          ( dbg )
+import           Debug.Trace                    ( trace )
+
+---------------
+-- LOG ENTRY --
+---------------
+
+
+logEntries = many (try emptyLine) *> some logEntry <* eof
+
+logEntry :: Parser (Int, TimeStamp, Entry)
+logEntry = entry <* many (try emptyLine)
+ where
+  entry = do
+    indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+    ts          <- timestamp
+    --dbg ("updateIndentation " <> show indentLevel) $
+    updateIndentation indentLevel
+    r <- try read <|> try quotation <|> try definition <|> commentary
+    --dbg (show indentLevel <> ": " <> show ts) (pure ())
+    updateTimeStamp ts
+    return (indentLevel, ts, r)
+
+updateTimeStamp :: TimeStamp -> Parser ()
+updateTimeStamp ts = modify $ \(a, _) -> (a, Just ts)
+
+updateIndentation :: Int -> Parser ()
+updateIndentation i = --dbg ("updateidnt " <> show i) $
+  modify $ \(_, ts) -> (i, ts)
+
 
 ---------------------------
 -- Commentary & Dialogue --
@@ -53,10 +93,10 @@ commentaryPrefix = cp <?> "commentary prefix"
   where cp = try (symbol "commentary") <|> symbol "synthesis"
 
 commentary :: Parser Entry
-commentary = textBlockEntry commentaryPrefix Commentary
+commentary = textBlockEntry commentaryPrefix Commentary <?> "commentary"
 
 dialogue :: Parser Entry
-dialogue = textBlockEntry dialoguePrefix Dialogue
+dialogue = textBlockEntry dialoguePrefix Dialogue <?> "dialogue"
 
 dialoguePrefix :: Parser String
 dialoguePrefix = cp <?> "dialogue prefix" where cp = symbol "dialogue"
@@ -99,6 +139,17 @@ indentedTextBlock = do
           <|> pure ""
       return $ line <> rest
   indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  minIndent   <- gets fst
+  unless (minIndent < indentLevel)
+         (fail "indentedTextBlock: insufficient indentation")
+  --(  dbg
+  --  $  "indentedTextBlock: indent lower bound = "
+  --  <> show minIndent
+  --  <> " actual indent = "
+  --  <> show indentLevel
+  --  )
+  --  (pure ())
+  --dbg ("tb: " <> show indentLevel) (pure ())
   (, indentLevel) <$> lines indentLevel
 
 
@@ -123,6 +174,7 @@ indentedTextBlockUntil (Just terminalLine) = do
           return $ ln <> rest
         Nothing -> return ""
   indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  --updateIndentation indentLevel
   (, indentLevel) <$> lines indentLevel
 
 -- | A triple-backtick-fenced block of raw text. The fences may be placed
@@ -147,20 +199,21 @@ fencedTextBlock = do
 -- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
 -- 'DefVersus').
 definition :: Parser Entry
-definition = do
-  let prefix =
-        try (symbol "d") <|> try (symbol "def") <|> try (symbol "definition")
+definition = label "definition" $ do
+  let dvs = symbol "dvs" *> defVersus'
+      prefix =
+        try (symbol "definition") <|> try (symbol "def") <|> try (symbol "d")
       inline = prefix *> (uncurry InlineDef <$> inlineMeaning False)
-      hws    = prefix *> hws
-      dvs    = symbol "dvs" *> defVersus
+      hws    = prefix *> headwords
   fmap Def $ try dvs <|> try inline <|> hws
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
 headwords :: Parser DefQuery
-headwords = do
+headwords = label "headword(s)" $ do
   pg  <- optional (lexeme L.decimal)
-  hws <- lexeme
-    $ sepBy1 (some $ satisfy (\x -> x /= '\n' && x /= ',')) (lexeme (char ','))
+  hws <- lexeme $ sepBy1
+    (some $ satisfy (\x -> x /= '\n' && x /= ',' && x /= ':'))
+    (lexeme (char ','))
   many (try emptyLine)
   return $ Defn pg hws
 
@@ -168,20 +221,137 @@ headwords = do
 inlineMeaning
   :: Bool -- ^ Whether to for definition comparison separator.
   -> Parser (String, String)
-inlineMeaning inDefComparison = do
+inlineMeaning inDefComparison = label "inlineDef" $ do
   let indentedTextBlock' = if inDefComparison
         then indentedTextBlockUntil $ Just (defVersusSeparator <* newline)
         else indentedTextBlock
   -- TODO parse list of words: sequence of non-space characters separated by
   -- spaces. This would obivate the need to trim trailing whitespace from the
   -- headword.
-  headword <- manyTill
-    anySingle
+  headword <- someTill
+    (satisfy (\x -> x /= '\n' && x /= ':'))
     (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
-  meaningLine1 <- (++ "\n") <$> many (satisfy (/= '\n')) <* newline
-  (restOfMeaning, indentLevel) <- try indentedTextBlock' <|> return ("", 0)
-  return (headword, meaningLine1 ++ restOfMeaning)
+  meaningLine1                 <- some (satisfy (/= '\n')) <* newline
+  minIndent                    <- gets fst
+  (restOfMeaning, indentLevel) <- try indentedTextBlock'
+    <|> return ("", minIndent)
+  --dbg ("updateIndentation " <> show minIndent) $
+  updateIndentation minIndent
+  --(  dbg
+  --  $  "inlineMeaning: indent lower bound = "
+  --  <> show minIndent
+  --  <> " actual indent = "
+  --  <> show indentLevel
+  --  <> "rest="
+  --  <> show (show restOfMeaning)
+  --  <> "|"
+  --  <> show (length restOfMeaning)
+  --  <> show (null restOfMeaning)
+  --  )
+  --  (pure ())
+  -- TODO, HERE FIXME figure out correct indentation enforcement !!!
+  when
+    (not (null restOfMeaning) && minIndent >= indentLevel)
+    (  fail
+    $  "inlineMeaning: insufficient indentation-"
+    <> headword
+    <> ":"
+    <> meaningLine1
+    <> "\n"
+    <> "idt="
+    <> show indentLevel
+    <> ","
+    <> show minIndent
+    <> "-"
+    <> restOfMeaning
+    )
+  return
+    ( headword
+    , meaningLine1 ++ if null restOfMeaning then "" else '\n' : restOfMeaning
+    )
+
+defVersus' :: Parser DefQuery
+defVersus' = do
+  (hw , mn ) <- defVersusFirst
+  (hw', mn') <- defVersusNext
+  return $ DefVersus hw mn hw' mn'
+
+-- | For 'DefVersus'
+defVersusFirst :: Parser (String, String)
+defVersusFirst = label "defVersusFirst" $ do
+  -- TODO parse list of words: sequence of non-space characters separated by
+  -- spaces. This would obivate the need to trim trailing whitespace from the
+  -- headword.
+  headword <- someTill
+    (satisfy (\x -> x /= '\n' && x /= ':'))
+    (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
+  meaningLine1                 <- some (satisfy (/= '\n')) <* newline
+  minIndent                    <- gets fst
+  (restOfMeaning, indentLevel) <- indentedTextBlockUntil'
+    <|> return ("", minIndent)
+  --dbg ("dvf updateIndentation " <> show indentLevel) $
+  updateIndentation indentLevel
+  -- TODO, HERE FIXME figure out correct indentation enforcement !!!
+  when
+    (not (null restOfMeaning) && minIndent >= indentLevel)
+    (  fail
+    $  "defVersus': insufficient indentation-"
+    <> headword
+    <> ":"
+    <> meaningLine1
+    <> "\n"
+    <> "idt="
+    <> show indentLevel
+    <> ","
+    <> show minIndent
+    <> "-"
+    <> restOfMeaning
+    )
+  return
+    ( headword
+    , meaningLine1 ++ if null restOfMeaning then "" else '\n' : restOfMeaning
+    )
   --meaning <- _ --
+
+-- | Parse the next comparison.
+defVersusNext :: Parser (String, String)
+defVersusNext = label "defVersusNext" $ do
+  let delimiter = try (many (satisfy (== ' ')) <* char ':') <|> "" <$ char ':'
+      line      = some (satisfy (/= '\n')) <* newline
+  indent <- gets fst
+  sum <$> count indent (1 <$ satisfy (== ' '))
+  hw    <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
+  ln1   <- line
+  mRest <- fmap fst <$> optional (try indentedTextBlockUntil')
+  case mRest of
+    Just mn -> return (hw, ln1 <> "\n" <> mn)
+    Nothing -> return (hw, ln1)
+
+
+-- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
+-- should expect no leading whitespace and to consume the rest of the line
+-- (newline included) but none of the proceeding line.
+indentedTextBlockUntil' :: Parser (String, Int)
+indentedTextBlockUntil' = do
+  let terminalLine = defVersusSeparator <* newline
+  indent    <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  minIndent <- gets fst
+  --dbg ( show indent <> " <= " <> show minIndent ) (pure ())
+  when (indent < minIndent)
+       (fail "indentedTextBlockUntil': insufficient indentation")
+  let
+    lines = do
+      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n'))
+      case line of
+        Just ln -> do
+          emptyLines <- concat <$> some (try (indentedEmptyLine indent))
+          rest       <-
+            try (count indent (satisfy (== ' ')) *> fmap (emptyLines <>) lines)
+              <|> pure ""
+          return $ ln <> rest
+        Nothing -> return ""
+  --updateIndentation indent
+  (, indent) <$> lines
 
 
 -- | List of inline comparisions separated by "--- vs ---", properly indented
@@ -190,13 +360,20 @@ inlineMeaning inDefComparison = do
 -- TODO extend defversus to allow n-way comparisons. As regards this parser,
 -- all that need be done is replace @count 2@ with 'some'.
 --
--- FIXME figure out how to rely on 'count' invariant without partial function.
+-- TODO (HERE FIXME) !!!! rewrite to expect one standard inline definition (no special
+-- indentation for first line, some for remainder) and then assert that the
+-- separator and further inlines should be indented appropriately.
+-- (I say this because `curr`, a.t.m., parses 'defVersus' correctly only when
+-- it has a trailing newline and it fails to strip the second headword (potter)
+-- of itl leading whitespace).
 defVersus :: Parser DefQuery
 defVersus = do
   xs <- count 2 (inlineMeaning True)
   case xs of
     ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw mn hw' mn'
-    _ -> error "defVersus: `count 2` succeeded but did not parse two elements"
+    _ -> fail "defVersus: `count 2` succeeded but did not parse two elements"
+
+
 
 defVersusSeparator :: Parser String
 defVersusSeparator = lexeme (string "--- vs ---")
@@ -231,7 +408,7 @@ defVersusSeparator = lexeme (string "--- vs ---")
 -- * The entry variant prefix parser is expected not to have leading
 --   whitespace.
 quotation :: Parser Entry
-quotation = do
+quotation = label "quotation" $ do
   quotePrefix
   pg <- optional (lexeme L.decimal)
   many (try emptyLine)
@@ -281,8 +458,15 @@ quotePrefix = L.lexeme spaceWithoutNewline qp <?> "quote prefix"
 -- | Parse (top-level) entry containing attribution for book or other similarly
 -- cited written media.
 read :: Parser Entry
-read = do
+read = label "read" $ do
   let quote = char '"'
+  currentIndentLevel <- gets fst
+  unless
+    (currentIndentLevel == 0)
+    (  fail
+    $  "read: found read entry with non-zero indentation"
+    <> show currentIndentLevel
+    )
   try (symbol "read")
     <|> try (symbol "finish reading")
     <|> try (symbol "begin to read")
@@ -294,12 +478,10 @@ read = do
   author <- someTill (satisfy (/= '\n')) newline
   return $ Read title author
 
-curr =
-  parseTest read "read \"The Ideology of the Aesthetic\" by Terry Eagleton\n"
 
 -- Assumes no leading whitespace.
-timestamp :: Parser (Int, Int, Int)
-timestamp = do
+timestamp :: Parser TimeStamp
+timestamp = label "timestamp" $ do
   h <- twoDigitNatural
   char ':'
   m <- twoDigitNatural
@@ -307,10 +489,10 @@ timestamp = do
   s <- twoDigitNatural
   space1
   symbol "λ."
-  return (h, m, s)
+  return $ TimeStamp h m s
 
 -- | Parses a two digit decimal integer.
-twoDigitNatural :: Parser Int
+twoDigitNatural :: (MonadParsec e s m, Token s ~ Char) => m Int
 twoDigitNatural = do
   tens <- digitToInt <$> digitChar
   ones <- digitToInt <$> digitChar
@@ -320,7 +502,9 @@ twoDigitNatural = do
 -- HELPERS --
 -------------
 
-type Parser = Parsec Void String
+type Parser' = Parsec Void String
+type Parser = ParsecT Void String (State (Int, Maybe TimeStamp))
+
 
 type ParserM e s m = (MonadParsec e s m, Token s ~ Char)
 
@@ -331,10 +515,11 @@ lexeme = L.lexeme spaceWithoutNewline
 sc :: ParserM e s m => m ()
 sc = L.space space1 empty empty
 
-spaceWithoutNewline :: Parser ()
+spaceWithoutNewline :: (MonadParsec e s m, Token s ~ Char) => m ()
 spaceWithoutNewline = L.space (void whitespaceNotNewline) empty empty
 
-whitespaceNotNewline :: Parser String
+--whitespaceNotNewline :: Parser String
+whitespaceNotNewline :: (MonadParsec e s m, Token s ~ Char) => m (Tokens s)
 whitespaceNotNewline = takeWhile1P (Just "tab or space") isTabOrSpace
 
 -- Parse either a newline or a string of tabs and/or spaces followed by
@@ -375,4 +560,14 @@ indented = L.nonIndented sc (L.indentBlock sc p)
 qItem = L.lexeme spaceWithoutNewline p
   where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
 
-pt = flip parse ""
+
+pt p = flip runState (0, Nothing) . runParserT p ""
+
+pt' p input =
+  let parse s = runState (runParserT p "" s) (0, Nothing)
+      (pState, customState) = parse input
+  in  do
+        case pState of
+          Left  e -> putStr (errorBundlePretty e)
+          Right x -> pPrint x
+        pPrint customState

@@ -15,6 +15,8 @@ import           ParseR                  hiding ( pt
                                                 )
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
+                                                , PageNum(..)
+                                                , Phrase(..)
                                                 , TimeStamp(..)
                                                 )
 import           Prelude                 hiding ( read
@@ -60,9 +62,6 @@ dvs' = [r|19:29:05 λ. dvs putter: one who puts; to potter
             --- vs ---
             potter: one who makes pots; to trifle; to walk lazily |]
 
-globLog = do log <- readFile "examples/globLogR"
-             pt' logEntries log
-
 indentedUntilTest = pt'
   (tupleRest p)
   "    19:31:02 \955. q\n\n        \"...\8212oh, don't go in for accuracy at this house. We all exaggerate, and\n        we get very angry at people who don't.\" \n"
@@ -71,6 +70,14 @@ indentedUntilTest = pt'
     updateIndentation 16 
     indentedTextBlockUntil'
 
+pageNums = [r|
+18:06:31 λ. read "A Room with a View" by E.M. Forster
+    18:06:32 λ. s 34
+    18:38:08 λ.  p35
+    18:58:19 λ. e  36 
+    19:00:14 λ.   f     37    
+|]
+ 
 excerpt = [r|
 18:06:31 λ. read "A Room with a View" by E.M. Forster
     18:06:32 λ. d disject
@@ -105,9 +112,21 @@ spec :: Spec
 spec = do
   describe "logEntries" $ do
     it "defVersus greed-check" $ pt logEntries excerpt `shouldParse` excerptOut
-    it "examples/globLogR" $ do
-      log <- liftIO $ readFile "examples/globLogR"
-      pt logEntries log `shouldParse` globLogR
+    it "examples/globLog" $ do
+      log <- liftIO $ readFile "examples/globLog"
+      pt logEntries log `shouldParse` globLog
+  describe "pageNums"
+    $             it "all variants"
+    $             pt logEntries pageNums
+    `shouldParse` [ ( 0
+                    , TimeStamp {hr = 18, min = 6, sec = 31}
+                    , Read "A Room with a View" "E.M. Forster"
+                    )
+                  , (4, TimeStamp {hr = 18, min = 6, sec = 32} , PN (PStart 34))
+                  , (4, TimeStamp {hr = 18, min = 38, sec = 8} , PN (Page 35))
+                  , (4, TimeStamp {hr = 18, min = 58, sec = 19}, PN (PEnd 36))
+                  , (4, TimeStamp {hr = 19, min = 0, sec = 14}, PN (PFinish 37))
+                  ]
   describe "read" $ do
     let eagleton = Read "The Ideology of the Aesthetic" "Terry Eagleton"
     it "read by"
@@ -186,17 +205,16 @@ spec = do
                     , 4
                     )
   describe "definition" $ do
-    it "hw, pg, single" $ pt headwords hws0 `shouldParse` Defn (Just 53)
-                                                               ["somatic"]
-    it "hw, pg, multi" $ pt headwords hws1 `shouldParse` Defn
-      (Just 53)
-      ["somatic", "sensate", "endue"]
-    it "hw, no pg, multi" $ pt headwords hws2 `shouldParse` Defn
-      Nothing
-      ["somatic", "sensate", "endue"]
-    it "hw, pg no right-padding, single" $ pt headwords hws3 `shouldParse` Defn
-      (Just 45)
-      ["somatic", "sensate"]
+    it "hw, pg, single" $ pt headwords hws0 `shouldParse` (Just 53, ["somatic"])
+    it "hw, pg, multi"
+      $             pt headwords hws1
+      `shouldParse` (Just 53, ["somatic", "sensate", "endue"])
+    it "hw, no pg, multi"
+      $             pt headwords hws2
+      `shouldParse` (Nothing, ["somatic", "sensate", "endue"])
+    it "hw, pg no right-padding, single"
+      $             pt headwords hws3
+      `shouldParse` (Just 45, ["somatic", "sensate"])
     it "inline, single line, newline"
       $             pt (inlineMeaning False) "hello : world\n"
       `shouldParse` ("hello", "world") -- FIXME trim trailing whitespace
@@ -255,8 +273,6 @@ spec = do
                         "one who makes pots; to trifle; to walk lazily"
                       )
                     )
-
-
 
 emptyLineEx = [r|
 
@@ -534,205 +550,230 @@ excerptOut =
     )
   ]
 
-globLogR =
+globLog = 
   [ ( 0
-    , TimeStamp {hr = 8, min = 47, sec = 47}
+    , TimeStamp { hr = 8 , min = 47 , sec = 47 }
     , Read "The Mill on the Floss" "George Eliot (Mary Ann Evans)"
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 47, sec = 48}
+    , TimeStamp { hr = 8 , min = 47 , sec = 48 }
     , Quotation
-      "What novelty is worth that sweet monotony where everything is known,\nand _loved_ because it is known?"
-      ""
-      Nothing
+        "What novelty is worth that sweet monotony where everything is known,\nand _loved_ because it is known?"
+        ""
+        Nothing
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 48, sec = 52}
+    , TimeStamp { hr = 8 , min = 48 , sec = 52 }
     , Quotation
-      "...that fly-fishers fail in preparing their bait so as to make it \nalluring in the right quarter, for want of a due acquaintance with \nthe subjectivity of fishes."
-      ""
-      Nothing
-    )
-  , (4, TimeStamp {hr = 8, min = 50, sec = 4}, Def (Defn Nothing ["brimful"]))
-  , ( 4
-    , TimeStamp {hr = 8, min = 50, sec = 29}
-    , Def (Defn Nothing ["\"rapt in\""])
-    )
-  , (4, TimeStamp {hr = 8, min = 51, sec = 24}, Def (Defn Nothing ["trebly"]))
-  , ( 4
-    , TimeStamp {hr = 8, min = 51, sec = 33}
-    , Def (Defn Nothing ["sanguinary"])
+        "...that fly-fishers fail in preparing their bait so as to make it \nalluring in the right quarter, for want of a due acquaintance with \nthe subjectivity of fishes."
+        ""
+        Nothing
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 51, sec = 39}
-    , Def (Defn Nothing ["topsy-turvy"])
+    , TimeStamp { hr = 8 , min = 50 , sec = 4 }
+    , Def (Defn Nothing [ "brimful" ])
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 51, sec = 44}
-    , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
+    , TimeStamp { hr = 8 , min = 50 , sec = 29 }
+    , Phr (Plural [ "\"rapt in\"" ])
     )
-  , (4, TimeStamp {hr = 8, min = 51, sec = 58}, Def (Defn Nothing ["tonic"]))
   , ( 4
-    , TimeStamp {hr = 8, min = 52, sec = 0}
+    , TimeStamp { hr = 8 , min = 51 , sec = 24 }
+    , Def (Defn Nothing [ "trebly" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 51 , sec = 33 }
+    , Def (Defn Nothing [ "sanguinary" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 51 , sec = 39 }
+    , Def (Defn Nothing [ "topsy-turvy" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 51 , sec = 44 }
+    , Phr (Plural [ "\"omit to\"" , "\"fail of\"" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 51 , sec = 58 }
+    , Def (Defn Nothing [ "tonic" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 52 , sec = 0 }
     , Def (InlineDef "bowl" "(v.) to move along")
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 52, sec = 25}
+    , TimeStamp { hr = 8 , min = 52 , sec = 25 }
     , Def (InlineDef "stodgy" "dull, old-fashioned")
     )
-  , (4, TimeStamp {hr = 8, min = 53, sec = 6} , Def (Defn Nothing ["merest"]))
-  , (4, TimeStamp {hr = 8, min = 53, sec = 11}, Def (Defn Nothing ["fortuity"]))
   , ( 4
-    , TimeStamp {hr = 8, min = 53, sec = 16}
-    , Def (Defn Nothing ["\"be hindered of\""])
+    , TimeStamp { hr = 8 , min = 53 , sec = 6 }
+    , Def (Defn Nothing [ "merest" ])
     )
   , ( 4
-    , TimeStamp {hr = 8, min = 53, sec = 38}
+    , TimeStamp { hr = 8 , min = 53 , sec = 11 }
+    , Def (Defn Nothing [ "fortuity" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 53 , sec = 16 }
+    , Phr (Plural [ "\"be hindered of\"" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 8 , min = 53 , sec = 38 }
     , Def
-      (InlineDef "pother" "(n.) bustle, tumult, bother; (v.) to perplex, worry")
+        (InlineDef
+           "pother" "(n.) bustle, tumult, bother; (v.) to perplex, worry")
     )
   , ( 0
-    , TimeStamp {hr = 12, min = 13, sec = 16}
+    , TimeStamp { hr = 12 , min = 13 , sec = 16 }
     , Read "Wings of the Dove" "Henry James"
     )
   , ( 4
-    , TimeStamp {hr = 12, min = 19, sec = 51}
-    , Quotation "Lucid and ironic, she knew no merciful muddle." "" Nothing
+    , TimeStamp { hr = 12 , min = 19 , sec = 51 }
+    , Quotation
+        "Lucid and ironic, she knew no merciful muddle." "" Nothing
     )
   , ( 4
-    , TimeStamp {hr = 12, min = 29, sec = 25}
-    , Def (Defn Nothing ["malachite"])
+    , TimeStamp { hr = 12 , min = 29 , sec = 25 }
+    , Def (Defn Nothing [ "malachite" ])
     )
   , ( 4
-    , TimeStamp {hr = 12, min = 39, sec = 46}
-    , Def (Defn Nothing ["salutary terror"])
+    , TimeStamp { hr = 12 , min = 39 , sec = 46 }
+    , Phr (Plural [ "salutary terror" ])
     )
   , ( 4
-    , TimeStamp {hr = 12, min = 41, sec = 28}
-    , Def
-      (InlineDef
-        "\"in view of\""
-        "as regards the accord of a thing to some other \nobject, upcoming event, or circumstance"
-      )
+    , TimeStamp { hr = 12 , min = 41 , sec = 28 }
+    , Phr
+        (Defined
+           "\"in view of\""
+           "as regards the accord of a thing to some other \nobject, upcoming event, or circumstance")
     )
   , ( 4
-    , TimeStamp {hr = 12, min = 45, sec = 24}
+    , TimeStamp { hr = 12 , min = 45 , sec = 24 }
     , Def (InlineDef "patrimony" "an inheritance from one's father")
     )
   , ( 0
-    , TimeStamp {hr = 17, min = 15, sec = 55}
+    , TimeStamp { hr = 17 , min = 15 , sec = 55 }
     , Read "Jitterbug Perfume" "Tom Robbins"
     )
   , ( 4
-    , TimeStamp {hr = 17, min = 33, sec = 59}
+    , TimeStamp { hr = 17 , min = 33 , sec = 59 }
     , Commentary "<Insightful lexical ejaculate /here/>"
     )
   , ( 4
-    , TimeStamp {hr = 17, min = 51, sec = 1}
-    , Quotation "You misunderstand me. I do not fear death. I _resent_ it."
-                ""
-                Nothing
+    , TimeStamp { hr = 17 , min = 51 , sec = 1 }
+    , Quotation
+        "You misunderstand me. I do not fear death. I _resent_ it."
+        ""
+        Nothing
     )
   , ( 0
-    , TimeStamp {hr = 17, min = 52, sec = 16}
+    , TimeStamp { hr = 17 , min = 52 , sec = 16 }
     , Read "Northanger Abbey" "Jane Austen"
     )
   , ( 4
-    , TimeStamp {hr = 17, min = 52, sec = 17}
+    , TimeStamp { hr = 17 , min = 52 , sec = 17 }
     , Def (InlineDef "mizzle" "a misty drizzle")
     )
   , ( 4
-    , TimeStamp {hr = 17, min = 52, sec = 49}
+    , TimeStamp { hr = 17 , min = 52 , sec = 49 }
     , Quotation
-      "Miss Morland, no one can think more highly of the understanding of\nwomen than I do. In my opinion, nature has given them so much, that\nthey never find it necessary to use more than half."
-      ""
-      Nothing
+        "Miss Morland, no one can think more highly of the understanding of\nwomen than I do. In my opinion, nature has given them so much, that\nthey never find it necessary to use more than half."
+        ""
+        Nothing
     )
   , ( 4
-    , TimeStamp {hr = 17, min = 52, sec = 50}
+    , TimeStamp { hr = 17 , min = 52 , sec = 50 }
     , Commentary "<A second jettisoned insight /here/>"
     )
   , ( 0
-    , TimeStamp {hr = 18, min = 6, sec = 31}
+    , TimeStamp { hr = 18 , min = 6 , sec = 31 }
     , Read "A Room with a View" "E.M. Forster"
     )
-  , (4, TimeStamp {hr = 18, min = 6, sec = 32}, Def (Defn Nothing ["disject"]))
   , ( 4
-    , TimeStamp {hr = 18, min = 38, sec = 8}
+    , TimeStamp { hr = 18 , min = 6 , sec = 32 }
+    , Def (Defn Nothing [ "disject" ])
+    )
+  , ( 4
+    , TimeStamp { hr = 18 , min = 38 , sec = 8 }
     , Def (InlineDef "choric" "of, by, or relating to a chorus")
     )
   , ( 4
-    , TimeStamp {hr = 18, min = 58, sec = 19}
-    , Def (Defn Nothing ["flurry (v.)"])
+    , TimeStamp { hr = 18 , min = 58 , sec = 19 }
+    , Def (Defn Nothing [ "flurry (v.)" ])
     )
   , ( 4
-    , TimeStamp {hr = 19, min = 0, sec = 14}
-    , Def (Defn Nothing ["shibboleth"])
+    , TimeStamp { hr = 19 , min = 0 , sec = 14 }
+    , Def (Defn Nothing [ "shibboleth" ])
     )
   , ( 4
-    , TimeStamp {hr = 19, min = 7, sec = 0}
-    , Def (Defn Nothing ["twaddle", "twattle"])
+    , TimeStamp { hr = 19 , min = 7 , sec = 0 }
+    , Def (Defn Nothing [ "twaddle" , "twattle" ])
     )
   , ( 4
-    , TimeStamp {hr = 19, min = 29, sec = 5}
+    , TimeStamp { hr = 19 , min = 29 , sec = 5 }
     , Def
-      (DefVersus "putter"
-                 "one who puts; to potter"
-                 "potter"
-                 "one who makes pots; to trifle; to walk lazily "
-      )
+        (DefVersus
+           "putter"
+           "one who puts; to potter"
+           "potter"
+           "one who makes pots; to trifle; to walk lazily ")
     )
   , ( 4
-    , TimeStamp {hr = 19, min = 31, sec = 2}
+    , TimeStamp { hr = 19 , min = 31 , sec = 2 }
     , Quotation
-      "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and\nwe get very angry at people who don't."
-      ""
-      Nothing
+        "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and\nwe get very angry at people who don't."
+        ""
+        Nothing
     )
   , ( 4
-    , TimeStamp {hr = 19, min = 40, sec = 45}
+    , TimeStamp { hr = 19 , min = 40 , sec = 45 }
     , Def
-      (InlineDef
-        "prig"
-        "to haggle over a price; to steal; a thief; a conceited moralist"
-      )
+        (InlineDef
+           "prig"
+           "to haggle over a price; to steal; a thief; a conceited moralist")
     )
   , ( 4
-    , TimeStamp {hr = 20, min = 49, sec = 24}
-    , Quotation "...he had shown her the holiness of direct desire." "" Nothing
+    , TimeStamp { hr = 20 , min = 49 , sec = 24 }
+    , Quotation
+        "...he had shown her the holiness of direct desire." "" Nothing
     )
   , ( 0
-    , TimeStamp {hr = 21, min = 28, sec = 18}
+    , TimeStamp { hr = 21 , min = 28 , sec = 18 }
     , Quotation
-      "{There's no,What} better antidote to respect than hypocrisy{.,?}"
-      "Keane Yahn-Krafft"
-      Nothing
+        "{There's no,What} better antidote to respect than hypocrisy{.,?}"
+        "Keane Yahn-Krafft"
+        Nothing
     )
   , ( 0
-    , TimeStamp {hr = 21, min = 28, sec = 41}
+    , TimeStamp { hr = 21 , min = 28 , sec = 41 }
     , Def (InlineDef "irremunerable" "beyond compensation")
     )
-  , (0, TimeStamp {hr = 21, min = 43, sec = 44}, Read "Emma" "Jane Austen")
+  , ( 0
+    , TimeStamp { hr = 21 , min = 43 , sec = 44 }
+    , Read "Emma" "Jane Austen"
+    )
   , ( 4
-    , TimeStamp {hr = 21, min = 44, sec = 21}
-    , Quotation "Better be without sense, than misapply it as you do."
-                ""
-                Nothing
-    )
-  , (0, TimeStamp {hr = 22, min = 3, sec = 9}, Def (Defn Nothing ["dour"]))
-  , ( 0
-    , TimeStamp {hr = 22, min = 31, sec = 29}
-    , Def (Defn Nothing ["harlequin"])
-    )
-  , ( 0
-    , TimeStamp {hr = 23, min = 32, sec = 36}
-    , Def (Defn Nothing ["impetuous"])
-    )
-  , ( 0
-    , TimeStamp {hr = 23, min = 33, sec = 42}
+    , TimeStamp { hr = 21 , min = 44 , sec = 21 }
     , Quotation
-      "Rationalization isn't just a river in Egyt\8212wait, that's denial."
-      "IZombie"
-      Nothing
+        "Better be without sense, than misapply it as you do." "" Nothing
+    )
+  , ( 0
+    , TimeStamp { hr = 22 , min = 3 , sec = 9 }
+    , Def (Defn Nothing [ "dour" ])
+    )
+  , ( 0
+    , TimeStamp { hr = 22 , min = 31 , sec = 29 }
+    , Def (Defn Nothing [ "harlequin" ])
+    )
+  , ( 0
+    , TimeStamp { hr = 23 , min = 32 , sec = 36 }
+    , Def (Defn Nothing [ "impetuous" ])
+    )
+  , ( 0
+    , TimeStamp { hr = 23 , min = 33 , sec = 42 }
+    , Quotation
+        "Rationalization isn't just a river in Egyt\8212wait, that's denial."
+        "IZombie"
+        Nothing
     )
   ]

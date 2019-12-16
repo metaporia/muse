@@ -39,6 +39,8 @@ import           Data.Void                      ( Void )
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
                                                 , LogEntry(..)
+                                                , PageNum(..)
+                                                , Phrase(..)
                                                 , TimeStamp(..)
                                                 )
 import           Prelude                 hiding ( read )
@@ -65,10 +67,17 @@ logEntry = entry <* many (try emptyLine)
     ts          <- timestamp
     --dbg ("updateIndentation " <> show indentLevel) $
     updateIndentation indentLevel
-    r <- try read <|> try quotation <|> try definition <|> commentary
+    entry <-
+      try read
+      <|> try quotation
+      <|> try definition
+      <|> try commentary
+      <|> try pageNum
+      <|> try phrase
+      <|> dialogue
     --dbg (show indentLevel <> ": " <> show ts) (pure ())
     updateTimeStamp ts
-    return (indentLevel, ts, r)
+    return (indentLevel, ts, entry)
 
 updateTimeStamp :: TimeStamp -> Parser ()
 updateTimeStamp ts = modify $ \(a, _) -> (a, Just ts)
@@ -196,26 +205,32 @@ fencedTextBlock = do
 -- Definition --
 ----------------
 
+phrase :: Parser Entry
+phrase = do
+  let pPrefix = try (symbol "phrase") <|> symbol "phr"
+      inline  = pPrefix *> (uncurry Defined <$> inlineMeaning False)
+      hws     = pPrefix *> (Plural . snd <$> headwords)
+  fmap Phr $ try inline <|> hws
+
 -- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
 -- 'DefVersus').
 definition :: Parser Entry
 definition = label "definition" $ do
-  let dvs = symbol "dvs" *> defVersus'
-      prefix =
-        try (symbol "definition") <|> try (symbol "def") <|> try (symbol "d")
-      inline = prefix *> (uncurry InlineDef <$> inlineMeaning False)
-      hws    = prefix *> headwords
+  let dvs     = symbol "dvs" *> defVersus'
+      dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+      inline  = dPrefix *> (uncurry InlineDef <$> inlineMeaning False)
+      hws     = dPrefix *> (uncurry Defn <$> headwords)
   fmap Def $ try dvs <|> try inline <|> hws
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
-headwords :: Parser DefQuery
+headwords :: Parser (Maybe Integer, [String])
 headwords = label "headword(s)" $ do
   pg  <- optional (lexeme L.decimal)
   hws <- lexeme $ sepBy1
     (some $ satisfy (\x -> x /= '\n' && x /= ',' && x /= ':'))
     (lexeme (char ','))
   many (try emptyLine)
-  return $ Defn pg hws
+  return (fromIntegral <$> pg, hws)
 
 -- TODO optional page nmuber
 inlineMeaning
@@ -378,8 +393,26 @@ defVersus = do
 defVersusSeparator :: Parser String
 defVersusSeparator = lexeme (string "--- vs ---")
 
+
+----------
+-- PAGE --
+----------
+
+-- Is there a difference between 'PEnd' and 'PFinish'?
+pageNum :: Parser Entry
+pageNum = do
+  pg <-
+    try (Page <$ symbol "p")
+    <|> try (PStart <$ symbol "s")
+    <|> try (PEnd <$ symbol "e")
+    <|> (PFinish <$ symbol "f") -- FIXME redundant page tag.
+  num <- lexeme L.decimal
+  many (try emptyLine)
+  return $ PN $ pg num
+
+
 ------------
--- Quote --
+-- QUOTE --
 ------------
 
 -- Parses a quotation entry body (its timestamp should have been already

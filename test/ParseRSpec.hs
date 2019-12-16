@@ -2,6 +2,7 @@
 
 module ParseRSpec where
 
+import Control.Monad ((<=<))
 import           Control.Monad.IO.Class            ( liftIO )
 import           Control.Monad.State            ( State
                                                 , runState
@@ -51,7 +52,7 @@ curr'' = pt' (tupleRest p) multiInlineDefs
   rest = "potter: one who makes pots; to trifle; to walk lazily "
 
 
-curr = pt' logEntry dvs'
+curr = pt' logEntries nullEntries
 
 multiInlineDefs = [r|putter: one who puts; to potter
             --- vs ---
@@ -94,6 +95,14 @@ excerpt = [r|
         we get very angry at people who don't." 
 |]
 
+nullEntries = [r|22:03:09 λ. d dour
+22:03:09 λ. 
+
+22:31:29 λ. d harlequin
+22:03:09 λ.      
+21:28:41 λ. d irremunerable : beyond compensation
+|]
+
 defs = [r|22:03:09 λ. d dour
 21:28:41 λ. d irremunerable : beyond compensation
 22:31:29 λ. d harlequin
@@ -107,6 +116,21 @@ defs = [r|22:03:09 λ. d dour
 curr' = pt' (manyTill anySingle (satisfy (== '\n')) :: Parser String)  "aeou \n \n"
 
 
+contents = do
+  let fps =
+        [ "19.08.27"
+        , "19.11.26"
+        , "19.11.27"
+        , "19.12.03"
+        , "19.12.06"
+        , "19.12.10"
+        , "19.12.11"
+        , "19.12.14"
+        ]
+  traverse
+    (\fp -> pt' logEntries <=< readFile $ "/home/aporia/sputum/muse/" <> fp)
+    fps
+
 
 spec :: Spec
 spec = do
@@ -115,6 +139,10 @@ spec = do
     it "examples/globLog" $ do
       log <- liftIO $ readFile "examples/globLog"
       pt logEntries log `shouldParse` globLog
+  describe "null entry"
+    $             it ""
+    $             pt logEntries nullEntries
+    `shouldParse` nullEntriesOut
   describe "pageNums"
     $             it "all variants"
     $             pt logEntries pageNums
@@ -777,3 +805,17 @@ globLog =
         Nothing
     )
   ]
+
+nullEntriesOut
+  = [ (0, TimeStamp {hr = 22, min = 3, sec = 9}, Def (Defn Nothing ["dour"]))
+    , (0, TimeStamp {hr = 22, min = 3, sec = 9}, Null)
+    , ( 0
+      , TimeStamp {hr = 22, min = 31, sec = 29}
+      , Def (Defn Nothing ["harlequin"])
+      )
+    , (0, TimeStamp {hr = 22, min = 3, sec = 9}, Null)
+    , ( 0
+      , TimeStamp {hr = 21, min = 28, sec = 41}
+      , Def (InlineDef "irremunerable" "beyond compensation")
+      )
+    ]

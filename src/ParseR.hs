@@ -56,7 +56,6 @@ import           Debug.Trace                    ( trace )
 -- LOG ENTRY --
 ---------------
 
-
 logEntries = many (try emptyLine) *> some logEntry <* eof
 
 logEntry :: Parser (Int, TimeStamp, Entry)
@@ -74,7 +73,9 @@ logEntry = entry <* many (try emptyLine)
       <|> try commentary
       <|> try pageNum
       <|> try phrase
-      <|> dialogue
+      <|> try dialogue
+      <|> nullEntry
+
     --dbg (show indentLevel <> ": " <> show ts) (pure ())
     updateTimeStamp ts
     return (indentLevel, ts, entry)
@@ -85,6 +86,11 @@ updateTimeStamp ts = modify $ \(a, _) -> (a, Just ts)
 updateIndentation :: Int -> Parser ()
 updateIndentation i = --dbg ("updateidnt " <> show i) $
   modify $ \(_, ts) -> (i, ts)
+
+nullEntry :: Parser Entry
+nullEntry = do
+  optional (many (satisfy (== ' '))) <* newline
+  Null <$ many (try emptyLine)
 
 
 ---------------------------

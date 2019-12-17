@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
@@ -23,6 +24,10 @@ module ParseR where
 import           Control.Applicative     hiding ( many
                                                 , some
                                                 )
+import           Control.Lens                   ( over
+                                                , _1
+                                                , _2
+                                                )
 import           Control.Monad                  ( void
                                                 , unless
                                                 , when
@@ -35,6 +40,8 @@ import           Control.Monad.State            ( State
 import           Data.Char                      ( digitToInt )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
 import           Data.Void                      ( Void )
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
@@ -54,12 +61,12 @@ import           Debug.Trace                    ( trace )
 
 -- TODO test compliance:
 -- - Dump handling (as discard)
--- - indentation conversion: 
+-- - indentation conversion:
 --     - ban tabs
 --     - count spaces
 --     - update attribution grouping to divide indentation by 4 (convert to
 --       tabs) or group more finely by space-based indentation.
--- - 
+-- -
 
 ---------------
 -- LOG ENTRY --
@@ -115,7 +122,7 @@ nullEntry = Null <$ many (satisfy (== ' ')) <* newline
 --
 -- FIXME indentation-sensitive comment parsing will break, e.g., that
 -- inline-markdown comment on /Carry On, Jeeves/.
-commentaryPrefix :: Parser String
+commentaryPrefix :: Parser Text
 commentaryPrefix = cp <?> "commentary prefix"
   where cp = try (symbol "commentary") <|> symbol "synthesis"
 
@@ -125,17 +132,17 @@ commentary = textBlockEntry commentaryPrefix Commentary <?> "commentary"
 dialogue :: Parser Entry
 dialogue = textBlockEntry dialoguePrefix Dialogue <?> "dialogue"
 
-dialoguePrefix :: Parser String
+dialoguePrefix :: Parser Text
 dialoguePrefix = cp <?> "dialogue prefix" where cp = symbol "dialogue"
 
 
 -- | Parameterizes construction of the two isomorphic 'Entry' variants,
 -- 'Commentary' and 'Dialogue'.
-textBlockEntry :: Parser String -> (String -> Entry) -> Parser Entry
+textBlockEntry :: Parser Text -> (String -> Entry) -> Parser Entry
 textBlockEntry prefix toEntry = do
   prefix
   many (try emptyLine)
-  toEntry <$> textBlock
+  toEntry . T.unpack <$> textBlock
 
 
 -- | Parse a text block. A text block may be either indented more than its
@@ -152,12 +159,12 @@ textBlock = try fencedTextBlock <|> fst <$> indentedTextBlock
 -- may be reported as a failure the next applied parser.
 --
 -- Newlines after the block are discarded.
-indentedTextBlock :: Parser (String, Int)
+indentedTextBlock :: Parser (Text, Int)
 indentedTextBlock = do
   let
     lines indent = do
-      line       <- many (satisfy (/= '\n'))
-      emptyLines <- concat <$> many (try (indentedEmptyLine indent))
+      line       <- takeWhileP Nothing (/= '\n')
+      emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
       rest       <-
         try
             (  count indent (satisfy (== ' '))
@@ -183,15 +190,15 @@ indentedTextBlock = do
 -- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
 -- should expect no leading whitespace and to consume the rest of the line
 -- (newline included) but none of the proceeding line.
-indentedTextBlockUntil :: Maybe (Parser String) -> Parser (String, Int)
+indentedTextBlockUntil :: Maybe (Parser Text) -> Parser (Text, Int)
 indentedTextBlockUntil Nothing             = indentedTextBlock
 indentedTextBlockUntil (Just terminalLine) = do
   let
     lines indent = do
-      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n'))
+      line <- Nothing <$ terminalLine <|> Just <$> takeWhile1P Nothing (/= '\n')
       case line of
         Just ln -> do
-          emptyLines <- concat <$> many (try (indentedEmptyLine indent))
+          emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
           rest       <-
             try
                 (  count indent (satisfy (== ' '))
@@ -212,12 +219,12 @@ indentedTextBlockUntil (Just terminalLine) = do
 -- If present after the opening fence, a single newline is dropped.
 --
 -- Newlines after the block are discarded.
-fencedTextBlock :: Parser String
+fencedTextBlock :: Parser Text
 fencedTextBlock = do
   let fence = symbol "```"
   fence <* optional newline
   -- FIXME necessary to clear trailing whitespace?
-  manyTill anySingle fence-- <* many emptyLine 
+  T.pack <$> manyTill anySingle fence-- <* many emptyLine
 
 dump :: Parser LogEntry
 dump = do
@@ -233,8 +240,9 @@ dump = do
 phrase :: Parser Entry
 phrase = do
   let pPrefix = try (symbol "phrase") <|> symbol "phr"
-      inline  = pPrefix *> (uncurry Defined <$> inlineMeaning False)
-      hws     = pPrefix *> (Plural . snd <$> headwords)
+      inline =
+        pPrefix *> (uncurry Defined . over _2 T.unpack <$> inlineMeaning False)
+      hws = pPrefix *> (Plural . snd <$> headwords)
   fmap Phr $ try inline <|> hws
 
 -- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
@@ -243,13 +251,14 @@ definition :: Parser Entry
 definition = label "definition" $ do
   let dvs     = symbol "dvs" *> defVersus'
       dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
-      inline  = dPrefix *> (uncurry InlineDef <$> inlineMeaning False)
+      inline  = dPrefix *> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
       hws     = dPrefix *> (uncurry Defn <$> headwords)
   fmap Def $ try dvs <|> try inline <|> hws
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
 headwords :: Parser (Maybe Integer, [String])
 headwords = label "headword(s)" $ do
+  -- FIXME
   pg  <- optional (lexeme L.decimal)
   hws <- lexeme $ sepBy1
     (some $ satisfy (\x -> x /= '\n' && x /= ',' && x /= ':'))
@@ -260,7 +269,7 @@ headwords = label "headword(s)" $ do
 -- TODO optional page nmuber
 inlineMeaning
   :: Bool -- ^ Whether to for definition comparison separator.
-  -> Parser (String, String)
+  -> Parser (String, Text)
 inlineMeaning inDefComparison = label "inlineDef" $ do
   let indentedTextBlock' = if inDefComparison
         then indentedTextBlockUntil $ Just (defVersusSeparator <* newline)
@@ -271,7 +280,7 @@ inlineMeaning inDefComparison = label "inlineDef" $ do
   headword <- someTill
     (satisfy (\x -> x /= '\n' && x /= ':'))
     (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
-  meaningLine1                 <- some (satisfy (/= '\n')) <* newline
+  meaningLine1                 <- takeWhile1P Nothing (/= '\n') <* newline
   minIndent                    <- gets fst
   (restOfMeaning, indentLevel) <- try indentedTextBlock'
     <|> return ("", minIndent)
@@ -291,33 +300,33 @@ inlineMeaning inDefComparison = label "inlineDef" $ do
   --  (pure ())
   -- TODO, HERE FIXME figure out correct indentation enforcement !!!
   when
-    (not (null restOfMeaning) && minIndent >= indentLevel)
+    (not (T.null restOfMeaning) && minIndent >= indentLevel)
     (  fail
     $  "inlineMeaning: insufficient indentation-"
     <> headword
     <> ":"
-    <> meaningLine1
+    <> T.unpack meaningLine1
     <> "\n"
     <> "idt="
     <> show indentLevel
     <> ","
     <> show minIndent
     <> "-"
-    <> restOfMeaning
+    <> T.unpack restOfMeaning
     )
   return
     ( headword
-    , meaningLine1 ++ if null restOfMeaning then "" else '\n' : restOfMeaning
+    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
     )
 
 defVersus' :: Parser DefQuery
 defVersus' = do
   (hw , mn ) <- defVersusFirst
   (hw', mn') <- defVersusNext
-  return $ DefVersus hw mn hw' mn'
+  return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
 
 -- | For 'DefVersus'
-defVersusFirst :: Parser (String, String)
+defVersusFirst :: Parser (String, Text)
 defVersusFirst = label "defVersusFirst" $ do
   -- TODO parse list of words: sequence of non-space characters separated by
   -- spaces. This would obivate the need to trim trailing whitespace from the
@@ -325,7 +334,7 @@ defVersusFirst = label "defVersusFirst" $ do
   headword <- someTill
     (satisfy (\x -> x /= '\n' && x /= ':'))
     (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
-  meaningLine1                 <- some (satisfy (/= '\n')) <* newline
+  meaningLine1                 <- takeWhile1P Nothing (/= '\n') <* newline
   minIndent                    <- gets fst
   (restOfMeaning, indentLevel) <- indentedTextBlockUntil'
     <|> return ("", minIndent)
@@ -333,31 +342,31 @@ defVersusFirst = label "defVersusFirst" $ do
   updateIndentation indentLevel
   -- TODO, HERE FIXME figure out correct indentation enforcement !!!
   when
-    (not (null restOfMeaning) && minIndent >= indentLevel)
+    (not (T.null restOfMeaning) && minIndent >= indentLevel)
     (  fail
     $  "defVersus': insufficient indentation-"
     <> headword
     <> ":"
-    <> meaningLine1
+    <> T.unpack meaningLine1
     <> "\n"
     <> "idt="
     <> show indentLevel
     <> ","
     <> show minIndent
     <> "-"
-    <> restOfMeaning
+    <> T.unpack restOfMeaning
     )
   return
     ( headword
-    , meaningLine1 ++ if null restOfMeaning then "" else '\n' : restOfMeaning
+    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
     )
   --meaning <- _ --
 
 -- | Parse the next comparison.
-defVersusNext :: Parser (String, String)
+defVersusNext :: Parser (String, Text)
 defVersusNext = label "defVersusNext" $ do
   let delimiter = try (many (satisfy (== ' ')) <* char ':') <|> "" <$ char ':'
-      line      = some (satisfy (/= '\n')) <* newline
+      line      = takeWhile1P Nothing (/= '\n') <* newline
   indent <- gets fst
   sum <$> count indent (1 <$ satisfy (== ' '))
   hw    <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
@@ -375,7 +384,7 @@ defVersusNext = label "defVersusNext" $ do
 -- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
 -- should expect no leading whitespace and to consume the rest of the line
 -- (newline included) but none of the proceeding line.
-indentedTextBlockUntil' :: Parser (String, Int)
+indentedTextBlockUntil' :: Parser (Text, Int)
 indentedTextBlockUntil' = do
   let terminalLine = defVersusSeparator <* newline
   indent    <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
@@ -385,10 +394,10 @@ indentedTextBlockUntil' = do
        (fail "indentedTextBlockUntil': insufficient indentation")
   let
     lines = do
-      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n')) -- FIXME use 'many'
+      line <- Nothing <$ terminalLine <|> Just <$> takeWhile1P Nothing (/= '\n') -- FIXME use 'many'
       case line of
         Just ln -> do
-          emptyLines <- concat <$> some (try (indentedEmptyLine indent)) -- FIXME use 'many'
+          emptyLines <- T.concat <$> some (try (indentedEmptyLine indent)) -- FIXME use 'many'
           rest       <-
             try (count indent (satisfy (== ' ')) *> fmap (emptyLines <>) lines)
               <|> pure ""
@@ -414,12 +423,12 @@ defVersus :: Parser DefQuery
 defVersus = do
   xs <- count 2 (inlineMeaning True)
   case xs of
-    ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw mn hw' mn'
+    ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
     _ -> fail "defVersus: `count 2` succeeded but did not parse two elements"
 
 
 
-defVersusSeparator :: Parser String
+defVersusSeparator :: Parser Text
 defVersusSeparator = lexeme (string "--- vs ---")
 
 
@@ -435,6 +444,7 @@ pageNum = do
     <|> try (PStart <$ symbol "s")
     <|> try (PEnd <$ symbol "e")
     <|> (PFinish <$ symbol "f") -- FIXME redundant page tag.
+  -- FIXME
   num <- lexeme L.decimal
   emptyLine
   return $ PN $ pg num
@@ -483,21 +493,22 @@ quotation = label "quotation" $ do
     $  try
     $  count indentLevel (satisfy isTabOrSpace)
     *> someTill anySingle newline
-  return $ Quotation body (fromMaybe "" attr) pg
+    -- *> takeWhile1P (/= '\n') someTill anySingle newline
+  return $ Quotation (T.unpack body) (fromMaybe "" attr) pg
 
 -- | Parses quoted content. Assumes that whitespace preceding the opening
 -- double quote has been preserved.
 --
 -- FIXME proper tab handling. Debar them or process them correctly.
-quoteContent :: Parser (String, Int)
+quoteContent :: Parser (Text, Int)
 quoteContent = do
   let isDelimiter x = x == '\n' || x == '"'
       lines indent = do
-        lineContent  <- many (satisfy (not . isDelimiter)) <?> "line content"
+        lineContent  <- takeWhileP (Just "line content") (not . isDelimiter)
         terminalChar <- satisfy isDelimiter
         case terminalChar of
           '\n' -> do
-            emptyLines <- concat <$> many (try (indentedEmptyLine indent))
+            emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
             count indent (satisfy isTabOrSpace)
             ((emptyLines <> lineContent <> "\n") <>) <$> lines indent
           '"' -> return lineContent
@@ -507,7 +518,7 @@ quoteContent = do
     sum <$> manyTill (1 <$ satisfy (== ' ')) (char '"') <?> "leading whitespace"
   (, indentLevel) <$> lines indentLevel
 
-quotePrefix :: Parser String
+quotePrefix :: Parser Text
 quotePrefix = L.lexeme spaceWithoutNewline qp <?> "quote prefix"
   where qp = try (string "quotation") <|> string "q"
 
@@ -564,19 +575,21 @@ twoDigitNatural = do
 -------------
 
 type Parser' = Parsec Void String
-type Parser = ParsecT Void String (State (Int, Maybe TimeStamp))
+type Parser = ParsecT Void Text (State (Int, Maybe TimeStamp))
 
 
 type ParserM e s m = (MonadParsec e s m, Token s ~ Char)
 
+--symbol :: Tokens s -> Parser Text
 symbol = L.symbol spaceWithoutNewline
 
+lexeme :: Parser a -> Parser a
 lexeme = L.lexeme spaceWithoutNewline
 
 sc :: ParserM e s m => m ()
 sc = L.space space1 empty empty
 
-spaceWithoutNewline :: (MonadParsec e s m, Token s ~ Char) => m ()
+--spaceWithoutNewline :: (MonadParsec e s m, Token s ~ Char) => m ()
 spaceWithoutNewline = L.space (void whitespaceNotNewline) empty empty
 
 --whitespaceNotNewline :: Parser String
@@ -585,20 +598,20 @@ whitespaceNotNewline = takeWhile1P (Just "tab or space") isTabOrSpace
 
 -- Parse either a newline or a string of tabs and/or spaces followed by
 -- newline.
-emptyLine :: Parser String
+emptyLine :: Parser Text
 emptyLine =
-  (try (return <$> newline) <|> ((++ "\n") <$> whitespaceNotNewline <* newline))
+  (try ("\n" <$ newline) <|> ((<> "\n") <$> whitespaceNotNewline <* newline))
     <?> "empty line"
 
 -- | Like 'emptyLine' but drops the first @indentLevel@ spaces from each
 -- line that isn't just a newline.
-indentedEmptyLine :: Int -> Parser String
+indentedEmptyLine :: Int -> Parser Text
 indentedEmptyLine indentLevel = trim indentLevel <$> emptyLine
  where
-  trim _ [] = []
-  trim 0 xs = xs
-  trim n l@(x : xs) | x == ' '  = trim (n - 1) xs
-                    | otherwise = l
+  trim _ "" = ""
+  trim 0 x = x
+  trim n x | T.head x == ' '  = trim (n - 1) (T.drop 1 x)
+           | otherwise = x
 
 isTabOrSpace :: Char -> Bool
 isTabOrSpace ' '  = True
@@ -609,17 +622,17 @@ isTabOrSpace _    = False
 -- MISC --
 ----------
 
--- indentation-sensitive parsing
-indented :: Parser (String, [String]) -- prefix and body line
-indented = L.nonIndented sc (L.indentBlock sc p)
- where
-  p = do
-    prefix <- quotePrefix
-    return (L.IndentMany Nothing (return . (prefix, )) (try qItem))
-
---qItem :: Parser String
-qItem = L.lexeme spaceWithoutNewline p
-  where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
+---- indentation-sensitive parsing
+--indented :: Parser (String, [String]) -- prefix and body line
+--indented = L.nonIndented sc (L.indentBlock sc p)
+-- where
+--  p = do
+--    prefix <- quotePrefix
+--    return (L.IndentMany Nothing (return . (prefix, )) (try qItem))
+--
+----qItem :: Parser String
+--qItem = L.lexeme spaceWithoutNewline p
+--  where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
 
 
 pt p = flip runState (0, Nothing) . runParserT p ""

@@ -1,15 +1,19 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Parse.TestData where
 
 import           Parse.Types
 import           Prelude                 hiding ( min )
 import           Text.RawString.QQ
+import           Data.Text (Text)
 
+tNoValidPrefix  :: Text
 tNoValidPrefix = [r|
 13:36:33 λ. not a prefix!
 |]
 
+tDialogue :: Text
 tDialogue =
   [r|
 07:36:33 λ. phrase sine qua non
@@ -50,6 +54,7 @@ tDialogueOut
       )
     ]
 
+tPhrase :: Text
 tPhrase =
   [r|
 10:36:33 λ. phrase sine qua non
@@ -168,7 +173,7 @@ testLogWithDumpOutput'
       )
     ]
 
-testDump :: String
+testDump :: Text
 testDump =
   [r|
 ...
@@ -200,7 +205,7 @@ testDumpOutput =
     )
   ]
 
-testNull :: String
+testNull :: Text
 testNull =
   [r|
     12:10:01 λ.
@@ -209,7 +214,7 @@ testNull =
 testNullOutput :: [LogEntry]
 testNullOutput = [TabTsEntry (4, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
 
-testLonelySpaces :: String
+testLonelySpaces :: Text
 testLonelySpaces =
   [r|
 
@@ -307,7 +312,7 @@ output
     ]
 
 -- should fail. comments must be indented. Otherwise used 'fencedTextBlock'
-commentTs :: String
+commentTs :: Text
 commentTs = [r|20:30:00 λ. commentary
 ```
 I found myself extremely aggravated by the claustrophobia-inducing parental
@@ -328,7 +333,7 @@ commentTsOutput =
       )
   ]
 
-commentTs' :: String
+commentTs' :: Text
 commentTs' =
   [r|10:30:00 λ. synthesis
 
@@ -354,13 +359,13 @@ commentTsOutput'
     ]
 
 -- test data
-testStrDefn :: String
+testStrDefn :: Text
 testStrDefn = [r| d word1, word2, hyphenated-word3 |]
 
-testStrInline0 :: String
+testStrInline0 :: Text
 testStrInline0 = "d word1 : meaning1; meaning2; meaning3"
 
-testStrInline1 :: String
+testStrInline1 :: Text
 testStrInline1 =
   [r|\
 d word1 : meaning1; meaning2; meaning3;
@@ -370,7 +375,7 @@ d word1 : meaning1; meaning2; meaning3;
   meaning
 |]
 
-testPgNum :: String
+testPgNum :: Text
 testPgNum =
   [r|
 08:38:20 λ. p38
@@ -389,7 +394,7 @@ testPgNumOutput =
   , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 24}, PN (Page 38))
   ]
 
-testLog :: String
+testLog :: Text
 testLog =
   [r|
 08:23:30 λ. d quiescence, quiescent, quiesce
@@ -410,7 +415,7 @@ testLog =
             --- vs ---
             comport : to endure; carry together; to accord (with) |]
 
-v0, v1, v0', v2, v2', v3, v3', v3'', v4, v5 :: String
+v0, v1, v0', v2, v2', v3, v3', v3'', v4, v5 :: Text
 v0 = "08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal"
 
 v0' = "prorated, hello, mine, yours, hypochondriacal"
@@ -456,7 +461,7 @@ v5 =
         comport : to endure; carry together; to accord (with)
 |]
 
-testlog :: String
+testlog :: Text
 testlog =
   [r|
 09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
@@ -493,6 +498,7 @@ testlog =
 
 |]
 
+tNull :: Text
 tNull =
   [r|
 
@@ -519,6 +525,7 @@ tNullOut
       )
     ]
 
+tDump :: Text
 tDump =
   [r|
 ...
@@ -624,6 +631,7 @@ drink gin 'n tonic (2 < shots)
 
 |]
 
+autoAttr :: Text
 autoAttr = [r|
 
 12:32:18 λ. d offering, sacrifice, expiate, propitiate, gift
@@ -1176,6 +1184,7 @@ silentFailure = [r|
 8:35:27 λ. read "Great Expectations" by Charles Dickens
 |]
 
+defVersusNote :: Text
 defVersusNote = [r|14:23:10 λ. dvs emulatable: capable of being emulated
                 --- vs ---
                 emulable : see above

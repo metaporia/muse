@@ -1,4 +1,5 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module ParseRSpec where
 
@@ -20,6 +21,9 @@ import           Data.List                      ( sortBy )
 import           Data.Maybe                     ( fromMaybe
                                                 , maybe
                                                 )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
+import qualified Data.Text.IO                  as T
 import           ParseR                  hiding ( pt
                                                 , curr
                                                 )
@@ -53,11 +57,10 @@ import           Text.Show.Pretty               ( pPrint )
 curr = pt' (tupleRest (p)) indentedComparison
  where
   p = do
-    emptyLine
-    timestamp
+    emptyLine *> timestamp
     symbol "dvs"
     first <- defVersusFirst
-    second <- defVersusNext
+    -- second <- defVersusNext
     return first
 
 -- TODO FIXME the problem is that the initial indentation level is set by the second
@@ -73,9 +76,7 @@ indentedComparison = [r|
 |]
 
 tlg = pt' (tupleRest p) testlog
-  where p = do
-              emptyLine
-              count 5 logEntry
+  where p = emptyLine *> count 5 logEntry
 -- should succeed
 brokenQuote = [r|
 10:24:02 λ. quotation
@@ -103,7 +104,7 @@ pt'' = flip parse ""
 pt p = fst . flip runState (0, Nothing) . runParserT p "" 
 
 curr''' = do 
-  log <- readFile "examples/globLogR"
+  log <- T.readFile "examples/globLogR"
   pt' logEntries' log
 
 tupleRest p = (,) <$> p <*> many anySingle
@@ -177,14 +178,14 @@ defs = [r|22:03:09 λ. d dour
                 potter: one who makes pots; to trifle; to walk lazily 
 |]
 
-curr' = pt' (manyTill anySingle (satisfy (== '\n')) :: Parser String)  "aeou \n \n"
+curr' = pt' (takeWhileP Nothing (/= '\n') <* newline :: Parser Text) "aeou \n \n"
 
 
 contents = do
   fps <- drop 80 . take 120 . sortBy (flip compare) <$> getDirectoryContents
     "/home/aporia/sputum/muse"
   traverse
-    (\fp -> pt' logEntries' <=< readFile $ "/home/aporia/sputum/muse/" <> fp)
+    (\fp -> pt' logEntries' <=< T.readFile $ "/home/aporia/sputum/muse/" <> fp)
     fps
 
 spec' :: Spec
@@ -310,7 +311,7 @@ spec = do
   describe "logEntries" $ do
     it "defVersus greed-check" $ pt logEntries' excerpt `shouldParse` excerptOut
     it "examples/globLog" $ do
-      log <- liftIO $ readFile "examples/globLog"
+      log <- liftIO $ T.readFile "examples/globLog"
       pt logEntries' log `shouldParse` globLog
   describe "null entry"
     $             it ""
@@ -361,7 +362,7 @@ spec = do
     it "fenced text block" $ do
       pt fencedTextBlock fenceV0
         `shouldParse` "text block\n\nof \n\nmany \n\n\n\nlines"
-      pt fencedTextBlock (fenceV0 ++ "  \n \n\n\n  \n")
+      pt fencedTextBlock (fenceV0 <> "  \n \n\n\n  \n")
         `shouldParse` "text block\n\nof \n\nmany \n\n\n\nlines"
       pt fencedTextBlock fenceV1
         `shouldParse` "text block\n\nof \n\nmany \n\n  \n\nlines"
@@ -567,6 +568,7 @@ qcMultiSkipTrim = [r|    "this is the
 
 |]
 
+fenceV0 :: Text
 fenceV0 = [r|```
 text block
 
@@ -578,6 +580,7 @@ many
 
 lines```|]
 
+fenceV1 :: Text
 fenceV1 = [r|```text block
 
 of 

@@ -169,4 +169,3 @@ projectDef (TabTsEntry (_, _, Def dq)) = case dq of
   InlineDef hw  meaning   -> [(hw, Just meaning)]
   DefVersus hw m hw' m'   -> [(hw, Just m), (hw', Just m')]
 projectDef _ = []
-

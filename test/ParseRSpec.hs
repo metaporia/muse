@@ -2,23 +2,36 @@
 
 module ParseRSpec where
 
-import Control.Monad ((<=<))
-import           Control.Monad.IO.Class            ( liftIO )
+import           Control.Lens                   ( (^?)
+                                                , (%~)
+                                                , _3
+                                                , _1
+                                                , each
+                                                , over
+                                                )
+import           Control.Monad                  ( (<=<) )
+import           Control.Monad.IO.Class         ( liftIO )
 import           Control.Monad.State            ( State
                                                 , runState
                                                 , gets
                                                 )
+import           Data.Function                  ( (&) )
 import           Data.Maybe                     ( fromMaybe
                                                 , maybe
                                                 )
 import           ParseR                  hiding ( pt
                                                 , curr
                                                 )
+import           Parse.TestData
 import           Parse.Types                    ( Entry(..)
                                                 , DefQuery(..)
                                                 , PageNum(..)
                                                 , Phrase(..)
                                                 , TimeStamp(..)
+                                                , LogEntry
+                                                , _TabTsEntry
+                                                , _Quotation
+                                                , _Dialogue
                                                 )
 import           Prelude                 hiding ( read
                                                 , min
@@ -33,13 +46,42 @@ import           Text.Megaparsec.Debug          ( dbg )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 
+
+
+curr = pt' (tupleRest logEntries) brokenQuote
+tlg = pt' (tupleRest p) testlog
+  where p = do
+              emptyLine
+              count 5 logEntry
+-- should succeed
+brokenQuote = [r|
+10:24:02 λ. quotation
+
+            "There was no treachery too base for the world to commit. She
+            knew this. No happiness lasted."
+
+            In "To the Lighthouse", by Virginia Woolf
+|]
+
+-- Is this indentation scheme acceptable? It's certainly present in existing
+-- logs.
+brokenDefVersus = [r|
+10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
+            distress; inimical; bent on evil.
+                --- vs ---
+                malign : (adj.) having an evil disposition; spiteful;
+                medically trheatening; (v.) to slander; to asperse; to show
+                hatred toward.
+
+|]
+
 test = hspec spec 
 pt'' = flip parse ""
 pt p = fst . flip runState (0, Nothing) . runParserT p "" 
 
 curr''' = do 
   log <- readFile "examples/globLogR"
-  pt' logEntries log
+  pt' logEntries' log
 
 tupleRest p = (,) <$> p <*> many anySingle
 
@@ -52,7 +94,6 @@ curr'' = pt' (tupleRest p) multiInlineDefs
   rest = "potter: one who makes pots; to trifle; to walk lazily "
 
 
-curr = pt' logEntries nullEntries
 
 multiInlineDefs = [r|putter: one who puts; to potter
             --- vs ---
@@ -128,24 +169,141 @@ contents = do
         , "19.12.14"
         ]
   traverse
-    (\fp -> pt' logEntries <=< readFile $ "/home/aporia/sputum/muse/" <> fp)
+    (\fp -> pt' logEntries' <=< readFile $ "/home/aporia/sputum/muse/" <> fp)
     fps
-
+    
+spec' :: Spec
+spec' = do
+  let
+    logEntries' =
+      (& (each . _TabTsEntry . _3 . _Quotation . _1) %~ (unwords . lines)) .   
+        (& (each . _TabTsEntry . _1) %~ (`div` 4))
+        <$> logEntries
+  describe "Timestamp parser"
+    $             it "parse timestamp \"00:11:22 λ. \" is [00, 11, 22]"
+    $             pt timestamp "00:11:22 λ. "
+    `shouldParse` TimeStamp 00 11 22
+  describe "stub" $ it "stub" $ True `shouldBe` True
+    -- testlog
+  describe "Parse testlog"
+    $             it "parse logEntries testlog"
+    $             example
+    $             pt logEntries' testlog
+    `shouldParse` output
+    -- testlog with dump
+  describe "Parse testlog including dumps"
+    $             it "parse logEntries testlog"
+    $             example
+    $             pt logEntries' testlog
+    `shouldParse` testLogWithDumpOutput'
+    -- commentary
+  -- FIXME
+  describe "Parse commentary entry variant 1"
+    $             it "parse logEntries commentTs"
+    $             example
+    $             pt logEntries' commentTs
+    `shouldParse` commentTsOutput
+    -- commentary
+  -- FIXME
+  describe "Parse commentary entry variant 2"
+    $             it "parse logEntries commentTs'"
+    $             example
+    $             pt logEntries' commentTs'
+    `shouldParse` commentTsOutput'
+    -- pgNum
+  describe "test pgNum: \"(s | e | p | f)<num>\""
+    $             it "parse logEntries testPgNum"
+    $             example
+    $             pt logEntries' testPgNum
+    `shouldParse` testPgNumOutput
+    -- skip lonely spaces
+  describe "skip lines containing only spaces"
+    $             it "parse logEntries testLonelySpaces"
+    $             example
+    $             pt logEntries' testLonelySpaces
+    `shouldParse` testLonelySpacesOutput
+  describe "parse null logEntries (those w only timestamps)"
+    $             it "parse logEntries testNull"
+    $             example
+    $             pt logEntries testNull
+    `shouldParse` testNullOutput
+  describe "parse dump: \"...\n<multi-line-dump-body>\n...\""
+    $             it "parse logEntries testDump"
+    $             example
+    $             pt logEntries' testDump
+    `shouldParse` testDumpOutput
+  -- FIXME 
+  describe "parse dump containing ellipsis"
+    $             it "parse logEntries tDump"
+    $             example
+    $             pt logEntries' tDump
+    `shouldParse` tDumpOut
+  describe "parse null timestamp"
+    $             it "parse logEntries tNull"
+    $             example
+    $             pt logEntries' tNull
+    `shouldParse` tNullOut
+  describe "keyword \"phrase\""
+    $             it "parse logEntries tPhrase"
+    $             example
+    $             pt logEntries' tPhrase
+    `shouldParse` tPhraseOut
+  describe "keyword \"dialogue\""
+    $             it "parse logEntries tDialogue"
+    $             example
+    $             pt logEntries' tDialogue
+    `shouldParse` tDialogueOut
+  describe "unattributed quotationsn't consume proceeding indentation"
+    $             it "parse logEntries autoAttr"
+    $             example
+    $             pt logEntries' autoAttr
+    `shouldParse` autoAttrOut
+  describe "fail on entry without valid prefix"
+    $              it "parse logEntry tNoValidPrefix"
+    $              example
+    $              pt (logEntries <* eof) -- FIXME example of poor error message
+    `shouldFailOn` tNoValidPrefix
+  --describe "square-bracketed, comma-separated tags" $ do
+  --  -- "assert that tagChar may only be one of [a-zA-Z0-9-]"
+  --  it
+  --      "* tagChar: alpha-numeric characters, spaces, underscores, and hyphens are valid `tagChar`s"
+  --    $ do
+  --      (pt (many tagChar) "_- ") `shouldBe` Just "_- "
+  --        (pt (many tagChar) "abcdefghijklmnopqrstuvwxyz")
+  --          `shouldBe` Just "abcdefghijklmnopqrstuvwxyz"
+  --  it "* tag sequence may be empty, e.g., \"[]\" should parse successfully"
+  --     ((pt tags "[]") `shouldBe` Just [])
+  --  it "* tag sequence may _not_ contain empty tags, as in \"[tag1,,]\""
+  --     ((pt tags "[tag1,,]") `shouldBe` Nothing)
+  --  it
+  --    "* example of well-formed tag list w whitespace trimming: \"[tag1,some_tag, my-special-tag, this is space separated ]\""
+  --    (          toMaybe
+  --        (parse tags
+  --               "[tag1,some_tag, my-special-tag, this is space separated ]"
+  --        )
+  --    `shouldBe` Just
+  --                 [ "tag1"
+  --                 , "some_tag"
+  --                 , "my-special-tag"
+  --                 , "this is space separated"
+  --                 ]
+  --    )
 
 spec :: Spec
 spec = do
+  spec'
   describe "logEntries" $ do
-    it "defVersus greed-check" $ pt logEntries excerpt `shouldParse` excerptOut
+    it "defVersus greed-check" $ pt logEntries' excerpt `shouldParse` excerptOut
     it "examples/globLog" $ do
       log <- liftIO $ readFile "examples/globLog"
-      pt logEntries log `shouldParse` globLog
+      pt logEntries' log `shouldParse` globLog
   describe "null entry"
     $             it ""
-    $             pt logEntries nullEntries
+    $             pt logEntries' nullEntries
     `shouldParse` nullEntriesOut
   describe "pageNums"
     $             it "all variants"
-    $             pt logEntries pageNums
+    $             pt logEntries' pageNums
     `shouldParse` [ ( 0
                     , TimeStamp {hr = 18, min = 6, sec = 31}
                     , Read "A Room with a View" "E.M. Forster"
@@ -218,6 +376,9 @@ spec = do
                   , "\n"
                   ]
   describe "quotation" $ do
+    it "only one newline trailing attr"
+      $ pt logEntries' brokenQuote `shouldParse`
+                     [(0,TimeStamp {hr = 10, min = 24, sec = 2},Quotation "There was no treachery too base for the world to commit. She\nknew this. No happiness lasted." "In \"To the Lighthouse\", by Virginia Woolf" Nothing)]
     it "multiline, skip space, no attr, pg"
       $             pt quotation multiSkipNoAttrPg
       `shouldParse` Quotation "quote \n\nk\n\nbody \ncont." "" (Just 23)
@@ -272,7 +433,7 @@ spec = do
                       , ("text block 3\nla di da"         , 0)
                       ]
     it "defVersus w multi paragraph second meaning"
-      $             pt logEntries defVersus0
+      $             pt logEntries' defVersus0
       `shouldParse` [ ( 0
                       , TimeStamp 19 29 05
                       , Def
@@ -347,7 +508,6 @@ multiSkipAttrNoPg = [r|q
   cont."
 
   attr
-
 |]
 
 literal = [r|"hello

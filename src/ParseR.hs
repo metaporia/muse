@@ -52,11 +52,25 @@ import           Text.Show.Pretty               ( pPrint )
 import           Text.Megaparsec.Debug          ( dbg )
 import           Debug.Trace                    ( trace )
 
+-- TODO test compliance:
+-- - Dump handling (as discard)
+-- - indentation conversion: 
+--     - ban tabs
+--     - count spaces
+--     - update attribution grouping to divide indentation by 4 (convert to
+--       tabs) or group more finely by space-based indentation.
+-- - 
+
 ---------------
 -- LOG ENTRY --
 ---------------
 
-logEntries = many (try emptyLine) *> some logEntry <* eof
+--logEntries = fmap TabTsEntry <$> logEntries'
+logEntries = many (try emptyLine) *> some logEntry' <* eof
+ where
+  logEntry' = (try dump <|> TabTsEntry <$> logEntry) <* many (try emptyLine)
+
+logEntries' = many (try emptyLine) *> some logEntry <* eof
 
 logEntry :: Parser (Int, TimeStamp, Entry)
 logEntry = entry <* many (try emptyLine)
@@ -68,12 +82,12 @@ logEntry = entry <* many (try emptyLine)
     updateIndentation indentLevel
     entry <-
       try read
+      <|> try commentary
+      <|> try dialogue
       <|> try quotation
       <|> try definition
-      <|> try commentary
       <|> try pageNum
       <|> try phrase
-      <|> try dialogue
       <|> nullEntry
 
     --dbg (show indentLevel <> ": " <> show ts) (pure ())
@@ -88,9 +102,7 @@ updateIndentation i = --dbg ("updateidnt " <> show i) $
   modify $ \(_, ts) -> (i, ts)
 
 nullEntry :: Parser Entry
-nullEntry = do
-  optional (many (satisfy (== ' '))) <* newline
-  Null <$ many (try emptyLine)
+nullEntry = Null <$ many (satisfy (== ' ')) <* newline
 
 
 ---------------------------
@@ -204,7 +216,14 @@ fencedTextBlock :: Parser String
 fencedTextBlock = do
   let fence = symbol "```"
   fence <* optional newline
-  manyTill anySingle fence <* many emptyLine
+  -- FIXME necessary to clear trailing whitespace?
+  manyTill anySingle fence-- <* many emptyLine 
+
+dump :: Parser LogEntry
+dump = do
+  let fence = symbol "..."
+  fence <* optional newline
+  Dump <$> manyTill anySingle fence
 
 
 ----------------
@@ -235,7 +254,7 @@ headwords = label "headword(s)" $ do
   hws <- lexeme $ sepBy1
     (some $ satisfy (\x -> x /= '\n' && x /= ',' && x /= ':'))
     (lexeme (char ','))
-  many (try emptyLine)
+  --many (try emptyLine) -- FIXME remove
   return (fromIntegral <$> pg, hws)
 
 -- TODO optional page nmuber
@@ -413,7 +432,7 @@ pageNum = do
     <|> try (PEnd <$ symbol "e")
     <|> (PFinish <$ symbol "f") -- FIXME redundant page tag.
   num <- lexeme L.decimal
-  many (try emptyLine)
+  emptyLine
   return $ PN $ pg num
 
 
@@ -460,7 +479,6 @@ quotation = label "quotation" $ do
     $  try
     $  count indentLevel (satisfy isTabOrSpace)
     *> someTill anySingle newline
-    <* newline
   return $ Quotation body (fromMaybe "" attr) pg
 
 -- | Parses quoted content. Assumes that whitespace preceding the opening

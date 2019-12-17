@@ -223,7 +223,7 @@ dump :: Parser LogEntry
 dump = do
   let fence = symbol "..."
   fence <* optional newline
-  Dump <$> manyTill anySingle fence
+  Dump <$> manyTill anySingle (try $ newline *> fence <* newline)
 
 
 ----------------

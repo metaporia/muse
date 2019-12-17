@@ -189,10 +189,10 @@ multiple lines
 
 testDumpOutput :: [LogEntry]
 testDumpOutput =
-  [ Dump "dump aeouoaeu\nsecond line\n"
+  [ Dump "dump aeouoaeu\nsecond line"
   , TabTsEntry
     (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
-  , Dump "dump body\nmultiple lines\n"
+  , Dump "dump body\nmultiple lines"
   , TabTsEntry
     ( 0
     , TimeStamp {hr = 14, min = 19, sec = 0}
@@ -531,7 +531,7 @@ solution: `ssh-add` (the local agent simply needed a heads-up!).
 
 tDumpOut =
   [ Dump
-      "\ncoffee\nshit\nfuck with ssh-keygen (error: \"sign_and_send_pubkey: signing failed ...\")\nsolution: `ssh-add` (the local agent simply needed a heads-up!)."
+      "coffee\nshit\nfuck with ssh-keygen (error: \"sign_and_send_pubkey: signing failed ...\")\nsolution: `ssh-add` (the local agent simply needed a heads-up!)."
   ]
 
 broken' =

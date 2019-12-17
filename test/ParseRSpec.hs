@@ -16,6 +16,7 @@ import           Control.Monad.State            ( State
                                                 , gets
                                                 )
 import           Data.Function                  ( (&) )
+import           Data.List                      ( sortBy )
 import           Data.Maybe                     ( fromMaybe
                                                 , maybe
                                                 )
@@ -28,7 +29,7 @@ import           Parse.Types                    ( Entry(..)
                                                 , PageNum(..)
                                                 , Phrase(..)
                                                 , TimeStamp(..)
-                                                , LogEntry
+                                                , LogEntry(..)
                                                 , _TabTsEntry
                                                 , _Quotation
                                                 , _Dialogue
@@ -36,6 +37,7 @@ import           Parse.Types                    ( Entry(..)
 import           Prelude                 hiding ( read
                                                 , min
                                                 )
+import           System.Directory               ( getDirectoryContents )
 import           Test.Hspec
 import           Text.Megaparsec.Char           ( newline
                                                 , char
@@ -47,8 +49,29 @@ import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 
 
+-- FIXME
+curr = pt' (tupleRest (p)) indentedComparison
+ where
+  p = do
+    emptyLine
+    timestamp
+    symbol "dvs"
+    first <- defVersusFirst
+    second <- defVersusNext
+    return first
 
-curr = pt' (tupleRest logEntries) brokenQuote
+-- TODO FIXME the problem is that the initial indentation level is set by the second
+-- line of the first meaning (in this case that beginning with "proof,
+-- application, ...") and so the rest of the entry is found insufficiently
+-- indented.
+indentedComparison = [r|
+11:20:29 λ. dvs susceptible of : capable of, admitting; as in, "susceptible of
+                                 proof, application, division, consideration" 
+                --- vs ---
+                susceptible to : able to be affected by; impressible; sensitive to effect by; 
+                                as in "susceptible to disease, beguilement,  
+|]
+
 tlg = pt' (tupleRest p) testlog
   where p = do
               emptyLine
@@ -158,20 +181,12 @@ curr' = pt' (manyTill anySingle (satisfy (== '\n')) :: Parser String)  "aeou \n 
 
 
 contents = do
-  let fps =
-        [ "19.08.27"
-        , "19.11.26"
-        , "19.11.27"
-        , "19.12.03"
-        , "19.12.06"
-        , "19.12.10"
-        , "19.12.11"
-        , "19.12.14"
-        ]
+  fps <- drop 80 . take 120 . sortBy (flip compare) <$> getDirectoryContents
+    "/home/aporia/sputum/muse"
   traverse
     (\fp -> pt' logEntries' <=< readFile $ "/home/aporia/sputum/muse/" <> fp)
     fps
-    
+
 spec' :: Spec
 spec' = do
   let
@@ -377,8 +392,15 @@ spec = do
                   ]
   describe "quotation" $ do
     it "only one newline trailing attr"
-      $ pt logEntries' brokenQuote `shouldParse`
-                     [(0,TimeStamp {hr = 10, min = 24, sec = 2},Quotation "There was no treachery too base for the world to commit. She\nknew this. No happiness lasted." "In \"To the Lighthouse\", by Virginia Woolf" Nothing)]
+      $             pt logEntries' brokenQuote
+      `shouldParse` [ ( 0
+                      , TimeStamp {hr = 10, min = 24, sec = 2}
+                      , Quotation
+                        "There was no treachery too base for the world to commit. She\nknew this. No happiness lasted."
+                        "In \"To the Lighthouse\", by Virginia Woolf"
+                        Nothing
+                      )
+                    ]
     it "multiline, skip space, no attr, pg"
       $             pt quotation multiSkipNoAttrPg
       `shouldParse` Quotation "quote \n\nk\n\nbody \ncont." "" (Just 23)
@@ -432,6 +454,20 @@ spec = do
                       , ("text block 2\n\nand some more\n", 0)
                       , ("text block 3\nla di da"         , 0)
                       ]
+    it "defVersus with newline then note"
+      $             pt logEntries defVersusNote
+      `shouldParse` [ TabTsEntry
+                        ( 0
+                        , TimeStamp {hr = 14, min = 23, sec = 10}
+                        , Def
+                          (DefVersus
+                            "emulatable"
+                            "capable of being emulated"
+                            "emulable"
+                            "see above\nNote: According to google Ngrams, \"emulable\" occurs with\n(marginally) higher frequency. However, \"emulatable\" did not\nappear (with any significance) until around 1920."
+                          )
+                        )
+                    ]
     it "defVersus w multi paragraph second meaning"
       $             pt logEntries' defVersus0
       `shouldParse` [ ( 0

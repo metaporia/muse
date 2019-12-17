@@ -309,13 +309,13 @@ output
 -- should fail. comments must be indented. Otherwise used 'fencedTextBlock'
 commentTs :: String
 commentTs = [r|20:30:00 λ. commentary
-
+```
 I found myself extremely aggravated by the claustrophobia-inducing parental
 harassment Alan and Buddy's Father--with his anger--, and the Mother--with
 her hypochondriacal whining. This repressive treatment--nay, parental
 abuse--may have tapped long-suppressed issues of mine with authoritarian
 hyper-management.
-
+```
 |]
 
 commentTsOutput :: [LogEntry]
@@ -1174,4 +1174,65 @@ silentFailure = [r|
     DAD: No, just get it over with.
 
 8:35:27 λ. read "Great Expectations" by Charles Dickens
+|]
+
+defVersusNote = [r|14:23:10 λ. dvs emulatable: capable of being emulated
+                --- vs ---
+                emulable : see above
+
+                Note: According to google Ngrams, "emulable" occurs with
+                (marginally) higher frequency. However, "emulatable" did not
+                appear (with any significance) until around 1920.
+
+|]
+anotherDay = [r|
+17:12:30 λ. begin to read "The Literary Discipline" by John Erskine
+    17:12:49 λ. commentary
+
+        This note is a reminder to investigate Aristotle's Poetics, and the
+        authors George Santayana (who recieves Erskine's highest praise),
+        Frederick J.E. Woodbridge, and poet-critic (poet and critic, not critic
+        of poets, I surmise) George Edward Woodberry.
+
+        
+    17:14:27 λ. q
+
+        "To have a literary ambition as we contemplate another's misery, would
+        seem possible only for a fiend; ..."
+
+    17:22:22 λ. 
+    17:23:09 λ. commentary
+
+        Note: Homer laid down principles of comedy "by dramatizing the
+        ludicrous".
+
+        Think of all your favorite chortlers in Austen, Eliot, Forster,
+        consider the termagant, the harridan, the oppressively benevolent
+        maternal shrew, and realize they take on the aspect of humour not in
+        derision; they do not scathe; they proffer (with admitted hyperbole) 
+        the absurd with a straight face, leaving to you whether to rage,
+        sublimating your own Oedipal woes, to accuse of silliness, that highest
+        of calumnies, to sympathize with the most available proxy for your own
+        mother, aunt, or whomever, or to chucklingly appreciate their actions
+        in context, finding it simply to be amusing, of pleasure, a depiction
+        which though we find (to our immeasurable ease of mind) stripped of
+        judgement diminishes not at all as a vehicle for wisdom, an
+        inoculation against flash-pan prejudice; that is likewise no less fit 
+        to be a quintain in the image of the greater, inescapable absurdities
+        which our our own against which we might joust from the safety of an
+        armchair, and comforted by our liberty to skip the displeasing,
+        roll-back time where we wish to refresh faded recognition--how could we
+        but help find at least use and at most some ineffable artistic
+        upwelling of the soul in the opportunity afforded to us by such lovely
+        inscribed microcosms of the ridiculousness (not at all in the
+        pejorative) of everything human (with a remainder to stout to worry
+        over exclusion from consideration) to practice first reconciling
+        ourselves to ourselves and our/the other and second apprehending that
+        we needn't reconcile what no longer disturbs: excruciating confusion
+        becomes humorous absurdity which is finally transmuted into detached,
+        sagacious sympathy, which as a mere but thoroughly anticipated
+        side-effect produces laughter (or the soft exhalations with which we
+        make do in solitude).
+
+    17:23:56 λ. 
 |]

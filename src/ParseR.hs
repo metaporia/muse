@@ -362,6 +362,10 @@ defVersusNext = label "defVersusNext" $ do
   sum <$> count indent (1 <$ satisfy (== ' '))
   hw    <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
   ln1   <- line
+  -- FIXME curr fails here. Perhaps because 'indentedTextBlockUntil'' expects
+  -- indented text but counts the empty line as 0 spaces and fails?
+  -- YES
+  many (try emptyLine)
   mRest <- fmap fst <$> optional (try indentedTextBlockUntil')
   case mRest of
     Just mn -> return (hw, ln1 <> "\n" <> mn)
@@ -381,10 +385,10 @@ indentedTextBlockUntil' = do
        (fail "indentedTextBlockUntil': insufficient indentation")
   let
     lines = do
-      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n'))
+      line <- Nothing <$ terminalLine <|> Just <$> some (satisfy (/= '\n')) -- FIXME use 'many'
       case line of
         Just ln -> do
-          emptyLines <- concat <$> some (try (indentedEmptyLine indent))
+          emptyLines <- concat <$> some (try (indentedEmptyLine indent)) -- FIXME use 'many'
           rest       <-
             try (count indent (satisfy (== ' ')) *> fmap (emptyLines <>) lines)
               <|> pure ""
@@ -619,6 +623,9 @@ qItem = L.lexeme spaceWithoutNewline p
 
 
 pt p = flip runState (0, Nothing) . runParserT p ""
+
+parseLogEntries = pt logEntries
+
 
 pt' p input =
   let parse s = runState (runParserT p "" s) (0, Nothing)

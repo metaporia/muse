@@ -99,6 +99,7 @@ import           Parse.Types                    ( allDefVariants
                                                 )
 import           Parse
 import           Parse.Entry                    ( logEntries )
+import qualified ParseR
 import           CLI.Parser.Custom
 import           CLI.Parser.Types
 import           Prelude                 hiding ( init
@@ -128,6 +129,8 @@ import           System.Directory               ( createDirectoryIfMissing
 import           System.Environment             ( getEnv )
 import           System.Exit                    ( exitFailure )
 import           Text.Show.Pretty               ( pPrint )
+import           Text.Megaparsec                ( errorBundlePretty )
+import qualified Text.Megaparsec               as M
 import qualified Text.Trifecta                 as Tri
 
 version :: String
@@ -794,6 +797,93 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 --
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
+  fps <- sort <$> lsEntrySource mc
+  let
+    -- If we always cache (modified) parsed LogEntry groups then we need only
+    -- store last parse time. Then we select all logs modified since the last
+    -- parse and pass those into 'parseAndShowErrs' unless @ignoreCache ==
+    -- True@.
+    --
+    -- TODO Test that parse invocation with @ignoreCache == True@ i) reparses
+    -- all logs and ii) replaces the entire cache.
+    selectModified :: [FilePath] -> UTCTime -> IO [FilePath]
+    selectModified fps lastParsed =
+      let hasBeenModified :: FilePath -> IO Bool
+          hasBeenModified baseName = do
+            dateModified <-
+              getModificationTime $ T.unpack (entrySource mc) ++ baseName
+            return (dateModified > lastParsed)
+      in  filterM
+            (\fp ->
+              (&&) <$> hasBeenModified fp <*> return (isJust (pathToDay fp))
+            )
+            fps
+    parse :: String -> IO (String, Either String [LogEntry])
+    parse fp = do
+      eitherLogEntry <-
+        -- TODO (parser refactor) replace with
+        -- @
+        -- ParseR.parseLogEntries <$> readFile (T.unpack (entrySource mc) <> "/" <> fp)
+        -- @
+        showErr . Tri.parseByteString logEntries mempty <$> B.readFile
+          (T.unpack (entrySource mc) ++ "/" ++ fp)
+      return (fp, eitherLogEntry)
+    -- TODO group `logEntry`s by day for use with 'addDay'
+    parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
+    parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
+    showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
+    showOrCollect =
+      let sideBar = unlines . fmap ("> " ++) . lines
+      in
+        foldr
+          (\(fp, e) rest -> case e of
+            Left err -> if quiet
+              then rest
+              -- TODO (parser refactor) replace with
+              -- @
+              -- ParseR.errorBundlePretty err
+              -- @
+              else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
+            Right res -> do
+              when showDebug $ putStrLn $ "Success: " ++ fp
+              ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
+          )
+          (return [])
+  when quiet $ putStrLn "\nSuppressing entry parse error output"
+  runSqlite (home <> "/.muse/state/sqlite.db") $ do
+    -- FIXME remove before merging feature into master.
+    -- Migration should be performed manually on both test and "production"
+    -- databases
+    runMigration Sql.migrateAll
+    now          <- liftIO getCurrentTime
+    entriesByDay <- if ignoreCache
+      then liftIO $ parseAndShowErrs $ filter (isJust . pathToDay) fps
+      else do
+        lastParseTime <- fromMaybe now <$> Sql.getLastParseTime
+        liftIO $ selectModified fps lastParseTime >>= parseAndShowErrs
+    -- write to sqlite db
+    traverse_ (uncurry Sql.writeDay)
+      $ mapMaybe (\(a, b) -> (,) <$> pathToDay a <*> Just b) entriesByDay
+    -- /Always/ update cache: when ignoreCache is true, this will
+    -- overwrite the lot; but when false, will overwrite only the modified.
+    --
+    -- That is, ignoreCache only indicates whether to use the cache to speed up
+    -- parsing, not that we should omit to /update/ the cache.
+    liftIO $ traverse_
+      (\(fp, logs) ->
+        BL.writeFile (T.unpack (entryCache mc) ++ "/" ++ fp) (encode logs)
+      )
+      entriesByDay
+    -- update LastParse
+    -- FIXME LastParse only reflects the time of the last successful parses.
+    Sql.setLastParseTime now ignoreCache
+  return ()
+  -- read in log file names; parse 'em
+  --putStrLn $ show mc
+
+
+parseAllEntries' :: Bool -> Bool -> MuseConf -> IO ()
+parseAllEntries' quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
   let
     -- If we always cache (modified) parsed LogEntry groups then we need only

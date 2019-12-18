@@ -537,12 +537,13 @@ read :: Parser Entry
 read = label "read" $ do
   let quote = char '"'
   currentIndentLevel <- gets fst
-  unless
-    (currentIndentLevel == 0)
-    (  fail
-    $  "read: found read entry with non-zero indentation"
-    <> show currentIndentLevel
-    )
+  -- TODO decide on lovel enforcment
+  --unless
+  --  (currentIndentLevel == 0)
+  --  (  fail
+  --  $  "read: found read entry with non-zero indentation"
+  --  <> show currentIndentLevel
+  --  )
   try (symbol "read")
     <|> try (symbol "finish reading")
     <|> try (symbol "begin to read")

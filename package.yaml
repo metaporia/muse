@@ -31,7 +31,6 @@ dependencies:
 - criterion
 - directory
 - esqueleto
-- hspec
 - lens
 - megaparsec
 - monad-logger

@@ -13,15 +13,15 @@ module Helpers where
 
 import           Control.Applicative
 import           Data.Char                      ( isSpace )
-import           Data.List                      ( isPrefixOf
-                                                , dropWhileEnd
+import           Data.List                      ( dropWhileEnd
+                                                , isPrefixOf
                                                 )
 import qualified Data.Text                     as T
-import           Text.Show.Pretty
-import           System.IO                      ( stderr
+import           System.IO                      ( hPrint
                                                 , hPutStrLn
-                                                , hPrint
+                                                , stderr
                                                 )
+import           Text.Show.Pretty
 
 
 trim :: String -> String

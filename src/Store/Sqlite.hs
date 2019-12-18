@@ -18,8 +18,8 @@
 module Store.Sqlite where
 
 import           CLI.Parser.Types               ( BoolExpr
-                                                , interpretBoolExpr
                                                 , evalMapBoolExpr
+                                                , interpretBoolExpr
                                                 )
 import           Control.Monad                  ( join )
 import           Control.Monad.IO.Class         ( MonadIO
@@ -40,7 +40,7 @@ import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
                                                 )
 import qualified Data.Maybe                    as Maybe
-import Data.String (IsString)
+import           Data.String                    ( IsString )
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
 import qualified Data.Text.Lazy                as TL
@@ -67,7 +67,9 @@ import           Database.Persist.TH
 import           GHC.Generics            hiding ( from )
 import           Helpers
 import qualified Parse.Types                   as P
-import           Parse.Types             hiding ( DefQueryVariant(..), DefQuery(..))
+import           Parse.Types             hiding ( DefQuery(..)
+                                                , DefQueryVariant(..)
+                                                )
 import           Search
 import           Store                          ( Result(..) )
 import           Store.Sqlite.Types
@@ -912,7 +914,7 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::      -- Esqueleto query expr backend =>
+  ::       -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
@@ -989,7 +991,6 @@ applyBoolExprInSql
   -> SqlExpr (Value Bool)
 applyBoolExprInSql be rawJson =
   evalMapBoolExpr sqlPadStrSearch (&&.) (||.) (like rawJson . val) be
-
 
 -- Revision of 'DefSearch' to accomodate deferred string search type dispatch
 -- (prefix vs infix vs suffix).
@@ -1158,8 +1159,10 @@ selectDefs'
   -> Maybe (BoolExpr (StrSearch String))
   -> [P.DefQueryVariant]
   -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants = do
-  let querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
+selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
+  = do
+    let
+      querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
       dateConstraint defEntry =
         dateRangeConstraint DefEntryId DefEntryKey defEntry since before
       -- apply both headword and meaning 'BoolExpr's to a DefEntry's JSON-encoded
@@ -1173,70 +1176,75 @@ selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants 
       -- 'StrSearch's be infix.
       couldSatisfyDefSearch mHw mMn defJSON =
         maybe (val True) applied mHw &&. maybe (val True) applied mMn
-        where applied be = applyBoolExprInSql (fmap TL.pack . asInfixSearch <$> be) defJSON
-  if null authPreds && null titlePreds
-    then
-      select
-      $ from
-      $ \defEntry -> do
-          -- FIXME (optimization refactor) apply def variant predicates here
-          -- let defTag = defEntry  ^. DefEntryDefinitionTag
-          -- requires unifying Phrase vs DefEntry distinction. then it just
-          -- becomes the above code (convert variants to tags compare tags)
-          --
-          --let
-          --  toDefQueryVariant :: PhraseOrDef -> DefTag -> P.DefQueryVariant
-          --  toDefQueryVariant Phrase'     _      = P.Phrase'
-          --  toDefQueryVariant Definition' defTag = case defTag of
-          --    Headwords'  -> P.Defn'
-          --    Inline'     -> P.InlineDef'
-          --    Comparison' -> P.DefVersus'
+       where
+        applied be =
+          applyBoolExprInSql (fmap TL.pack . asInfixSearch <$> be) defJSON
+    if null authPreds && null titlePreds
+      then
+        select
+        $ from
+        $ \defEntry -> do
+            -- FIXME (optimization refactor) apply def variant predicates here
+            -- let defTag = defEntry  ^. DefEntryDefinitionTag
+            -- requires unifying Phrase vs DefEntry distinction. then it just
+            -- becomes the above code (convert variants to tags compare tags)
+            --
+            --let
+            --  toDefQueryVariant :: PhraseOrDef -> DefTag -> P.DefQueryVariant
+            --  toDefQueryVariant Phrase'     _      = P.Phrase'
+            --  toDefQueryVariant Definition' defTag = case defTag of
+            --    Headwords'  -> P.Defn'
+            --    Inline'     -> P.InlineDef'
+            --    Comparison' -> P.DefVersus'
 
-          --  -- WARNING: this will return true when given an empty list
-          --  variantConstraint
-          --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
-          let variantConstraint _      []       = val True
-              variantConstraint defTag variants = foldl'
-                (\res v -> (val v ==. defTag) ||. res)
-                (val True)
-                variants
+            --  -- WARNING: this will return true when given an empty list
+            --  variantConstraint
+            --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
+            let variantConstraint _      []       = val True
+                variantConstraint defTag variants = foldl'
+                  (\res v -> (val v ==. defTag) ||. res)
+                  (val True)
+                  variants
 
-          where_
-            (   dateConstraint defEntry
-            &&. couldSatisfyDefSearch hwBoolExpr
-                                      mnBoolExpr
-                                      (defEntry ^. DefEntryDefinitions)
-            -- FIXME (blocked on tag refactor) JANK WORKAROUND
-            &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
-                                  querysDefTags
+            where_
+              (   dateConstraint defEntry
+              &&. couldSatisfyDefSearch hwBoolExpr
+                                        mnBoolExpr
+                                        (defEntry ^. DefEntryDefinitions)
+              -- FIXME (blocked on tag refactor) JANK WORKAROUND
+              &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
+                                    querysDefTags
 
-            -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
-            -- a tag than a structural distinction
-            -- &&. (variantConstraint (defEntry ^. DefEntryPhraseOrDef)
-            --                       (defEntry ^. DefEntryDefinitionTag)
-            --                       defVariants
-            --    ) -- FIXME tag check here!
-                 -- - each entry has a json encoded tag in its definitions
-                 -- field (one of Inlines, Headwords, (the string "headwords"
-                 -- occurs more than once for def versus comparison entries)
-                 -- - and in the "phrase_or_def" field one of Definition' or
-                 -- Phrase'
-                 --
-                 -- we need a filter to take a list of DefQueryVariant
-                 -- ( Phrase' | Defn' | InlineDef' | DefVersus'),
-                 -- the entry's definition tag (Headwords' | Inline' | Comparison), and
-                 -- the entry's phrase_or_def (Phrase' | Definiton')
-            )
-          return defEntry
-    else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
-      on
-        (defEntry ^. DefEntryAttributionTag ==. just (readEntry ^. ReadEntryId))
-      where_
-        $ attributionConstraint (just $ readEntry ^. ReadEntryAuthor) authPreds
-        &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
-                                  titlePreds
-        &&. dateConstraint defEntry
-      return defEntry
+              -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
+              -- a tag than a structural distinction
+              -- &&. (variantConstraint (defEntry ^. DefEntryPhraseOrDef)
+              --                       (defEntry ^. DefEntryDefinitionTag)
+              --                       defVariants
+              --    ) -- FIXME tag check here!
+                   -- - each entry has a json encoded tag in its definitions
+                   -- field (one of Inlines, Headwords, (the string "headwords"
+                   -- occurs more than once for def versus comparison entries)
+                   -- - and in the "phrase_or_def" field one of Definition' or
+                   -- Phrase'
+                   --
+                   -- we need a filter to take a list of DefQueryVariant
+                   -- ( Phrase' | Defn' | InlineDef' | DefVersus'),
+                   -- the entry's definition tag (Headwords' | Inline' | Comparison), and
+                   -- the entry's phrase_or_def (Phrase' | Definiton')
+              )
+            return defEntry
+      else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
+        on
+          (defEntry ^. DefEntryAttributionTag ==. just
+            (readEntry ^. ReadEntryId)
+          )
+        where_
+          $   attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
+                                    authPreds
+          &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
+                                    titlePreds
+          &&. dateConstraint defEntry
+        return defEntry
 
 
 
@@ -1343,7 +1351,7 @@ filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
 
 
 filterDumps
-  ::      -- MonadIO m =>
+  ::       -- MonadIO m =>
      Day -> Day -> [String] -> DB m [String]
 filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump storage
 

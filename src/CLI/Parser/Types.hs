@@ -9,11 +9,11 @@ module CLI.Parser.Types
 where
 
 import           Control.Applicative
+import           Control.Monad.Combinators.Expr
 import           Data.Char                      ( isAlpha )
 import           Data.Void                      ( Void )
 import           Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer    as L
-import           Control.Monad.Combinators.Expr
 
 type Parser = Parsec Void String
 

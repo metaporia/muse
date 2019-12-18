@@ -14,12 +14,12 @@
 -----------------------------------------------------------------------------
 module Render where
 
-import           Data.Char                      ( toUpper
-                                                , isSpace
+import           Data.Char                      ( isSpace
+                                                , toUpper
                                                 )
 import           Data.Foldable                  ( traverse_ )
-import           Data.List                      ( intercalate
-                                                , dropWhileEnd
+import           Data.List                      ( dropWhileEnd
+                                                , intercalate
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T

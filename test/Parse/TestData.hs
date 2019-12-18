@@ -3,10 +3,10 @@
 
 module Parse.TestData where
 
+import           Data.Text                      ( Text )
 import           Parse.Types
 import           Prelude                 hiding ( min )
 import           Text.RawString.QQ
-import           Data.Text (Text)
 
 tNoValidPrefix  :: Text
 tNoValidPrefix = [r|

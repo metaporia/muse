@@ -64,8 +64,8 @@ module Lib
   )
 where
 
-import           Control.Lens                   ( over
-                                                , _Left
+import           Control.Lens                   ( _Left
+                                                , over
                                                 )
 import           Control.Monad                  ( void )
 import           Control.Monad.State
@@ -788,8 +788,7 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
             fps
     --parse :: String -> IO (String, Either (ErrorBundle ...) [LogEntry])
     parse fp = do
-      eitherLogEntry <-
-                        Parse.parseLogEntries
+      eitherLogEntry <- Parse.parseLogEntries
         <$> T.readFile (T.unpack (entrySource mc) <> "/" <> fp)
       return (fp, fst eitherLogEntry)
     parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]

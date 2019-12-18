@@ -15,31 +15,37 @@
 -- arguments.
 --
 -----------------------------------------------------------------------------
-module CLI.Parser.Custom (searchArgument, pathToDay, reldur, caretedPreds) where
+module CLI.Parser.Custom
+  ( searchArgument
+  , pathToDay
+  , reldur
+  , caretedPreds
+  )
+where
 
 import           CLI.Parser.Types
 import           Control.Applicative
-import           Control.Monad                  ( join )
-import           Control.Lens                   ( preview
-                                                , over
+import           Control.Lens                   ( _Left
                                                 , _Right
-                                                , _Left
+                                                , over
+                                                , preview
                                                 )
+import           Control.Monad                  ( join )
 import           Data.Bifunctor                 ( bimap )
 import           Data.Maybe                     ( isJust )
 import           Data.Time                      ( Day
                                                 , fromGregorianValid
                                                 )
 import           Data.Void                      ( Void )
+import           Parse                   hiding ( Parser )
+import qualified Parse
 import           Parse.Types                    ( DefQueryVariant(..)
                                                 , RelDur(..)
                                                 )
-import           Parse                  hiding ( Parser )
-import qualified Parse
+import           Store.Sqlite                   ( StrSearch(..) )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
-import           Store.Sqlite                   ( StrSearch(..) )
 
 type Parser = Parsec Void String
 
@@ -108,9 +114,9 @@ searchArgument =
 searchVariant :: Parser DefQueryVariant
 searchVariant =
   try (DefVersus' <$ symbol "dvs")
-      <|> try (Defn' <$ symbol "d")
-      <|> (InlineDef' <$ symbol "inline")
-      <|> try (Phrase' <$ symbol "p")
+    <|> try (Defn' <$ symbol "d")
+    <|> (InlineDef' <$ symbol "inline")
+    <|> try (Phrase' <$ symbol "p")
 
 data DefSearchInput
   = DefPred (Maybe (String -> Bool))

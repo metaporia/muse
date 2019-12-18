@@ -11,6 +11,7 @@
 -----------------------------------------------------------------------------
 module StoreSpec where
 
+import           CLI.Parser.Custom              ( pathToDay )
 import           Control.Exception              ( bracket )
 import           Control.Monad                  ( (>=>)
                                                 , void
@@ -36,7 +37,6 @@ import           Prelude                 hiding ( min
                                                 , reads
                                                 )
 import           Render
-import           CLI.Parser.Custom              ( pathToDay )
 import           Store                   hiding ( Null )
 import           Store.Render
 import qualified Store.Sqlite                  as Sql

@@ -24,18 +24,18 @@ module Parse where
 import           Control.Applicative     hiding ( many
                                                 , some
                                                 )
-import           Control.Lens                   ( over
-                                                , _1
+import           Control.Lens                   ( _1
                                                 , _2
+                                                , over
                                                 )
-import           Control.Monad                  ( void
-                                                , unless
+import           Control.Monad                  ( unless
+                                                , void
                                                 , when
                                                 )
 import           Control.Monad.State            ( State
-                                                , runState
-                                                , modify
                                                 , gets
+                                                , modify
+                                                , runState
                                                 )
 import           Data.Char                      ( digitToInt )
 import           Data.Maybe                     ( fromMaybe )
@@ -43,8 +43,9 @@ import           Data.Semigroup                 ( (<>) )
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
 import           Data.Void                      ( Void )
-import           Parse.Types                    ( Entry(..)
-                                                , DefQuery(..)
+import           Debug.Trace                    ( trace )
+import           Parse.Types                    ( DefQuery(..)
+                                                , Entry(..)
                                                 , LogEntry(..)
                                                 , PageNum(..)
                                                 , Phrase(..)
@@ -54,10 +55,9 @@ import           Prelude                 hiding ( read )
 import           Text.Megaparsec         hiding ( State )
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
+import           Text.Megaparsec.Debug          ( dbg )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Megaparsec.Debug          ( dbg )
-import           Debug.Trace                    ( trace )
 
 -- TODO test compliance:
 -- - Dump handling (as discard)
@@ -85,9 +85,11 @@ logEntry = entry <* many (try emptyLine)
   entry = do
     indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
     ts          <- timestamp
-    mLastTs <- gets snd
+    mLastTs     <- gets snd
     case mLastTs of
-      Just lastTs -> unless (lastTs < ts) (fail "logEntry: found duplicate or non-ascending timestamps")
+      Just lastTs -> unless
+        (lastTs < ts)
+        (fail "logEntry: found duplicate or non-ascending timestamps")
       Nothing -> pure ()
     --dbg ("updateIndentation " <> show indentLevel) $
     updateIndentation indentLevel
@@ -253,10 +255,12 @@ phrase = do
 -- 'DefVersus').
 definition :: Parser Entry
 definition = label "definition" $ do
-  let dvs     = symbol "dvs" *> defVersus'
-      dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
-      inline  = dPrefix *> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
-      hws     = dPrefix *> (uncurry Defn <$> headwords)
+  let
+    dvs     = symbol "dvs" *> defVersus'
+    dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+    inline =
+      dPrefix *> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
+    hws = dPrefix *> (uncurry Defn <$> headwords)
   fmap Def $ try dvs <|> try inline <|> hws
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
@@ -320,7 +324,8 @@ inlineMeaning inDefComparison = label "inlineDef" $ do
     )
   return
     ( headword
-    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
+    , meaningLine1
+      <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
     )
 
 defVersus' :: Parser DefQuery
@@ -362,7 +367,8 @@ defVersusFirst = label "defVersusFirst" $ do
     )
   return
     ( headword
-    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
+    , meaningLine1
+      <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
     )
   --meaning <- _ --
 
@@ -373,8 +379,8 @@ defVersusNext = label "defVersusNext" $ do
       line      = takeWhile1P Nothing (/= '\n') <* newline
   indent <- gets fst
   sum <$> count indent (1 <$ satisfy (== ' '))
-  hw    <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
-  ln1   <- line
+  hw  <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
+  ln1 <- line
   -- FIXME curr fails here. Perhaps because 'indentedTextBlockUntil'' expects
   -- indented text but counts the empty line as 0 spaces and fails?
   -- YES
@@ -427,7 +433,8 @@ defVersus :: Parser DefQuery
 defVersus = do
   xs <- count 2 (inlineMeaning True)
   case xs of
-    ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
+    ((hw, mn) : [(hw', mn')]) ->
+      return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
     _ -> fail "defVersus: `count 2` succeeded but did not parse two elements"
 
 
@@ -506,17 +513,18 @@ quotation = label "quotation" $ do
 -- FIXME proper tab handling. Debar them or process them correctly.
 quoteContent :: Parser (Text, Int)
 quoteContent = do
-  let isDelimiter x = x == '\n' || x == '"'
-      lines indent = do
-        lineContent  <- takeWhileP (Just "line content") (not . isDelimiter)
-        terminalChar <- satisfy isDelimiter
-        case terminalChar of
-          '\n' -> do
-            emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
-            count indent (satisfy isTabOrSpace)
-            ((emptyLines <> lineContent <> "\n") <>) <$> lines indent
-          '"' -> return lineContent
-          _   -> error "expected newline or double quote"
+  let
+    isDelimiter x = x == '\n' || x == '"'
+    lines indent = do
+      lineContent  <- takeWhileP (Just "line content") (not . isDelimiter)
+      terminalChar <- satisfy isDelimiter
+      case terminalChar of
+        '\n' -> do
+          emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
+          count indent (satisfy isTabOrSpace)
+          ((emptyLines <> lineContent <> "\n") <>) <$> lines indent
+        '"' -> return lineContent
+        _   -> error "expected newline or double quote"
   -- N.B. assumes spaces
   indentLevel <-
     sum <$> manyTill (1 <$ satisfy (== ' ')) (char '"') <?> "leading whitespace"
@@ -614,9 +622,9 @@ indentedEmptyLine :: Int -> Parser Text
 indentedEmptyLine indentLevel = trim indentLevel <$> emptyLine
  where
   trim _ "" = ""
-  trim 0 x = x
-  trim n x | T.head x == ' '  = trim (n - 1) (T.drop 1 x)
-           | otherwise = x
+  trim 0 x  = x
+  trim n x | T.head x == ' ' = trim (n - 1) (T.drop 1 x)
+           | otherwise       = x
 
 isTabOrSpace :: Char -> Bool
 isTabOrSpace ' '  = True

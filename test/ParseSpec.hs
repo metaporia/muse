@@ -3,18 +3,18 @@
 
 module ParseSpec where
 
-import           Control.Lens                   ( (^?)
-                                                , (%~)
-                                                , _3
+import           Control.Lens                   ( (%~)
+                                                , (^?)
                                                 , _1
+                                                , _3
                                                 , each
                                                 , over
                                                 )
 import           Control.Monad                  ( (<=<) )
 import           Control.Monad.IO.Class         ( liftIO )
 import           Control.Monad.State            ( State
-                                                , runState
                                                 , gets
+                                                , runState
                                                 )
 import           Data.Function                  ( (&) )
 import           Data.List                      ( sortBy )
@@ -24,30 +24,30 @@ import           Data.Maybe                     ( fromMaybe
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Parse                  hiding ( pt
-                                                , curr
+import           Parse                   hiding ( curr
+                                                , pt
                                                 )
 import           Parse.TestData
-import           Parse.Types                    ( Entry(..)
-                                                , DefQuery(..)
+import           Parse.Types                    ( DefQuery(..)
+                                                , Entry(..)
+                                                , LogEntry(..)
                                                 , PageNum(..)
                                                 , Phrase(..)
                                                 , TimeStamp(..)
-                                                , LogEntry(..)
-                                                , _TabTsEntry
-                                                , _Quotation
                                                 , _Dialogue
+                                                , _Quotation
+                                                , _TabTsEntry
                                                 )
-import           Prelude                 hiding ( read
-                                                , min
+import           Prelude                 hiding ( min
+                                                , read
                                                 )
 import           System.Directory               ( getDirectoryContents )
 import           Test.Hspec
-import           Text.Megaparsec.Char           ( newline
-                                                , char
-                                                )
 import           Test.Hspec.Megaparsec
 import           Text.Megaparsec
+import           Text.Megaparsec.Char           ( char
+                                                , newline
+                                                )
 import           Text.Megaparsec.Debug          ( dbg )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )

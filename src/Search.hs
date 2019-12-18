@@ -16,7 +16,6 @@ module Search
   ( isTopLevel
   , isRead
   , isIndentedTo
-  , pathToDay
   )
 where
 
@@ -31,8 +30,6 @@ import           Data.Maybe                     ( isJust )
 import           Data.Time
 import           Helpers
 import           Parse.Types
-import           Parse
-import           Parse.Entry
 import           Prelude                 hiding ( log
                                                 , lookup
                                                 , min
@@ -51,10 +48,6 @@ data SearchResult
   | Null'
   | Entry' String -- ?
   deriving (Eq, Show)
-
--- | Parse basename /not/ absolute path into 'Day'.
-pathToDay :: FilePath -> Maybe Day
-pathToDay = join . preview _Right . showErr . parse day'
 
 -- auto-complete
 -- Qs:

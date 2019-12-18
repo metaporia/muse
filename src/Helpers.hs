@@ -12,20 +12,23 @@
 module Helpers where
 
 import           Control.Applicative
-import           Data.List                      ( isPrefixOf )
+import           Data.Char                      ( isSpace )
+import           Data.List                      ( isPrefixOf
+                                                , dropWhileEnd
+                                                )
 import qualified Data.Text                     as T
 import           Text.Show.Pretty
-import           Text.Trifecta           hiding ( Rendering
-                                                , Span
-                                                , render
-                                                , rendered
-                                                )
-import qualified Text.Trifecta.Result          as Tri
 import           System.IO                      ( stderr
                                                 , hPutStrLn
                                                 , hPrint
                                                 )
 
+
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
+
+trim' :: String -> String
+trim' = unwords . fmap trim . lines
 -- | Print 'show' output to stderr.
 print' :: Show a => a -> IO ()
 print' = hPrint stderr
@@ -60,24 +63,6 @@ maybeToEither :: Maybe a -> Either () a
 maybeToEither (Just a) = Right a
 maybeToEither Nothing  = Left ()
 
-toMaybe :: Tri.Result a -> Maybe a
-toMaybe (Tri.Success a) = Just a
-toMaybe (Tri.Failure _) = Nothing
-
--- | Show `ErrInfo`
-showErr :: Tri.Result a -> Either String a
-showErr (Tri.Success a              ) = Right a
-showErr (Tri.Failure (ErrInfo doc _)) = Left $ show doc
-
-periodSep :: Parser String -> Parser [String]
-periodSep p = p `sepBy` symbol "."
-
-skipOptDot :: Parser ()
-skipOptDot = skipOptional (char '.')
-
-skipEOL :: Parser ()
-skipEOL = skipMany (oneOf "\n")
-
 isIndented :: String -> Bool
 isIndented = isPrefixOf "           "
 
@@ -86,9 +71,6 @@ collectIndented :: [String] -> ([String], [String]) -- (rst, collected)
 collectIndented [] = ([], [])
 collectIndented (ln : lns) | isIndented ln = (ln :) <$> collectIndented lns
                            | otherwise     = (ln : lns, [])
-
-tilEOL :: Parser String
-tilEOL = skipEOL >> some (noneOf "\n")
 
 data MediaType
   = Play
@@ -111,11 +93,6 @@ data Written =
         (Maybe ISBN)
   deriving (Eq, Show)
 
-
---type PgNum = Integer
--- ISBN for pgNumbers?
-parse :: Parser a -> String -> Result a
-parse p = parseString p mempty
 
 show' :: Show a => a -> IO ()
 show' = pPrint

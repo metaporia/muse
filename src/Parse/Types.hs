@@ -156,6 +156,16 @@ instance ToJSON TimeStamp where
 
 instance FromJSON TimeStamp
 
+-- | Relative duration, conversion from which expects rollover, not clipping,
+-- as this is meant as a container for user-entered years, months, and days.
+-- Thus, `RelDur 1000 1000 1000` ought to be a valid input to whichever
+-- conversion function is used.
+data RelDur = RelDur
+  { yy :: Integer
+  , mm :: Integer
+  , dd :: Integer
+  } deriving (Eq, Show)
+
 
 
 makePrisms ''Entry

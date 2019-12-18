@@ -20,7 +20,7 @@ import           Data.List                      ( intercalate )
 import qualified Data.Text                     as T
 import           Data.Text.Metrics              ( levenshtein )
 import           Parse.Types                    ( Entry(Read) )
-import           Parse                          ( trim )
+import           Helpers                         ( trim )
 
 type Tag = String
 

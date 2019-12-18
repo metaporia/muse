@@ -17,6 +17,13 @@ module Store.SqliteSpec where
 
 
 import           CLI.Parser.Types               ( BoolExpr(..) )
+import           Control.Lens                   ( (^?)
+                                                , (^.)
+                                                , _1
+                                                , over
+                                                , preview
+                                                , _Right
+                                                )
 import           Control.Monad                  ( unless
                                                 , when
                                                 )
@@ -33,6 +40,7 @@ import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
 import           Data.Semigroup                 ( (<>) )
+import qualified Data.Text.IO                  as T
 import           Data.Time                      ( UTCTime(..)
                                                 , addDays
                                                 )
@@ -41,17 +49,14 @@ import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Helpers
-import           Parse.Entry                    ( logEntries
-                                                , logEntryPassNewestTimeStamp
-                                                , logEntrySquawk
-                                                , statefulValidatedMany
-                                                )
+import           Parse                          ( parseLogEntries )
 import           Parse.Types
 import qualified Parse.Types                   as P
 import           Render                         ( showAll )
 import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
 import           Test.Hspec              hiding ( before )
+import           Test.Hspec.Megaparsec          ( shouldParse )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Time
@@ -76,7 +81,7 @@ spec = do
   let filterQuotesSetup = setup (`writeDay` demoLogEntries)
       defVarSetup       = setup
         (\today -> do
-          let entries = fromJust $ toMaybe $ parse logEntries defVar
+          let entries = fromJust $ (parseLogEntries defVar) ^. _1 ^? _Right
           writeDay today entries
         )
 
@@ -161,8 +166,8 @@ getDateRange = do
   return (since, before)
 
 setup'' file = setup $ \today -> do
-  exampleMuseLog <- liftIO $ readFile file
-  let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
+  exampleMuseLog <- liftIO $ T.readFile file
+  let entries = fromJust $ parseLogEntries exampleMuseLog ^. _1 ^? _Right
   partitionEithers <$> writeDay today entries
 
 dispatchSearch'
@@ -829,17 +834,17 @@ demoLogEntries
     ]
 
 
-curr :: IO ()
-curr = runSqlite "test1.db" $ do
-  runMigration migrateAll
-  today <- liftIO $ utctDay <$> getCurrentTime
-  let -- logEntries :: _
-      logEntries' = statefulValidatedMany Nothing
-                                          logEntrySquawk
-                                          logEntryPassNewestTimeStamp
-  liftIO $ pPrint $ parse logEntries' reallyBroken
-  --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
-  return ()
+--curr :: IO ()
+--curr = runSqlite "test1.db" $ do
+--  runMigration migrateAll
+--  today <- liftIO $ utctDay <$> getCurrentTime
+--  let -- logEntries :: _
+--      logEntries' = statefulValidatedMany Nothing
+--                                          logEntrySquawk
+--                                          logEntryPassNewestTimeStamp
+--  liftIO $ pPrint $ parse logEntries' reallyBroken
+--  --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
+--  return ()
 
 reallyBroken = [r|
 09:20:55 λ. read "Dead Souls", by Gogol

@@ -31,14 +31,12 @@ import           Data.Time
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Helpers
-import           Parse
-import           Parse.Entry
 import           Parse.Types
 import           Prelude                 hiding ( min
                                                 , reads
                                                 )
 import           Render
-import           Search                         ( pathToDay )
+import           CLI.Parser.Custom              ( pathToDay )
 import           Store                   hiding ( Null )
 import           Store.Render
 import qualified Store.Sqlite                  as Sql
@@ -46,9 +44,6 @@ import           Store.Types                    ( AttrTag(..) )
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Trifecta           hiding ( render )
-import qualified Text.Trifecta                 as Tri
-import qualified Text.Trifecta.Result          as Tri
 import           Time
 
 test = hspec spec

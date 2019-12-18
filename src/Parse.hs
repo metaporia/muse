@@ -1,7 +1,8 @@
-{-# LANGUAGE InstanceSigs, OverloadedStrings, GADTs, QuasiQuotes,
-  ScopedTypeVariables, FlexibleInstances, DeriveGeneric,
-  TemplateHaskell #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
@@ -13,692 +14,641 @@
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- This module provides atomic parsers, as it were, for "Parsers.Entry".
+-- Rewrite of 'Parse' and 'Parse.Entry'.
+-- Contains non-greedy entry body parsers.
 --
--- Note 'toDefVersus', 'inlineMeaning', and
 -----------------------------------------------------------------------------
 module Parse where
 
-import           Control.Applicative
-import           Control.Monad                  ( void )
-import           Data.Aeson              hiding ( Null
-                                                , (<?>)
+
+import           Control.Applicative     hiding ( many
+                                                , some
                                                 )
-import           Data.Char                      ( isSpace )
-import           Data.List                      ( dropWhile
-                                                , dropWhileEnd
-                                                , foldl'
+import           Control.Lens                   ( over
+                                                , _1
+                                                , _2
                                                 )
-import           Data.Time
-import           GHC.Generics            hiding ( Infix
-                                                , Prefix
+import           Control.Monad                  ( void
+                                                , unless
+                                                , when
                                                 )
-import           Helpers
-import           Parse.Types
-import           Prelude                 hiding ( min
-                                                , quot
+import           Control.Monad.State            ( State
+                                                , runState
+                                                , modify
+                                                , gets
                                                 )
-import           Text.Parser.LookAhead
+import           Data.Char                      ( digitToInt )
+import           Data.Maybe                     ( fromMaybe )
+import           Data.Semigroup                 ( (<>) )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
+import           Data.Void                      ( Void )
+import           Parse.Types                    ( Entry(..)
+                                                , DefQuery(..)
+                                                , LogEntry(..)
+                                                , PageNum(..)
+                                                , Phrase(..)
+                                                , TimeStamp(..)
+                                                )
+import           Prelude                 hiding ( read )
+import           Text.Megaparsec         hiding ( State )
+import           Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer    as L
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Trifecta           hiding ( Rendering
-                                                , Span
-                                                )
--- NB:  See ~/hs-note/src/Parse.hs for trifecta examples.
--- N.B. ALL PARSERS must clean up after themseves as in `p <* entryBody <* many newlines`
--- | TODO: triage TODOs!!!!!
---
--- ▣  from [r|hh:mm:ss λ.|] to TimeStamp
---
--- ▣  from [r| d <def1>[, <def2>, ..., <defN>\n|] to [Definition]
---    where a <def> is "<word> [: <meaning>]" (the brackets '[' and ']'
---    indicate that the meaning, mapping is optional. The headword, <word>, is
---    not.
---
--- ▣  from
---
--- [r| dvs <def1>
---         --- vs ---
---         <def2> |] to  [DefVs]
---
--- ▣  (!) from, e.g., [| read "Title", by Author Name\n|] to (Title, Author)
---
--- ▣  quotations
---
--- ▣  strip newlines from quotation bodies
---
--- ▣  from "(commentary | synthesis of <title>, by <author>"
---    N.B.: optionally consume attribution info, but prefer to depend upon
---
--- ▣  deprecate comma before <auth> attribution
---
--- ▣  page numbers, viz., p<num> | s<num> | e<num> | f<num> (total pagecount) | d<num> <word>
---
--- ▣  ignore indentation preserving/setting timestamps (see `Entry::Null`)
---
--- ▣  dump syntax: (include null-timestamp, perhaps "00:00:00" ?) decide whether to ignore
---    or ban elipsis for untimestamped entries
---  [r|...
---     [<abbr-ts>] - <activity>
---     ...
---   |]
---   - expansion syntax for, e.g., "read ("A", "B", "C"), by <auth>" where the
---   <auth> attribution ditributes over the titles?
---   - first pass will merely collect the string surrounded by ellipses
--- ▣  from "q<pgNum> \"<quotation>\"
---
--- ▣  (!!! BLOCKING CLI) tag flattened entries with author, title info inside a structure something
---    like : `(TagDb :: (Tag, [Ts]), [LogEntry])`; where tag maps are fragmented
---    by day, or some other small unit
---
--- ▣  add pretty show functions for `LogEntry` w word wrap for quotes, etc.
---
--- ▣  (!!!) add "phrase <phrase>" single line entry variant to capture, e.g.,
---    C. Brontë's "ever and anon" and other choice collocations (like Hailey's
---    "the exhaust of your rage"!)
---
--- ▣  parse "dialogue"  of the form:
---    > dialogue
---    >
---    > <character>: <paragraph>
---    >
---    > <character>: <paragraph>
---    (and so on; consume half of or arbitrarily many character-attributed lines)
---
--- □  fail (per file) on an entry without a valid prefix
---
--- □  (!!) ignore trailing comma in 'Defn'
---
--- □  (!!) allow empty quote body
---
--- □  (!!) (hard) consume rest of log loudly; a.t.m. when, say, the quote parser
---    fails, as above with a pair of empty quotes, do not silently consume,
---    discard the rest of the log file if/when it's easily determined whether
---    there are further entries.
---
---
--- □  add CLI option to suppress `Read` entry output (see `guardStrSearch` for
---    control point
---
--- □  add def/quot/title prefix/infix/suffix search
---    - search quote attributions w/ title & author search strings
---
--- □  ignore all meta log info, e.g., containing:
---    - "muse"
---    - "muse-pre"
---    - "muse-interim"
---
--- □  improve error messages
---
--- □  (!!!) parse n.b.s after all entry types
---    from "(note | N.B.)", containing some specialization
---    grouping of (log) entries by title.
---
---    Example note at the end of a def. needs label; one of: "N.B.", "ref",
---    etc., or quotation (perhaps add to Quotation a "clarificatory" bool?)
---  [r| 19:32:42 λ. d adverse, averse
---
---    "Men have an aversion to what breaks in upon their habits; a reluctance and
---    repugnance to what crosses their will; a disgust at what offends their
---    sensibilities; and are often governed by antipathies for which they can
---    give no good reason." - See {Dislike}
---  |]
---
--- □  finish multiple books at once?
---
--- □  parse "read (book | article | play ) <title>, by <author>" to specify media
---    type; default to "book"?
---    watch [(tv | movie)] <title>[, with <cast-names>, ...,]
---
--- □  (?) chapter numbers, for instance, "ch <num"
---
--- □  add "research" keyword?
---
--- □  add citation/external reference entry type, as in, "see <ref>", "see @<link>"
---
--- □  (unprefixed?) life log entries
---
---    □  fix the unprefixed
---
---    □  parse "do <act>"
---
---    □  "distract <activity>" (meaningful only when nested inside "do[: ]");
---       support list syntax (semicolons or bullets?)
---
---    □  custom keywords for frequent actions, e.g., "hap", "walk", "coffee",
---       "eat (breakfast | lunch | dinner | snack) <food-desc>"
---
---    □  closing timestamp with "done ..."?
---
--- □  add comment syntax ("//" | "#" | "--" | "/* ... */") ? pick a few;
---    - distinguish between syntaxes, collect?
---    - where are comments permitted? end of line, dedicated line, or both?
---
--- □  (!) factor `entryBody` and `newline` discardment out of entry variant parsers
---    and into `entry` (see `emptyLines`)
---    BLOCKED: `entryBody` can't be factored out a.t.m.
-todo = undefined
+import           Text.Megaparsec.Debug          ( dbg )
+import           Debug.Trace                    ( trace )
+
+-- TODO test compliance:
+-- - Dump handling (as discard)
+-- - indentation conversion:
+--     - ban tabs
+--     - count spaces
+--     - update attribution grouping to divide indentation by 4 (convert to
+--       tabs) or group more finely by space-based indentation.
+-- -
+
+---------------
+-- LOG ENTRY --
+---------------
+
+--logEntries = fmap TabTsEntry <$> logEntries'
+logEntries = many (try emptyLine) *> some logEntry' <* eof
+ where
+  logEntry' = (try dump <|> TabTsEntry <$> logEntry) <* many (try emptyLine)
+
+logEntries' = many (try emptyLine) *> some logEntry <* eof
+
+logEntry :: Parser (Int, TimeStamp, Entry)
+logEntry = entry <* many (try emptyLine)
+ where
+  entry = do
+    indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+    ts          <- timestamp
+    mLastTs <- gets snd
+    case mLastTs of
+      Just lastTs -> unless (lastTs < ts) (fail "logEntry: found duplicate or non-ascending timestamps")
+      Nothing -> pure ()
+    --dbg ("updateIndentation " <> show indentLevel) $
+    updateIndentation indentLevel
+    entry <-
+      try read
+      <|> try commentary
+      <|> try dialogue
+      <|> try quotation
+      <|> try definition
+      <|> try pageNum
+      <|> try phrase
+      <|> nullEntry
+
+    --dbg (show indentLevel <> ": " <> show ts) (pure ())
+    updateTimeStamp ts
+    return (indentLevel, ts, entry)
+
+updateTimeStamp :: TimeStamp -> Parser ()
+updateTimeStamp ts = modify $ \(a, _) -> (a, Just ts)
+
+updateIndentation :: Int -> Parser ()
+updateIndentation i = --dbg ("updateidnt " <> show i) $
+  modify $ \(_, ts) -> (i, ts)
+
+nullEntry :: Parser Entry
+nullEntry = Null <$ many (satisfy (== ' ')) <* newline
 
 
-skipOptColon :: Parser ()
-skipOptColon = skipOptional (char ':')
+---------------------------
+-- Commentary & Dialogue --
+---------------------------
 
-twoDigit :: Parser Int
-twoDigit = read <$> count 2 digit <* skipOptColon
-
--- | Collects timestamp of the form "14:19:00 λ. ".
+-- TODO add multiline string literal syntax, e.g., use ``` to delimit raw
+-- strings. Otherwise, the commentary must be indented, which messes up the
+-- line wrap.
 --
--- N.B. Collect tabs before invoking `timestapm` as it will greedily consume
--- preceeding whitespace.
+-- FIXME indentation-sensitive comment parsing will break, e.g., that
+-- inline-markdown comment on /Carry On, Jeeves/.
+commentaryPrefix :: Parser Text
+commentaryPrefix = cp <?> "commentary prefix"
+  where cp = try (symbol "commentary") <|> symbol "synthesis"
+
+commentary :: Parser Entry
+commentary = textBlockEntry commentaryPrefix Commentary <?> "commentary"
+
+dialogue :: Parser Entry
+dialogue = textBlockEntry dialoguePrefix Dialogue <?> "dialogue"
+
+dialoguePrefix :: Parser Text
+dialoguePrefix = cp <?> "dialogue prefix" where cp = symbol "dialogue"
+
+
+-- | Parameterizes construction of the two isomorphic 'Entry' variants,
+-- 'Commentary' and 'Dialogue'.
+textBlockEntry :: Parser Text -> (String -> Entry) -> Parser Entry
+textBlockEntry prefix toEntry = do
+  prefix
+  many (try emptyLine)
+  toEntry . T.unpack <$> textBlock
+
+
+-- | Parse a text block. A text block may be either indented more than its
+-- parent timestamp or fenced with triple-backticks (```).
+--
+-- Note that this is /not/ backwards-compatible and that older log files will
+-- have to be corrected. My hope is that they will be rejected by the new
+-- parser loudly and with precision, so ensuring compliance  with the new
+-- spec shouldn't be too much work.
+textBlock = try fencedTextBlock <|> fst <$> indentedTextBlock
+
+-- | Parses indented blocks of text. It will succeed with whatever it has when
+-- it first encounters insufficiently indented input, so its well-formedness
+-- may be reported as a failure the next applied parser.
+--
+-- Newlines after the block are discarded.
+indentedTextBlock :: Parser (Text, Int)
+indentedTextBlock = do
+  let
+    lines indent = do
+      line       <- takeWhileP Nothing (/= '\n')
+      emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
+      rest       <-
+        try
+            (  count indent (satisfy (== ' '))
+            *> fmap (emptyLines <>) (lines indent)
+            )
+          <|> pure ""
+      return $ line <> rest
+  indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  minIndent   <- gets fst
+  unless (minIndent < indentLevel)
+         (fail "indentedTextBlock: insufficient indentation")
+  --(  dbg
+  --  $  "indentedTextBlock: indent lower bound = "
+  --  <> show minIndent
+  --  <> " actual indent = "
+  --  <> show indentLevel
+  --  )
+  --  (pure ())
+  --dbg ("tb: " <> show indentLevel) (pure ())
+  (, indentLevel) <$> lines indentLevel
+
+
+-- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
+-- should expect no leading whitespace and to consume the rest of the line
+-- (newline included) but none of the proceeding line.
+indentedTextBlockUntil :: Maybe (Parser Text) -> Parser (Text, Int)
+indentedTextBlockUntil Nothing             = indentedTextBlock
+indentedTextBlockUntil (Just terminalLine) = do
+  let
+    lines indent = do
+      line <- Nothing <$ terminalLine <|> Just <$> takeWhile1P Nothing (/= '\n')
+      case line of
+        Just ln -> do
+          emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
+          rest       <-
+            try
+                (  count indent (satisfy (== ' '))
+                *> fmap (emptyLines <>) (lines indent)
+                )
+              <|> pure ""
+          return $ ln <> rest
+        Nothing -> return ""
+  indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  --updateIndentation indentLevel
+  (, indentLevel) <$> lines indentLevel
+
+-- | A triple-backtick-fenced block of raw text. The fences may be placed
+-- directly after the entry variant prefix, on a line of their own, or at the
+-- start or end a of line; the three forms /should/ be equivalent. In any case, this
+-- parser expects the first chunk of its input stream to be a fence.
+--
+-- If present after the opening fence, a single newline is dropped.
+--
+-- Newlines after the block are discarded.
+fencedTextBlock :: Parser Text
+fencedTextBlock = do
+  let fence = symbol "```"
+  fence <* optional newline
+  -- FIXME necessary to clear trailing whitespace?
+  T.pack <$> manyTill anySingle fence-- <* many emptyLine
+
+dump :: Parser LogEntry
+dump = do
+  let fence = symbol "..."
+  fence <* optional newline
+  Dump <$> manyTill anySingle (try $ newline *> fence <* newline)
+
+
+----------------
+-- Definition --
+----------------
+
+phrase :: Parser Entry
+phrase = do
+  let pPrefix = try (symbol "phrase") <|> symbol "phr"
+      inline =
+        pPrefix *> (uncurry Defined . over _2 T.unpack <$> inlineMeaning False)
+      hws = pPrefix *> (Plural . snd <$> headwords)
+  fmap Phr $ try inline <|> hws
+
+-- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
+-- 'DefVersus').
+definition :: Parser Entry
+definition = label "definition" $ do
+  let dvs     = symbol "dvs" *> defVersus'
+      dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+      inline  = dPrefix *> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
+      hws     = dPrefix *> (uncurry Defn <$> headwords)
+  fmap Def $ try dvs <|> try inline <|> hws
+
+-- | Parses a list of comma separated headwords. It must not exceed one line.
+headwords :: Parser (Maybe Integer, [String])
+headwords = label "headword(s)" $ do
+  -- FIXME
+  pg  <- optional (lexeme L.decimal)
+  hws <- lexeme $ sepBy1
+    (some $ satisfy (\x -> x /= '\n' && x /= ',' && x /= ':'))
+    (lexeme (char ','))
+  --many (try emptyLine) -- FIXME remove
+  return (fromIntegral <$> pg, hws)
+
+-- TODO optional page nmuber
+inlineMeaning
+  :: Bool -- ^ Whether to for definition comparison separator.
+  -> Parser (String, Text)
+inlineMeaning inDefComparison = label "inlineDef" $ do
+  let indentedTextBlock' = if inDefComparison
+        then indentedTextBlockUntil $ Just (defVersusSeparator <* newline)
+        else indentedTextBlock
+  -- TODO parse list of words: sequence of non-space characters separated by
+  -- spaces. This would obivate the need to trim trailing whitespace from the
+  -- headword.
+  headword <- someTill
+    (satisfy (\x -> x /= '\n' && x /= ':'))
+    (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
+  meaningLine1                 <- takeWhile1P Nothing (/= '\n') <* newline
+  minIndent                    <- gets fst
+  (restOfMeaning, indentLevel) <- try indentedTextBlock'
+    <|> return ("", minIndent)
+  --dbg ("updateIndentation " <> show minIndent) $
+  updateIndentation minIndent
+  --(  dbg
+  --  $  "inlineMeaning: indent lower bound = "
+  --  <> show minIndent
+  --  <> " actual indent = "
+  --  <> show indentLevel
+  --  <> "rest="
+  --  <> show (show restOfMeaning)
+  --  <> "|"
+  --  <> show (length restOfMeaning)
+  --  <> show (null restOfMeaning)
+  --  )
+  --  (pure ())
+  -- TODO, HERE FIXME figure out correct indentation enforcement !!!
+  when
+    (not (T.null restOfMeaning) && minIndent >= indentLevel)
+    (  fail
+    $  "inlineMeaning: insufficient indentation-"
+    <> headword
+    <> ":"
+    <> T.unpack meaningLine1
+    <> "\n"
+    <> "idt="
+    <> show indentLevel
+    <> ","
+    <> show minIndent
+    <> "-"
+    <> T.unpack restOfMeaning
+    )
+  return
+    ( headword
+    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
+    )
+
+defVersus' :: Parser DefQuery
+defVersus' = do
+  (hw , mn ) <- defVersusFirst
+  (hw', mn') <- defVersusNext
+  return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
+
+-- | For 'DefVersus'
+defVersusFirst :: Parser (String, Text)
+defVersusFirst = label "defVersusFirst" $ do
+  -- TODO parse list of words: sequence of non-space characters separated by
+  -- spaces. This would obivate the need to trim trailing whitespace from the
+  -- headword.
+  headword <- someTill
+    (satisfy (\x -> x /= '\n' && x /= ':'))
+    (try (satisfy (== ' ') <* lexeme (char ':')) <|> lexeme (char ':'))
+  meaningLine1                 <- takeWhile1P Nothing (/= '\n') <* newline
+  minIndent                    <- gets fst
+  (restOfMeaning, indentLevel) <- indentedTextBlockUntil'
+    <|> return ("", minIndent)
+  --dbg ("dvf updateIndentation " <> show indentLevel) $
+  updateIndentation indentLevel
+  -- TODO, HERE FIXME figure out correct indentation enforcement !!!
+  when
+    (not (T.null restOfMeaning) && minIndent >= indentLevel)
+    (  fail
+    $  "defVersus': insufficient indentation-"
+    <> headword
+    <> ":"
+    <> T.unpack meaningLine1
+    <> "\n"
+    <> "idt="
+    <> show indentLevel
+    <> ","
+    <> show minIndent
+    <> "-"
+    <> T.unpack restOfMeaning
+    )
+  return
+    ( headword
+    , meaningLine1 <> if T.null restOfMeaning then T.empty else "\n" <> restOfMeaning
+    )
+  --meaning <- _ --
+
+-- | Parse the next comparison.
+defVersusNext :: Parser (String, Text)
+defVersusNext = label "defVersusNext" $ do
+  let delimiter = try (many (satisfy (== ' ')) <* char ':') <|> "" <$ char ':'
+      line      = takeWhile1P Nothing (/= '\n') <* newline
+  indent <- gets fst
+  sum <$> count indent (1 <$ satisfy (== ' '))
+  hw    <- someTill (satisfy (\x -> x /= '\n' && x /= ':')) (lexeme delimiter)
+  ln1   <- line
+  -- FIXME curr fails here. Perhaps because 'indentedTextBlockUntil'' expects
+  -- indented text but counts the empty line as 0 spaces and fails?
+  -- YES
+  many (try emptyLine)
+  mRest <- fmap fst <$> optional (try indentedTextBlockUntil')
+  case mRest of
+    Just mn -> return (hw, ln1 <> "\n" <> mn)
+    Nothing -> return (hw, ln1)
+
+
+-- | Like 'indentedTextBlock' but with optional block terminator, @mEnd@, which
+-- should expect no leading whitespace and to consume the rest of the line
+-- (newline included) but none of the proceeding line.
+indentedTextBlockUntil' :: Parser (Text, Int)
+indentedTextBlockUntil' = do
+  let terminalLine = defVersusSeparator <* newline
+  indent    <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
+  minIndent <- gets fst
+  --dbg ( show indent <> " <= " <> show minIndent ) (pure ())
+  when (indent < minIndent)
+       (fail "indentedTextBlockUntil': insufficient indentation")
+  let
+    lines = do
+      line <- Nothing <$ terminalLine <|> Just <$> takeWhile1P Nothing (/= '\n') -- FIXME use 'many'
+      case line of
+        Just ln -> do
+          emptyLines <- T.concat <$> some (try (indentedEmptyLine indent)) -- FIXME use 'many'
+          rest       <-
+            try (count indent (satisfy (== ' ')) *> fmap (emptyLines <>) lines)
+              <|> pure ""
+          return $ ln <> rest
+        Nothing -> return ""
+  --updateIndentation indent
+  (, indent) <$> lines
+
+
+-- | List of inline comparisions separated by "--- vs ---", properly indented
+-- and on a line of its own.
+--
+-- TODO extend defversus to allow n-way comparisons. As regards this parser,
+-- all that need be done is replace @count 2@ with 'some'.
+--
+-- TODO (HERE FIXME) !!!! rewrite to expect one standard inline definition (no special
+-- indentation for first line, some for remainder) and then assert that the
+-- separator and further inlines should be indented appropriately.
+-- (I say this because `curr`, a.t.m., parses 'defVersus' correctly only when
+-- it has a trailing newline and it fails to strip the second headword (potter)
+-- of itl leading whitespace).
+defVersus :: Parser DefQuery
+defVersus = do
+  xs <- count 2 (inlineMeaning True)
+  case xs of
+    ((hw, mn) : [(hw', mn')]) -> return $ DefVersus hw (T.unpack mn) hw' (T.unpack mn')
+    _ -> fail "defVersus: `count 2` succeeded but did not parse two elements"
+
+
+
+defVersusSeparator :: Parser Text
+defVersusSeparator = lexeme (string "--- vs ---")
+
+
+----------
+-- PAGE --
+----------
+
+-- Is there a difference between 'PEnd' and 'PFinish'?
+pageNum :: Parser Entry
+pageNum = do
+  pg <-
+    try (Page <$ symbol "p")
+    <|> try (PStart <$ symbol "s")
+    <|> try (PEnd <$ symbol "e")
+    <|> (PFinish <$ symbol "f") -- FIXME redundant page tag.
+  -- FIXME
+  num <- lexeme L.decimal
+  emptyLine
+  return $ PN $ pg num
+
+
+------------
+-- QUOTE --
+------------
+
+-- Parses a quotation entry body (its timestamp should have been already
+-- parsed) at a given indentation level. A quotation entry has the form:
+--
+--  > (q|quotation) [<page-number>]
+--  >
+--  > "<quotation-content>"
+--  >
+--  > [<attribution>]
+--
+--  Meant to store quotable excerpts for retrieval.
+--
+--  E.g.,
+--  >  quotation
+--  >
+--  >  "There was no treachery too base for the world to commit. She knew
+--  >  that..."
+--  >
+--  >  Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
+--
+-- Notes:
+-- * The entry variant prefix may be @q | quotation@.
+-- * The attribution is optional; inferred attributions are preferred in
+--   searches.
+-- * The entry variant prefix parser is expected not to have leading
+--   whitespace.
+quotation :: Parser Entry
+quotation = label "quotation" $ do
+  quotePrefix
+  pg <- optional (lexeme L.decimal)
+  many (try emptyLine)
+  (body, indentLevel) <- quoteContent
+  many (try emptyLine)
+  -- consume correct amount of leading whitespace to enforce (continuation) of
+  -- correct indentation.
+  attr <-
+    optional
+    $  try
+    $  count indentLevel (satisfy isTabOrSpace)
+    *> someTill anySingle newline
+    -- *> takeWhile1P (/= '\n') someTill anySingle newline
+  return $ Quotation (T.unpack body) (fromMaybe "" attr) pg
+
+-- | Parses quoted content. Assumes that whitespace preceding the opening
+-- double quote has been preserved.
+--
+-- FIXME proper tab handling. Debar them or process them correctly.
+quoteContent :: Parser (Text, Int)
+quoteContent = do
+  let isDelimiter x = x == '\n' || x == '"'
+      lines indent = do
+        lineContent  <- takeWhileP (Just "line content") (not . isDelimiter)
+        terminalChar <- satisfy isDelimiter
+        case terminalChar of
+          '\n' -> do
+            emptyLines <- T.concat <$> many (try (indentedEmptyLine indent))
+            count indent (satisfy isTabOrSpace)
+            ((emptyLines <> lineContent <> "\n") <>) <$> lines indent
+          '"' -> return lineContent
+          _   -> error "expected newline or double quote"
+  -- N.B. assumes spaces
+  indentLevel <-
+    sum <$> manyTill (1 <$ satisfy (== ' ')) (char '"') <?> "leading whitespace"
+  (, indentLevel) <$> lines indentLevel
+
+quotePrefix :: Parser Text
+quotePrefix = L.lexeme spaceWithoutNewline qp <?> "quote prefix"
+  where qp = try (string "quotation") <|> string "q"
+
+
+----------
+-- READ --
+----------
+
+-- | Parse (top-level) entry containing attribution for book or other similarly
+-- cited written media.
+read :: Parser Entry
+read = label "read" $ do
+  let quote = char '"'
+  currentIndentLevel <- gets fst
+  -- TODO decide on lovel enforcment
+  --unless
+  --  (currentIndentLevel == 0)
+  --  (  fail
+  --  $  "read: found read entry with non-zero indentation"
+  --  <> show currentIndentLevel
+  --  )
+  try (symbol "read")
+    <|> try (symbol "finish reading")
+    <|> try (symbol "begin to read")
+    <|> try (symbol "finish")
+    <|> symbol "begin"
+  title <- lexeme $ between quote quote (some (satisfy (/= '"')))
+  optional $ symbol ","
+  symbol "by"
+  author <- someTill (satisfy (/= '\n')) newline
+  return $ Read title author
+
+
+-- Assumes no leading whitespace.
 timestamp :: Parser TimeStamp
-timestamp = do
-  h <- lpad twoDigit
-  m <- twoDigit
-  s <- twoDigit <* space <* char 'λ' <* char '.' <* space
+timestamp = label "timestamp" $ do
+  h <- twoDigitNatural
+  char ':'
+  m <- twoDigitNatural
+  char ':'
+  s <- twoDigitNatural
+  space1
+  symbol "λ."
   return $ TimeStamp h m s
 
--- | Collects timestamps but also fetches indentation info.
-timestamp' :: Parser (Int, TimeStamp)
-timestamp' = do
-  indent <- tabs
-  h      <- twoDigit
-  m      <- twoDigit
-  s      <- twoDigit <* space <* char 'λ' <* char '.' <* space
-  return (indent, TimeStamp h m s)
+-- | Parses a two digit decimal integer.
+twoDigitNatural :: (MonadParsec e s m, Token s ~ Char) => m Int
+twoDigitNatural = do
+  tens <- digitToInt <$> digitChar
+  ones <- digitToInt <$> digitChar
+  return $ tens * 10 + ones
+
+-------------
+-- HELPERS --
+-------------
+
+type Parser' = Parsec Void String
+type Parser = ParsecT Void Text (State (Int, Maybe TimeStamp))
 
 
--- Parses one or more headwords in a comma separated list; e.g.,
---
--- > d callipygous
---
--- or
---
--- > d moue, wen, serac
---
--- N.B. as newline is the closing delimiter, headword list shouldn't exceed one
--- line.
---
--- TODO fail on trailing comma (the first parser given to 'sepBy' should be
--- more discriminating).
-toDefn :: Parser DefQuery
-toDefn = do
-  _         <- symbolic 'd'
-  pg        <- optional digits
-  headwords <- sepBy (some $ noneOf ",\n") (symbol ",") <* entryBody
-  return $ Defn pg headwords
+type ParserM e s m = (MonadParsec e s m, Token s ~ Char)
 
--- | Parses inline definition of headword. E.g.,
---
--- > "d headword : meaning"- recent
---
-inlineMeaning :: Parser DefQuery
-inlineMeaning = do
-  _    <- symbolic 'd'
-  tags <- optional $ brackets (many (noneOf "]"))
-  hw   <- many (noneOf ":") <* symbol ": "
-  InlineDef hw <$> entryBody
+symbol :: (MonadParsec e s m, Token s ~ Char) => Tokens s -> m (Tokens s)
+symbol = L.symbol spaceWithoutNewline
 
--- | Splits on delimiter. E.g.,
---
--- > "dvs headword1 : meaning
--- >      --- vs ---
--- >      headword2 : meaning"
---
-toDefVersus :: Parser DefQuery
-toDefVersus = do
-  let collect (hw, m) (hw', m') = DefVersus hw m hw' m'
-        -- it's important that this not parse greedily
-      p0 = inlineMeaning' . untilPNoTs $ string "--- vs ---"
-      p1 = inlineMeaning' entryBody
-      inlineMeaning' p = (,) <$> many (noneOf ":") <* symbol ": " <*> p
-  mTagList <- symbol "dvs" *> optional tags
-  firstDef <- p0 <* pad (string "--- vs ---")
-  collect firstDef <$> p1
+lexeme :: (MonadParsec e s m, Token s ~ Char) => m a -> m a
+lexeme = L.lexeme spaceWithoutNewline
 
--- | A tag may contain any (decimal) digit, any classical laten letter, that
--- is, one of [a-z], spaces, underscores, or hyphens. Unicode is /not/
--- supported.
-tagChar :: Parser Char
-tagChar = try alphaNum <|> oneOf "-_ "
+sc :: ParserM e s m => m ()
+sc = L.space space1 empty empty
 
--- | Parses zero or more comma-separated sequences of 'tagChar's within square
--- brackets, e.g., @[tag1,my-tag2,tag_3,some other tag]@. Note that although
--- white space is permitted /within/ tags, leading and trailing spaces are
--- removed.
-tags :: Parser [String]
-tags = fmap trimTrailing <$> brackets (commaSep (some tagChar))
-  where trimTrailing = dropWhileEnd isSpace
-      -- we trim after parsing to avoid look-ahead--idk whether it's faster,
-      -- but it's feels simlpler to me atm
+spaceWithoutNewline :: (MonadParsec e s m, Token s ~ Char) => m ()
+spaceWithoutNewline = L.space (void whitespaceNotNewline) empty empty
 
+--whitespaceNotNewline :: Parser String
+whitespaceNotNewline :: (MonadParsec e s m, Token s ~ Char) => m (Tokens s)
+whitespaceNotNewline = takeWhile1P (Just "tab or space") isTabOrSpace
 
--- | Returns the number of tabs, i.e., 4 spaces. If there are 7 spaces,
---  `tab' "       "` returns `pure 1`.
---
--- We need a "tab" depth parser to determine indentation. To do this, we will
--- count spaces in groups of 4.
-tabs :: Parser Int
-tabs = length <$> many (try $ count 4 space)
+-- Parse either a newline or a string of tabs and/or spaces followed by
+-- newline.
+emptyLine :: Parser Text
+emptyLine =
+  (try ("\n" <$ newline) <|> ((<> "\n") <$> whitespaceNotNewline <* newline))
+    <?> "empty line"
 
--- | Collects lines up first occurrence of pattern `p`.
---
---
--- (src)[https://stackoverflow.com/questions/7753959/parsec-error-combinator-many-is-applied-to-a-parser-that-accepts-an-empty-s)
-untilP :: Parser p -> Parser String
-untilP p = do
-  s  <- some (noneOf "\n") <|> (many newline)
-              --nls <- many newline
-              --hasNewline <- try (const True <$> newline) <|> (const False <$> eof)
-  s' <- try (lookAhead (many space *> p) >> return "") <|> untilP p
-  return $ s ++ s'
-
-untilPNoTs :: Parser p -> Parser String
-untilPNoTs p = do
-  s  <- some (noneOf "\n") <|> return <$> newline
-  s' <-
-    try (lookAhead (lpad timestamp) >> return "")
-    <|> try (lookAhead (lpad p) >> return "")
-    <|> untilP p
-  return $ s ++ s'
-
-untilPNoTs' :: Parser p -> Parser String
-untilPNoTs' p = do
-  s <-
-    try (lookAhead (lpad timestamp) >> return "" <?> "ts")
-    <|> try (manyTill anyChar newline <* newline)
-    <|> (eof >> return "")
-  s' <-
-    try (lookAhead (lpad timestamp) >> return "")
-    <|> try (lookAhead (lpad p) >> return "")
-    <|> untilPNoTs' p
-  return $ s ++ s'
-
-notNewLine = many (satisfy (\c -> isSpace c && c /= '\n'))
-
--- | Collects one line, including newline, which does not contain a timestamp.
--- Accepts EOF (after a line) for which an empty sting is returned.
-notTs :: Parser (Maybe String)
-notTs =
-  try (lookAhead (notNewLine *> timestamp >> return Nothing))
-    <|> try (lookAhead (notNewLine *> (symbol "...") >> return Nothing))
-    <|> Just
-    <$> Parse.line
-
-
-linesNoTs :: Parser String
-linesNoTs = do
-  m <- notTs
-  case m of
-    Just ln -> (ln ++) <$> (try linesNoTs <|> (eof >> return ""))
-    Nothing -> return ""
-
-
-line :: Parser String
-line = do
-  x <-
-    try ((++ "\n") <$> (some $ noneOf "\n") <* newline) <|> (return <$> newline)
-  skipOptional eof
-  return x
-
-
--- | Splits entries up by timestamp. From here we need to:
---
---  * parse entries into defs, quots, etc.
---    N.B: preserve indentation info, as it will be used to group entries
-entryBody :: Parser String
-entryBody = untilPNoTs $ void (symbol "...") <|> void timestamp <|> eof
-
-lpad :: Parser a -> Parser a
-lpad p = try whiteSpace *> p
-
-rpad :: Parser a -> Parser a
-rpad p = p <* whiteSpace
-
-pad :: Parser a -> Parser a
-pad = rpad . lpad
-
-trim :: String -> String
-trim = dropWhileEnd isSpace . dropWhile isSpace
-
-trimDefQuery :: DefQuery -> DefQuery
-trimDefQuery (Defn      pg hws    ) = Defn pg (fmap trim hws)
-trimDefQuery (InlineDef hw meaning) = InlineDef (trim hw) (trim' meaning)
-trimDefQuery (DefVersus hw m h' m') =
-  DefVersus (trim hw) (trim' m) (trim h') (trim' m')
-
-trim' :: String -> String
-trim' = unwords . fmap trim . lines
-
-quot :: Parser ()
-quot = void $ pad (char '"')
-
-quote :: Parser ()
-quote = void $ char '"'
-
-
-bookTs :: String
-bookTs = "08:23:30 λ. read \"To the Lighthouse\", by Virginia Woolf"
-
-emptyLines :: Parser [String]
-emptyLines = some . try $ manyTill space newline
-
-spacesNotNewline :: Parser ()
-spacesNotNewline = void $ many $ oneOf ['\t', ' ']
-
--- | Runs parser and returns tuple of successfully parsed item and remainder
-pTup :: Parser a -> String -> Text.Trifecta.Result (a, String)
-pTup p = parse ((,) <$> p <*> many anyChar)
-
-unused :: a
-unused = undefined
+-- | Like 'emptyLine' but drops the first @indentLevel@ spaces from each
+-- line that isn't just a newline.
+indentedEmptyLine :: Int -> Parser Text
+indentedEmptyLine indentLevel = trim indentLevel <$> emptyLine
  where
-  _ = hr >> min >> sec >> pPrint
-  _ = bookTs >> bookTs' >> testLog'
-
-
-
--- | Relative duration, conversion from which expects rollover, not clipping,
--- as this is meant as a container for user-entered years, months, and days.
--- Thus, `RelDur 1000 1000 1000` ought to be a valid input to whichever
--- conversion function is used.
-data RelDur = RelDur
-  { yy :: Integer
-  , mm :: Integer
-  , dd :: Integer
-  } deriving (Eq, Show)
-
-index :: [a] -> [(Int, a)]
-index xs = zip [len, len - 1 .. 0] xs where len = length xs - 1
-
-toInteger :: [Integer] -> Integer
-toInteger = foldl' (\res (pow, el) -> (10 ^ pow) * el + res) 0 . index
-
-digits :: Parser Integer
-digits = read <$> some digit
-
-day :: Parser Integer
-day = digits <* char 'd'
-
-week :: Parser Integer
-week = digits <* char 'w'
-
-month :: Parser Integer
-month = digits <* char 'm'
-
-year :: Parser Integer
-year = digits <* char 'y'
-
--- Defaults to '00d00m00y' a.t.m.
-dmy :: Parser RelDur
-dmy = do
-  d <- try day <|> return 0
-  m <- try month <|> return 0
-  y <- try year <|> return 0
-  return $ RelDur y m d
-
--- Defaults to '00d00m00y' a.t.m.
-ymd :: Parser RelDur
-ymd = do
-  y <- try year <|> return 0
-  m <- try month <|> return 0
-  d <- try day <|> return 0
-  return $ RelDur y m d
-
-ymd' = RelDur <$> year <*> month <*> day
-
-dmy' = do
-  d <- day
-  m <- month
-  y <- year
-  return $ RelDur y m d
-
-mdy = do
-  m <- month
-  d <- day
-  y <- year
-  return $ RelDur y m d
-
-myd = RelDur <$> month <*> year <*> day
-
-ym = do
-  y <- year
-  m <- month
-  return $ RelDur y m 0
-
-my = do
-  m <- month
-  y <- year
-  return $ RelDur y m 0
-
-md = do
-  m <- month
-  d <- day
-  return $ RelDur 0 m d
-
-y = do
-  y <- year
-  return $ RelDur y 0 0
-
-m = do
-  m <- month
-  return $ RelDur 0 m 0
-
-d = do
-  d <- day
-  return $ RelDur 0 0 d
-
-yd = do
-  y <- year
-  d <- day
-  return $ RelDur y 0 d
-
-dy = do
-  d <- day
-  y <- year
-  return $ RelDur y 0 d
-
-dm = do
-  d <- day
-  m <- month
-  return $ RelDur 0 m d
-
---md = (\m d -> RelDur 0 m d) <$> y
-
-reldur :: Parser RelDur
-reldur =
-  try dmy'
-  -- 3
-    <|> try ymd'
-    <|> try mdy
-    <|> try myd
-  -- 2
-    <|> try ym
-    <|> try my
-
-    <|> try md
-    <|> try dm
-
-    <|> try yd
-    <|> try dy
-  -- 1
-    <|> try y
-    <|> try m
-    <|> try d
-    <|> (return $ RelDur 0 0 0)
-
--- | Parse `RelDur`
-relDur :: Parser RelDur
-relDur = dmy
-
-data SearchType
-  = Prefix
-  | Infix
-  | Suffix
-  deriving (Eq, Show, Generic)
-
-searchType :: Parser SearchType
-searchType = do
-  skipOptional space
-  st <-
-    const Prefix
-    <$> try (char 'p')
-    <|> const Infix
-    <$> try (char 'i')
-    <|> const Suffix
-    <$> char 's'
-  space
-  return st
-
--- | Parses list of caret ('^') separated strings, e.g.,
--- "Eliot^George" -> ["Eliot", "George"]
-preds :: Parser [String]
-preds = sepBy (some $ noneOf "^\n") (char '^')
-
-
-
-day' :: Parser (Maybe Day)
-day' = do
-  let twoDigits = read <$> count 2 digit
-  y <- read . ("20" ++) <$> count 2 digit
-  char '.'
-  m <- twoDigits
-  char '.'
-  d <- twoDigits
-  return $ fromGregorianValid (fromIntegral y) m d
-
-qo =
-  [r|
-08:59:30 λ. quotation
-
-            "There was no treachery too for the world to commit. She knew that.
-            No happiness lasted."
-
-            In "To the Lighthouse", by Virginia Woolf
-
-14:19:00 λ. read "Witches Abroad", by Terry Pratchett
-|]
-
-austen =
-  [r|
-
-10:54:04 λ. read "Northanger Abbey", by Jane Austen
-    10:54:22 λ. q101
-
-    "To come with a well-informed mind, is to come with the inablity of
-    administering to the vanity of others..."
-
-    In "Northanger Abbey" by Jane Austen
-
-    10:55:26 λ. d raillery, coppice, disquisition, dissertation
-    13:33:55 λ. d scud, mizzle
-    13:36:33 λ. d casement
-    13:39:59 λ. q123
-
-    "I cannot speak well enough to be unintelligible."
-
-    In "Northanger Abbey" by Jane Austen
-|]
-
-bookTs' :: String
-bookTs' = [r|begin to read "To the Lighthouse", by Virginia Woolf |]
-
-testDump' :: String
-testDump' =
-  [r|
-...
-dump aeouoaeu
-second line
-...
-
-    12:10:01 λ. d sylvan
-...
-dump body
-multiple lines
-...
-
-14:19:00 λ. read "Witches Abroad", by Terry Pratchett
-
-
-|]
-
-testLog' :: String
-testLog' =
-  [r|
-08:23:30 λ. d quiescence, quiescent, quiesce
-08:24:43 λ. d vouchsafed, another-word
-08:37:26 λ. d prorated, hello, mine, yours, hypochondriacal
-
-08:38:20 λ. d elegy : meaning
-08:45:37 λ. d tumbler
-
-08:23:30 λ. begin to read "To the Lighthouse", by Virginia Woolf
-
-08:49:57 λ. d disport : meaning
-      gibberish
-
-
-08:56:30 λ. d larder
-
-
-08:59:30 λ. quotation
-
-            "There was no treachery too for the world to commit. She knew that.
-            No happiness lasted."
-
-            Mrs. Ramsey in "To the Lighthouse", by Virginia Woolf
-
-
-08:57:29 λ. d wainscot
-09:12:16 λ. d fender
-        09:14:12 λ. d bleat
-        09:15:48 λ. d dissever
-        09:24:04 λ. d rhapsody
-09:15:48 λ. dvs deport : to transport, to carry away, to conduct (refl.)
-            --- vs ---
-            comport : to endure; carry together; to accord (with) |]
-
-testlog' :: String
-testlog' =
-  [r|
-09:55:06 λ. read "To the Lighthouse", by Virginia Woolf
-    09:55:17 λ. dvs benignant : kind; gracious; favorable;
-                    --- vs ---
-                    benign : gentle, mild, or, medically, non-threatening
-    10:11:45 λ. dvs malignant : (adj.) disposed to inflict suffering or cause
-                distress; inimical; bent on evil.
-                    --- vs ---
-                    malign : (adj.) having an evil disposition; spiteful;
-                    medically trheatening; (v.) to slander; to asperse; to show
-                    hatred toward.
-    10:17:40 λ. d inimical, traduce, virulent
-    10:18:12 λ. d48 sublime, lintel
-    10:24:02 λ. quotation
-
-                "There was no treachery too base for the world to commit. She
-                knew this. No happiness lasted."
-
-                In "To the Lighthouse", by Virginia Woolf
-    10:25:27 λ. quotation
-
-                "Her simplicity fathomed what clever people falsified."
-
-                In "To the Lighthouse", by Virginia Woolf
-    10:28:49 λ. d plover
-    10:47:59 λ. d -let
-    10:49:58 λ. quotation
-
-                "But nevertheless, the fact remained, that is was nearly
-                impossbile to dislike anyone if one looked at them."
-
-                In "To the Lighthouse", by Virginia Woolf
-
-|]
-
-q =
-  [r|10:49:58 λ. quotation
-
-            "But nevertheless, the fact remained, that is was nearly
-            impossbile to dislike anyone if one looked at them."
-
-            In "To the Lighthouse", by Virginia Woolf
-|]
+  trim _ "" = ""
+  trim 0 x = x
+  trim n x | T.head x == ' '  = trim (n - 1) (T.drop 1 x)
+           | otherwise = x
+
+isTabOrSpace :: Char -> Bool
+isTabOrSpace ' '  = True
+isTabOrSpace '\t' = True
+isTabOrSpace _    = False
+
+----------
+-- MISC --
+----------
+
+---- indentation-sensitive parsing
+--indented :: Parser (String, [String]) -- prefix and body line
+--indented = L.nonIndented sc (L.indentBlock sc p)
+-- where
+--  p = do
+--    prefix <- quotePrefix
+--    return (L.IndentMany Nothing (return . (prefix, )) (try qItem))
+--
+----qItem :: Parser String
+--qItem = L.lexeme spaceWithoutNewline p
+--  where p = some (satisfy (\x -> x /= '\n' && x /= '\f' && x /= '\r'))
+
+
+pt p = flip runState (0, Nothing) . runParserT p ""
+
+parseLogEntries = pt logEntries
+
+pt' p input =
+  let parse s = runState (runParserT p "" s) (0, Nothing)
+      (pState, customState) = parse input
+  in  do
+        case pState of
+          Left  e -> putStr (errorBundlePretty e)
+          Right x -> pPrint x
+        pPrint customState

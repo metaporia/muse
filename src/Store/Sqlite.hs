@@ -965,7 +965,8 @@ sqlPadStrSearch (PrefixSearch s) = s <> "%"
 sqlPadStrSearch (InfixSearch  s) = "%" <> s <> "%"
 sqlPadStrSearch (SuffixSearch s) = "%" <> s
 
-
+asInfixSearch :: StrSearch s -> StrSearch s
+asInfixSearch = InfixSearch . fromStrSearch
 
 strSearchToPredicate :: StrSearch String -> (String -> Bool)
 strSearchToPredicate (PrefixSearch s) = isPrefixOf s
@@ -1079,18 +1080,13 @@ filterDefs'
   -> DefSearch
   -> DB m [Either String Result]
 filterDefs' since before authPreds titlePreds defSearch = do
-  let mns =
-        maybe [] (foldr ((:) . sqlPadStrSearch) []) (meaningPreds defSearch)
-      -- this extracts all the string searches and pads them as infix searches
-      -- for use with SQL's LIKE operator.
-      infixSearches =
-        maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPreds defSearch)
-  -- liftIO $ traverse print infixSearches
+  let
   defEntries <- selectDefs' since
                             before
                             authPreds
                             titlePreds
-                            infixSearches
+                            (headwordPreds defSearch)
+                            (meaningPreds defSearch)
                             (defVariants defSearch) -- collect all strings
   return
     $   filtermap
@@ -1158,17 +1154,26 @@ selectDefs'
   -> Day
   -> [String]
   -> [String]
-  -> [String]
+  -> Maybe (BoolExpr (StrSearch String))
+  -> Maybe (BoolExpr (StrSearch String))
   -> [P.DefQueryVariant]
   -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
-  let infixSearches = TL.pack <$> infixSearches'
+selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants = do
   let querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
-  let dateConstraint defEntry =
+      dateConstraint defEntry =
         dateRangeConstraint DefEntryId DefEntryKey defEntry since before
-      matchesInfixSearches defEntry =
-        genericSearchConstraint (defEntry ^. DefEntryDefinitions) infixSearches
-
+      -- apply both headword and meaning 'BoolExpr's to a DefEntry's JSON-encoded
+      -- definitions as preliminary filter to reduce cost of marshalling
+      -- unsatisfactory entries from sqlite.
+      --
+      -- This relies on the truth of the assertion that for
+      -- @be :: Maybe (BoolExpr (StrSearch String))@ and
+      -- strings s and t if s is a subset of t then if @applyBoolExpr be s ==
+      -- True@ then @applyBoolExpr be t = True@, with the caveat that all
+      -- 'StrSearch's be infix.
+      couldSatisfyDefSearch mHw mMn defJSON =
+        maybe (val True) applied mHw &&. maybe (val True) applied mMn
+        where applied be = applyBoolExprInSql (fmap TL.pack . asInfixSearch <$> be) defJSON
   if null authPreds && null titlePreds
     then
       select
@@ -1198,7 +1203,9 @@ selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
 
           where_
             (   dateConstraint defEntry
-            &&. matchesInfixSearches defEntry
+            &&. couldSatisfyDefSearch hwBoolExpr
+                                      mnBoolExpr
+                                      (defEntry ^. DefEntryDefinitions)
             -- FIXME (blocked on tag refactor) JANK WORKAROUND
             &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
                                   querysDefTags

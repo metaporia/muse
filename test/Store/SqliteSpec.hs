@@ -492,7 +492,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
     $ do
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search headwords defs defnVariants = SearchConfig
+        let search headwords mn defs defnVariants = SearchConfig
               since
               before
               False
@@ -501,13 +501,13 @@ testSearchDispatch = describe "dispatchSearch" $ do
               False
               defs -- include defs?
               ([], [])
-              (DefSearch defnVariants (Just headwords) Nothing)
+              (DefSearch defnVariants (Just headwords) mn)
               []
               []
               []
               []
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "twaddle")) True [Defn'])
+          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 19, min = 7, sec = 0}
@@ -515,13 +515,60 @@ testSearchDispatch = describe "dispatchSearch" $ do
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "fail of")) False [Phrase'])
+          (search (LitE (InfixSearch "fail of")) Nothing False [Phrase'])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 8, min = 51, sec = 44}
                        , Phr (Plural ["\"omit to\"", "\"fail of\""])
                        )
                      ]
+        (searchErrs, results) <- dispatchSearch'
+          (search
+            (OrE (LitE (PrefixSearch "brim")) (LitE (PrefixSearch "sanguin")))
+            Nothing
+            False
+            [Defn']
+          )
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 8, min = 50, sec = 4}
+                       , Def (Defn Nothing ["brimful"])
+                       )
+                     , ( TimeStamp {hr = 8, min = 51, sec = 33}
+                       , Def (Defn Nothing ["sanguinary"])
+                       )
+                     ]
+
+        (searchErrs, results) <- dispatchSearch'
+          (search
+            (LitE (InfixSearch ""))
+            (Just
+              (OrE (LitE (SuffixSearch "worry"))
+                   (LitE (InfixSearch "inheritance"))
+              )
+            )
+            False
+            allDefVariants
+          )
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 8, min = 53, sec = 38}
+                       , Def
+                         (InlineDef
+                           "pother"
+                           "(n.) bustle, tumult, bother; (v.) to perplex, worry"
+                         )
+                       )
+                     , ( TimeStamp {hr = 12, min = 45, sec = 24}
+                       , Def
+                         (InlineDef "patrimony"
+                                    "an inheritance from one's father"
+                         )
+                       )
+                     ]
+
+
+
 
 
   it "phrases & quotes queries"

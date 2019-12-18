@@ -85,6 +85,10 @@ logEntry = entry <* many (try emptyLine)
   entry = do
     indentLevel <- sum <$> many (1 <$ satisfy (== ' ')) <?> "leading whitespace"
     ts          <- timestamp
+    mLastTs <- gets snd
+    case mLastTs of
+      Just lastTs -> unless (lastTs < ts) (fail "logEntry: found duplicate or non-ascending timestamps")
+      Nothing -> pure ()
     --dbg ("updateIndentation " <> show indentLevel) $
     updateIndentation indentLevel
     entry <-

@@ -136,6 +136,11 @@ indentedUntilTest = pt'
     updateIndentation 16 
     indentedTextBlockUntil'
 
+outOfOrder = [r|
+18:06:31 λ. read "A Room with a View" by E.M. Forster
+18:06:30 λ. read "A Room with a View" by E.M. Forster
+|]
+
 pageNums = [r|
 18:06:31 λ. read "A Room with a View" by E.M. Forster
     18:06:32 λ. s 34
@@ -160,12 +165,12 @@ excerpt = [r|
         we get very angry at people who don't." 
 |]
 
-nullEntries = [r|22:03:09 λ. d dour
+nullEntries = [r|22:03:08 λ. d dour
 22:03:09 λ. 
 
 22:31:29 λ. d harlequin
-22:03:09 λ.      
-21:28:41 λ. d irremunerable : beyond compensation
+23:03:09 λ.      
+24:28:41 λ. d irremunerable : beyond compensation
 |]
 
 defs = [r|22:03:09 λ. d dour
@@ -309,6 +314,7 @@ spec :: Spec
 spec = do
   spec'
   describe "logEntries" $ do
+    it "ascending" $ pt logEntries `shouldFailOn` outOfOrder
     it "defVersus greed-check" $ pt logEntries' excerpt `shouldParse` excerptOut
     it "examples/globLog" $ do
       log <- liftIO $ T.readFile "examples/globLog"
@@ -482,7 +488,7 @@ spec = do
                         )
                       )
                     , ( 0
-                      , TimeStamp 8 47 47
+                      , TimeStamp 20 47 47
                       , Read "The Mill on the Floss"
                              "George Eliot (Mary Ann Evans)"
                       )
@@ -693,7 +699,7 @@ defVersus0 = [r|19:29:05 λ. dvs decorum: outward grace or suitableness of condu
 
     tl;dr; "decency" has a (positive) moral connotation
 
-08:47:47 λ. read "The Mill on the Floss" by George Eliot (Mary Ann Evans)
+20:47:47 λ. read "The Mill on the Floss" by George Eliot (Mary Ann Evans)
 |]
 
 dvsTrailing = [r|19:29:05 λ. dvs putter: one who puts; to potter
@@ -1006,15 +1012,15 @@ globLog =
   ]
 
 nullEntriesOut
-  = [ (0, TimeStamp {hr = 22, min = 3, sec = 9}, Def (Defn Nothing ["dour"]))
+  = [ (0, TimeStamp {hr = 22, min = 3, sec = 8}, Def (Defn Nothing ["dour"]))
     , (0, TimeStamp {hr = 22, min = 3, sec = 9}, Null)
     , ( 0
       , TimeStamp {hr = 22, min = 31, sec = 29}
       , Def (Defn Nothing ["harlequin"])
       )
-    , (0, TimeStamp {hr = 22, min = 3, sec = 9}, Null)
+    , (0, TimeStamp {hr = 23, min = 3, sec = 9}, Null)
     , ( 0
-      , TimeStamp {hr = 21, min = 28, sec = 41}
+      , TimeStamp {hr = 24, min = 28, sec = 41}
       , Def (InlineDef "irremunerable" "beyond compensation")
       )
     ]

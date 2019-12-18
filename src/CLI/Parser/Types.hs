@@ -4,6 +4,7 @@ module CLI.Parser.Types
   ( BoolExpr(..)
   , parseBoolExpr
   , interpretBoolExpr
+  , evalMapBoolExpr
   )
 where
 

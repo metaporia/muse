@@ -19,6 +19,7 @@ module Store.Sqlite where
 
 import           CLI.Parser.Types               ( BoolExpr
                                                 , interpretBoolExpr
+                                                , evalMapBoolExpr
                                                 )
 import           Control.Monad                  ( join )
 import           Control.Monad.IO.Class         ( MonadIO
@@ -39,6 +40,7 @@ import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
                                                 )
 import qualified Data.Maybe                    as Maybe
+import Data.String (IsString)
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
 import qualified Data.Text.Lazy                as TL
@@ -958,10 +960,10 @@ fromStrSearch (PrefixSearch s) = s
 fromStrSearch (InfixSearch  s) = s
 fromStrSearch (SuffixSearch s) = s
 
-sqlPadStrSearch :: StrSearch String -> String
-sqlPadStrSearch (PrefixSearch s) = s ++ "%"
-sqlPadStrSearch (InfixSearch  s) = '%' : s ++ "%"
-sqlPadStrSearch (SuffixSearch s) = '%' : s
+sqlPadStrSearch :: (Semigroup s, IsString s) => StrSearch s -> s
+sqlPadStrSearch (PrefixSearch s) = s <> "%"
+sqlPadStrSearch (InfixSearch  s) = "%" <> s <> "%"
+sqlPadStrSearch (SuffixSearch s) = "%" <> s
 
 
 
@@ -977,6 +979,15 @@ applyBoolExpr :: Maybe (BoolExpr (StrSearch String)) -> String -> Bool
 applyBoolExpr Nothing   _ = True
 applyBoolExpr (Just be) s = interpretBoolExpr ((s &) . strSearchToPredicate) be
 
+-- | Like 'applyBoolExpr' but lifted into 'SqlExpr'. This specialization is
+-- made necessary by that 'SqlExpr' has no 'Applicative' instance.
+applyBoolExprInSql
+  :: (Semigroup s, IsString s, SqlString s)
+  => BoolExpr (StrSearch s) -- ^ BoolExpr from DefSearch (config)
+  -> SqlExpr (Value s) -- ^ rawJson of defentry to which we apply predicates
+  -> SqlExpr (Value Bool)
+applyBoolExprInSql be rawJson =
+  evalMapBoolExpr sqlPadStrSearch (&&.) (||.) (like rawJson . val) be
 
 
 -- Revision of 'DefSearch' to accomodate deferred string search type dispatch

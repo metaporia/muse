@@ -229,8 +229,7 @@ spec' = do
   describe "Parse commentary entry variant 2"
     $             it "parse logEntries commentTs'"
     $             example
-    $             pt logEntries' commentTs'
-    `shouldParse` commentTsOutput'
+    $             pt logEntries' `shouldFailOn` commentTs'
     -- pgNum
   describe "test pgNum: \"(s | e | p | f)<num>\""
     $             it "parse logEntries testPgNum"

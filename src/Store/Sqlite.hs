@@ -130,8 +130,8 @@ PageNumberEntry
     pageTag PageTag
     attributionTag (Key ReadEntry) Maybe
 DumpEntry
-    Id UTCTime default=CURRENT_TIME
-    dumps String
+    day Day
+    dump String
 LastParse
     parseTime UTCTime
     lock String
@@ -382,14 +382,14 @@ writeLogEntry day logEntry mAttrTag =
   -- trace ("writeLgEntry: " <> show mAttrTag <> "\n  logEntry:" <> show logEntry) $
                                       case logEntry of
   Dump dumpContents ->
-    return $ Left "Store.Sqlite.writeEntry: Dump handling not implemented"
-    -- FIXME add 'DumpEntry' type & table
+    -- FIXME (dump-store) As yet, unalloyed jank; correct return type of
+    -- 'writeLogEntry' (this) and 'writeDay' to reflect possibility of being
+    -- dump entry (key, date) pair.  (Also, consider allowing multiple error
+    -- messages?)
     --
-    --  with acid-state, we kept a list of dumps for each day. In order to
-    --  the same with sqlite and stay consistent with our JSON-based list
-    --  workaround, we will store a list of 'DumpEntry's as JSON, of the form
-    --  [ { "dumpBody" : <string>}, .. ].
-    --
+    -- For now, we return for each dump a UTCTime with 0 hrs, 0 mins, 0 secs
+    -- reflecting the date of the log file (its name, that is).
+    (Right $ toUTC day (TimeStamp 0 0 0)) <$ insertDump day dumpContents
   TabTsEntry (indentation, timestamp, entry)
     -> let utc = toUTC day timestamp
        in
@@ -1341,13 +1341,15 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
 
 -- | Search predicates applied in infix fashion to dump strings--I've never
 -- actually used this functionality through the old interface.
+--
+-- TODO replace with @BoolExpr (StrSearch String)@
 type DumpSearch = [String -> Bool]
 
 
 -- | Apply predicates to a dump.
 filterDump :: DumpSearch -> Entity DumpEntry -> Bool
-filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
-  and ((dumps &) <$> dumpPreds)
+filterDump dumpPreds (Entity _ (DumpEntry day dump)) =
+  and ((dump &) <$> dumpPreds)
 
 
 filterDumps
@@ -1635,6 +1637,7 @@ clearDb db = runSqlite db $ do
   deleteWhere ([] :: [P.Filter CommentaryEntry])
   deleteWhere ([] :: [P.Filter DialogueEntry])
   deleteWhere ([] :: [P.Filter PageNumberEntry])
+  deleteWhere ([] :: [P.Filter DumpEntry])
 
 -----------
 -- READs --
@@ -1672,3 +1675,19 @@ setLastParseTime lastParseUTC ignoreCache = do
   deleteWhere [LastParseLock P.==. "lock"]
   -- add new one
   insert (LastParse lastParseUTC "lock" ignoreCache)
+
+
+----------
+-- DUMP --
+----------
+
+-- | Takes a 'Day' (the name of the dumps' log file), a list of dumps (strings)
+-- belonging to a single log file, and adds them to the dump table.
+insertDumps :: MonadIO m => Day -> [String] -> DB m [Key DumpEntry]
+insertDumps = traverse . insertDump
+
+-- | Inserts a single dump entry. The primary key is left to SQLite to generate.
+-- Each row in the dump table contains the (string) contents of a single dump
+-- and the date of its log file.
+insertDump :: MonadIO m => Day -> String -> DB m (Key DumpEntry)
+insertDump day = insert . DumpEntry day

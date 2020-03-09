@@ -21,7 +21,7 @@ module Time
 where
 
 import           Data.Time
-import           Parse                          ( TimeStamp(..) )
+import           Parse.Types                    ( TimeStamp(..) )
 
 -- | Makes 'UTCTime' from a 'Day' by adding a 'DiffTime' of zero, that is, a
 -- time representing midnight on the given day.

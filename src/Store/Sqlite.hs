@@ -18,6 +18,7 @@
 module Store.Sqlite where
 
 import           CLI.Parser.Types               ( BoolExpr
+                                                , evalMapBoolExpr
                                                 , interpretBoolExpr
                                                 )
 import           Control.Monad                  ( join )
@@ -39,6 +40,7 @@ import           Data.Maybe                     ( catMaybes
                                                 , fromMaybe
                                                 )
 import qualified Data.Maybe                    as Maybe
+import           Data.String                    ( IsString )
 import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
 import qualified Data.Text.Lazy                as TL
@@ -64,9 +66,10 @@ import           Database.Persist.Sqlite        ( Entity(..)
 import           Database.Persist.TH
 import           GHC.Generics            hiding ( from )
 import           Helpers
-import qualified Parse                         as P
-import           Parse.Entry             hiding ( DefQueryVariant(..) )
-import qualified Parse.Entry                   as P
+import qualified Parse.Types                   as P
+import           Parse.Types             hiding ( DefQuery(..)
+                                                , DefQueryVariant(..)
+                                                )
 import           Search
 import           Store                          ( Result(..) )
 import           Store.Sqlite.Types
@@ -422,7 +425,7 @@ writeLogEntry day logEntry mAttrTag =
                  $   DialogueEntry dialogueBody
                  $   fromAttrTag
                  <$> mAttrTag
-             Parse.Entry.Null -> return ()
+             P.Null -> return ()
            )
            >> return (Right utc)
 
@@ -911,7 +914,7 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::      -- Esqueleto query expr backend =>
+  ::       -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
@@ -959,12 +962,13 @@ fromStrSearch (PrefixSearch s) = s
 fromStrSearch (InfixSearch  s) = s
 fromStrSearch (SuffixSearch s) = s
 
-sqlPadStrSearch :: StrSearch String -> String
-sqlPadStrSearch (PrefixSearch s) = s ++ "%"
-sqlPadStrSearch (InfixSearch  s) = '%' : s ++ "%"
-sqlPadStrSearch (SuffixSearch s) = '%' : s
+sqlPadStrSearch :: (Semigroup s, IsString s) => StrSearch s -> s
+sqlPadStrSearch (PrefixSearch s) = s <> "%"
+sqlPadStrSearch (InfixSearch  s) = "%" <> s <> "%"
+sqlPadStrSearch (SuffixSearch s) = "%" <> s
 
-
+asInfixSearch :: StrSearch s -> StrSearch s
+asInfixSearch = InfixSearch . fromStrSearch
 
 strSearchToPredicate :: StrSearch String -> (String -> Bool)
 strSearchToPredicate (PrefixSearch s) = isPrefixOf s
@@ -978,7 +982,15 @@ applyBoolExpr :: Maybe (BoolExpr (StrSearch String)) -> String -> Bool
 applyBoolExpr Nothing   _ = True
 applyBoolExpr (Just be) s = interpretBoolExpr ((s &) . strSearchToPredicate) be
 
-
+-- | Like 'applyBoolExpr' but lifted into 'SqlExpr'. This specialization is
+-- made necessary by that 'SqlExpr' has no 'Applicative' instance.
+applyBoolExprInSql
+  :: (Semigroup s, IsString s, SqlString s)
+  => BoolExpr (StrSearch s) -- ^ BoolExpr from DefSearch (config)
+  -> SqlExpr (Value s) -- ^ rawJson of defentry to which we apply predicates
+  -> SqlExpr (Value Bool)
+applyBoolExprInSql be rawJson =
+  evalMapBoolExpr sqlPadStrSearch (&&.) (||.) (like rawJson . val) be
 
 -- Revision of 'DefSearch' to accomodate deferred string search type dispatch
 -- (prefix vs infix vs suffix).
@@ -1069,18 +1081,13 @@ filterDefs'
   -> DefSearch
   -> DB m [Either String Result]
 filterDefs' since before authPreds titlePreds defSearch = do
-  let mns =
-        maybe [] (foldr ((:) . sqlPadStrSearch) []) (meaningPreds defSearch)
-      -- this extracts all the string searches and pads them as infix searches
-      -- for use with SQL's LIKE operator.
-      infixSearches =
-        maybe mns (foldr ((:) . sqlPadStrSearch) mns) (headwordPreds defSearch)
-  -- liftIO $ traverse print infixSearches
+  let
   defEntries <- selectDefs' since
                             before
                             authPreds
                             titlePreds
-                            infixSearches
+                            (headwordPreds defSearch)
+                            (meaningPreds defSearch)
                             (defVariants defSearch) -- collect all strings
   return
     $   filtermap
@@ -1148,78 +1155,96 @@ selectDefs'
   -> Day
   -> [String]
   -> [String]
-  -> [String]
+  -> Maybe (BoolExpr (StrSearch String))
+  -> Maybe (BoolExpr (StrSearch String))
   -> [P.DefQueryVariant]
   -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds infixSearches' defVariants = do
-  let infixSearches = TL.pack <$> infixSearches'
-  let querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
-  let dateConstraint defEntry =
+selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
+  = do
+    let
+      querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
+      dateConstraint defEntry =
         dateRangeConstraint DefEntryId DefEntryKey defEntry since before
-      matchesInfixSearches defEntry =
-        genericSearchConstraint (defEntry ^. DefEntryDefinitions) infixSearches
+      -- apply both headword and meaning 'BoolExpr's to a DefEntry's JSON-encoded
+      -- definitions as preliminary filter to reduce cost of marshalling
+      -- unsatisfactory entries from sqlite.
+      --
+      -- This relies on the truth of the assertion that for
+      -- @be :: Maybe (BoolExpr (StrSearch String))@ and
+      -- strings s and t if s is a subset of t then if @applyBoolExpr be s ==
+      -- True@ then @applyBoolExpr be t = True@, with the caveat that all
+      -- 'StrSearch's be infix.
+      couldSatisfyDefSearch mHw mMn defJSON =
+        maybe (val True) applied mHw &&. maybe (val True) applied mMn
+       where
+        applied be =
+          applyBoolExprInSql (fmap TL.pack . asInfixSearch <$> be) defJSON
+    if null authPreds && null titlePreds
+      then
+        select
+        $ from
+        $ \defEntry -> do
+            -- FIXME (optimization refactor) apply def variant predicates here
+            -- let defTag = defEntry  ^. DefEntryDefinitionTag
+            -- requires unifying Phrase vs DefEntry distinction. then it just
+            -- becomes the above code (convert variants to tags compare tags)
+            --
+            --let
+            --  toDefQueryVariant :: PhraseOrDef -> DefTag -> P.DefQueryVariant
+            --  toDefQueryVariant Phrase'     _      = P.Phrase'
+            --  toDefQueryVariant Definition' defTag = case defTag of
+            --    Headwords'  -> P.Defn'
+            --    Inline'     -> P.InlineDef'
+            --    Comparison' -> P.DefVersus'
 
-  if null authPreds && null titlePreds
-    then
-      select
-      $ from
-      $ \defEntry -> do
-          -- FIXME (optimization refactor) apply def variant predicates here
-          -- let defTag = defEntry  ^. DefEntryDefinitionTag
-          -- requires unifying Phrase vs DefEntry distinction. then it just
-          -- becomes the above code (convert variants to tags compare tags)
-          --
-          --let
-          --  toDefQueryVariant :: PhraseOrDef -> DefTag -> P.DefQueryVariant
-          --  toDefQueryVariant Phrase'     _      = P.Phrase'
-          --  toDefQueryVariant Definition' defTag = case defTag of
-          --    Headwords'  -> P.Defn'
-          --    Inline'     -> P.InlineDef'
-          --    Comparison' -> P.DefVersus'
+            --  -- WARNING: this will return true when given an empty list
+            --  variantConstraint
+            --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
+            let variantConstraint _      []       = val True
+                variantConstraint defTag variants = foldl'
+                  (\res v -> (val v ==. defTag) ||. res)
+                  (val True)
+                  variants
 
-          --  -- WARNING: this will return true when given an empty list
-          --  variantConstraint
-          --    :: SqlExpr (Value PhraseOrDef) -> SqlExpr (Value DefTag) -> [P.DefQueryVariant] -> SqlExpr (Value Bool)
-          let variantConstraint _      []       = val True
-              variantConstraint defTag variants = foldl'
-                (\res v -> (val v ==. defTag) ||. res)
-                (val True)
-                variants
+            where_
+              (   dateConstraint defEntry
+              &&. couldSatisfyDefSearch hwBoolExpr
+                                        mnBoolExpr
+                                        (defEntry ^. DefEntryDefinitions)
+              -- FIXME (blocked on tag refactor) JANK WORKAROUND
+              &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
+                                    querysDefTags
 
-          where_
-            (   dateConstraint defEntry
-            &&. matchesInfixSearches defEntry
-            -- FIXME (blocked on tag refactor) JANK WORKAROUND
-            &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
-                                  querysDefTags
-
-            -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
-            -- a tag than a structural distinction
-            -- &&. (variantConstraint (defEntry ^. DefEntryPhraseOrDef)
-            --                       (defEntry ^. DefEntryDefinitionTag)
-            --                       defVariants
-            --    ) -- FIXME tag check here!
-                 -- * each entry has a json encoded tag in its definitions
-                 -- field (one of Inlines, Headwords, (the string "headwords"
-                 -- occurs more than once for def versus comparison entries)
-                 -- * and in the "phrase_or_def" field one of Definition' or
-                 -- Phrase'
-                 --
-                 -- we need a filter to take a list of DefQueryVariant
-                 -- ( Phrase' | Defn' | InlineDef' | DefVersus'),
-                 -- the entry's definition tag (Headwords' | Inline' | Comparison), and
-                 -- the entry's phrase_or_def (Phrase' | Definiton')
-            )
-          return defEntry
-    else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
-      on
-        (defEntry ^. DefEntryAttributionTag ==. just (readEntry ^. ReadEntryId))
-      where_
-        $ attributionConstraint (just $ readEntry ^. ReadEntryAuthor) authPreds
-        &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
-                                  titlePreds
-        &&. dateConstraint defEntry
-      return defEntry
+              -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
+              -- a tag than a structural distinction
+              -- &&. (variantConstraint (defEntry ^. DefEntryPhraseOrDef)
+              --                       (defEntry ^. DefEntryDefinitionTag)
+              --                       defVariants
+              --    ) -- FIXME tag check here!
+                   -- - each entry has a json encoded tag in its definitions
+                   -- field (one of Inlines, Headwords, (the string "headwords"
+                   -- occurs more than once for def versus comparison entries)
+                   -- - and in the "phrase_or_def" field one of Definition' or
+                   -- Phrase'
+                   --
+                   -- we need a filter to take a list of DefQueryVariant
+                   -- ( Phrase' | Defn' | InlineDef' | DefVersus'),
+                   -- the entry's definition tag (Headwords' | Inline' | Comparison), and
+                   -- the entry's phrase_or_def (Phrase' | Definiton')
+              )
+            return defEntry
+      else select $ from $ \(defEntry `LeftOuterJoin` readEntry) -> do
+        on
+          (defEntry ^. DefEntryAttributionTag ==. just
+            (readEntry ^. ReadEntryId)
+          )
+        where_
+          $   attributionConstraint (just $ readEntry ^. ReadEntryAuthor)
+                                    authPreds
+          &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
+                                    titlePreds
+          &&. dateConstraint defEntry
+        return defEntry
 
 
 
@@ -1326,7 +1351,7 @@ filterDump dumpPreds (Entity _ (DumpEntry dumps)) =
 
 
 filterDumps
-  ::      -- MonadIO m =>
+  ::       -- MonadIO m =>
      Day -> Day -> [String] -> DB m [String]
 filterDumps since before dumpPreds = undefined -- TODO decide on sqlite dump storage
 

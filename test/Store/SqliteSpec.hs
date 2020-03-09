@@ -17,20 +17,30 @@ module Store.SqliteSpec where
 
 
 import           CLI.Parser.Types               ( BoolExpr(..) )
-import           Control.Monad                  ( when
-                                                , unless
+import           Control.Lens                   ( (^?)
+                                                , (^.)
+                                                , _1
+                                                , over
+                                                , preview
+                                                , _Right
+                                                )
+import           Control.Monad                  ( unless
+                                                , when
                                                 )
 import           Control.Monad.IO.Class         ( MonadIO
                                                 , liftIO
                                                 )
-import           Data.Either                    ( rights
-                                                , partitionEithers
+import           Control.Monad.Logger
+import           Control.Monad.Trans.Resource
+import           Data.Either                    ( partitionEithers
+                                                , rights
                                                 )
 import           Data.Foldable                  ( traverse_ )
 import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
 import           Data.Semigroup                 ( (<>) )
+import qualified Data.Text.IO                  as T
 import           Data.Time                      ( UTCTime(..)
                                                 , addDays
                                                 )
@@ -39,18 +49,17 @@ import           Data.Time.Clock                ( getCurrentTime )
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Helpers
-import           Parse
-import qualified Parse                         as P
-import           Parse.Entry
+import           Parse                          ( parseLogEntries )
+import           Parse.Types
+import qualified Parse.Types                   as P
 import           Render                         ( showAll )
 import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
 import           Test.Hspec              hiding ( before )
+import           Test.Hspec.Megaparsec          ( shouldParse )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
 import           Time
-import           Control.Monad.Logger
-import           Control.Monad.Trans.Resource
 
 asIO :: IO a -> IO a
 asIO a = a
@@ -72,7 +81,7 @@ spec = do
   let filterQuotesSetup = setup (`writeDay` demoLogEntries)
       defVarSetup       = setup
         (\today -> do
-          let entries = fromJust $ toMaybe $ parse logEntries defVar
+          let entries = fromJust $ (parseLogEntries defVar) ^. _1 ^? _Right
           writeDay today entries
         )
 
@@ -157,8 +166,8 @@ getDateRange = do
   return (since, before)
 
 setup'' file = setup $ \today -> do
-  exampleMuseLog <- liftIO $ readFile file
-  let entries = fromJust $ toMaybe $ parse logEntries exampleMuseLog
+  exampleMuseLog <- liftIO $ T.readFile file
+  let entries = fromJust $ parseLogEntries exampleMuseLog ^. _1 ^? _Right
   partitionEithers <$> writeDay today entries
 
 dispatchSearch'
@@ -481,11 +490,9 @@ testSearchDispatch = describe "dispatchSearch" $ do
     $ asIO
     $ runSqlInMem
     $ do
-        let debug  = False
-            pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search headwords defs defnVariants = SearchConfig
+        let search headwords mn defs defnVariants = SearchConfig
               since
               before
               False
@@ -494,13 +501,13 @@ testSearchDispatch = describe "dispatchSearch" $ do
               False
               defs -- include defs?
               ([], [])
-              (DefSearch defnVariants (Just headwords) Nothing)
+              (DefSearch defnVariants (Just headwords) mn)
               []
               []
               []
               []
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "twaddle")) True [Defn'])
+          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 19, min = 7, sec = 0}
@@ -508,13 +515,60 @@ testSearchDispatch = describe "dispatchSearch" $ do
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "fail of")) False [Phrase'])
+          (search (LitE (InfixSearch "fail of")) Nothing False [Phrase'])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 8, min = 51, sec = 44}
                        , Phr (Plural ["\"omit to\"", "\"fail of\""])
                        )
                      ]
+        (searchErrs, results) <- dispatchSearch'
+          (search
+            (OrE (LitE (PrefixSearch "brim")) (LitE (PrefixSearch "sanguin")))
+            Nothing
+            False
+            [Defn']
+          )
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 8, min = 50, sec = 4}
+                       , Def (Defn Nothing ["brimful"])
+                       )
+                     , ( TimeStamp {hr = 8, min = 51, sec = 33}
+                       , Def (Defn Nothing ["sanguinary"])
+                       )
+                     ]
+
+        (searchErrs, results) <- dispatchSearch'
+          (search
+            (LitE (InfixSearch ""))
+            (Just
+              (OrE (LitE (SuffixSearch "worry"))
+                   (LitE (InfixSearch "inheritance"))
+              )
+            )
+            False
+            allDefVariants
+          )
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 8, min = 53, sec = 38}
+                       , Def
+                         (InlineDef
+                           "pother"
+                           "(n.) bustle, tumult, bother; (v.) to perplex, worry"
+                         )
+                       )
+                     , ( TimeStamp {hr = 12, min = 45, sec = 24}
+                       , Def
+                         (InlineDef "patrimony"
+                                    "an inheritance from one's father"
+                         )
+                       )
+                     ]
+
+
+
 
 
   it "phrases & quotes queries"
@@ -827,17 +881,17 @@ demoLogEntries
     ]
 
 
-curr :: IO ()
-curr = runSqlite "test1.db" $ do
-  runMigration migrateAll
-  today <- liftIO $ utctDay <$> getCurrentTime
-  let -- logEntries :: _
-      logEntries' = statefulValidatedMany Nothing
-                                          logEntrySquawk
-                                          logEntryPassNewestTimeStamp
-  liftIO $ pPrint $ parse logEntries' reallyBroken
-  --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
-  return ()
+--curr :: IO ()
+--curr = runSqlite "test1.db" $ do
+--  runMigration migrateAll
+--  today <- liftIO $ utctDay <$> getCurrentTime
+--  let -- logEntries :: _
+--      logEntries' = statefulValidatedMany Nothing
+--                                          logEntrySquawk
+--                                          logEntryPassNewestTimeStamp
+--  liftIO $ pPrint $ parse logEntries' reallyBroken
+--  --writeDay today $ fromJust $ toMaybe $ parse logEntries reallyBroken
+--  return ()
 
 reallyBroken = [r|
 09:20:55 λ. read "Dead Souls", by Gogol
@@ -1006,7 +1060,7 @@ dispatchAllBare =
         "umber"
         "brown or reddish pigment"
         "ochre"
-        "red (hematite) or yellow (limonite) pigment; the color is near orange"
+        "red (hematite) or yellow (limonite) pigment; the\ncolor is near orange"
       )
     )
   , ( TimeStamp {hr = 10, min = 14, sec = 28}
@@ -1019,10 +1073,10 @@ dispatchAllBare =
     )
   , (TimeStamp {hr = 10, min = 18, sec = 41}, Def (Defn Nothing ["lissome"]))
   , ( TimeStamp {hr = 13, min = 25, sec = 38}
-    , Def (Defn Nothing ["incarnadine", "maudlin"])
+    , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1058,7 +1112,7 @@ dispatchAllBare =
         "dissent (n.)"
         "the act of dissenting, disagreement, etc."
         "dissension (n.)"
-        "disagreement of a violent character; strife; quarrel; discord."
+        "disagreement of a violent character;\nstrife; quarrel; discord."
       )
     )
   , ( TimeStamp {hr = 18, min = 59, sec = 17}
@@ -1077,16 +1131,16 @@ dispatchAllBare =
     , Def
       (InlineDef
         "phlegmatic"
-        "watery; generating or causing phlegm; or, of a person, not easily excited to action"
+        "watery; generating or causing phlegm; or, of a\nperson, not easily excited to action"
       )
     )
   , ( TimeStamp {hr = 19, min = 12, sec = 8}
     , Def
       (DefVersus
         "ployment"
-        "the act of forming up a body of troops into, e.g., a column"
+        "the act of forming up a body of troops into, e.g., a column "
         "deployment"
-        "the act of spreading a body of troops about a front; (modern) resource arrangement or distribution in preparation for battel or work."
+        "the act of spreading a body of troops about a\nfront; (modern) resource arrangement or\ndistribution in preparation for battel or\nwork."
       )
     )
   , ( TimeStamp {hr = 19, min = 25, sec = 25}
@@ -1097,7 +1151,7 @@ dispatchAllBare =
     )
   , ( TimeStamp {hr = 10, min = 16, sec = 17}
     , Quotation
-      "...he did not hate his mother and father, even though they had both been very good to him."
+      "...he did not hate his mother and father, even though they had both\nbeen very good to him."
       "In \"Catch-22\" by Joseph Heller"
       Nothing
     )
@@ -1109,18 +1163,18 @@ dispatchAllBare =
     )
   , ( TimeStamp {hr = 19, min = 15, sec = 48}
     , Quotation
-      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "He was pinched persipiringly in the epistemological dilemma of the\nskeptic, unable to accept solutions to problems he was unwilling to\ndismiss as unsolvable."
       "In \"Catch-22\" by Joseph Heller"
       Nothing
     )
   , ( TimeStamp {hr = 19, min = 15, sec = 49}
-    , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
+    , Dialogue "ATTICUS: SQL!\n\n(deafening silence)"
     )
   ]
 
 dialogueExp =
   [ ( TimeStamp {hr = 19, min = 15, sec = 49}
-    , Dialogue "ATTICUS: SQL!\n\n\n(deafening silence)\n"
+    , Dialogue "ATTICUS: SQL!\n\n(deafening silence)"
     )
   ]
 
@@ -1164,7 +1218,7 @@ dispatchOnlyDefs =
         "umber"
         "brown or reddish pigment"
         "ochre"
-        "red (hematite) or yellow (limonite) pigment; the color is near orange"
+        "red (hematite) or yellow (limonite) pigment; the\ncolor is near orange"
       )
     )
   , ( TimeStamp {hr = 10, min = 14, sec = 28}
@@ -1177,10 +1231,10 @@ dispatchOnlyDefs =
     )
   , (TimeStamp {hr = 10, min = 18, sec = 41}, Def (Defn Nothing ["lissome"]))
   , ( TimeStamp {hr = 13, min = 25, sec = 38}
-    , Def (Defn Nothing ["incarnadine", "maudlin"])
+    , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1216,7 +1270,7 @@ dispatchOnlyDefs =
         "dissent (n.)"
         "the act of dissenting, disagreement, etc."
         "dissension (n.)"
-        "disagreement of a violent character; strife; quarrel; discord."
+        "disagreement of a violent character;\nstrife; quarrel; discord."
       )
     )
   , ( TimeStamp {hr = 18, min = 59, sec = 17}
@@ -1235,16 +1289,16 @@ dispatchOnlyDefs =
     , Def
       (InlineDef
         "phlegmatic"
-        "watery; generating or causing phlegm; or, of a person, not easily excited to action"
+        "watery; generating or causing phlegm; or, of a\nperson, not easily excited to action"
       )
     )
   , ( TimeStamp {hr = 19, min = 12, sec = 8}
     , Def
       (DefVersus
         "ployment"
-        "the act of forming up a body of troops into, e.g., a column"
+        "the act of forming up a body of troops into, e.g., a column "
         "deployment"
-        "the act of spreading a body of troops about a front; (modern) resource arrangement or distribution in preparation for battel or work."
+        "the act of spreading a body of troops about a\nfront; (modern) resource arrangement or\ndistribution in preparation for battel or\nwork."
       )
     )
   , ( TimeStamp {hr = 19, min = 25, sec = 25}
@@ -1325,7 +1379,7 @@ dispatchOnlyDefVersus =
 dispatchOnlyQuotes =
   [ ( TimeStamp {hr = 10, min = 16, sec = 17}
     , Quotation
-      "...he did not hate his mother and father, even though they had both been very good to him."
+      "...he did not hate his mother and father, even though they had both\nbeen very good to him."
       "In \"Catch-22\" by Joseph Heller"
       Nothing
     )
@@ -1337,7 +1391,7 @@ dispatchOnlyQuotes =
     )
   , ( TimeStamp {hr = 19, min = 15, sec = 48}
     , Quotation
-      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "He was pinched persipiringly in the epistemological dilemma of the\nskeptic, unable to accept solutions to problems he was unwilling to\ndismiss as unsolvable."
       "In \"Catch-22\" by Joseph Heller"
       Nothing
     )
@@ -1361,7 +1415,7 @@ dispatchAuthBody =
     )
   , ( TimeStamp {hr = 19, min = 15, sec = 48}
     , Quotation
-      "He was pinched persipiringly in the epistemological dilemma of the skeptic, unable to accept solutions to problems he was unwilling to dismiss as unsolvable."
+      "He was pinched persipiringly in the epistemological dilemma of the\nskeptic, unable to accept solutions to problems he was unwilling to\ndismiss as unsolvable."
       "In \"Catch-22\" by Joseph Heller"
       Nothing
     )
@@ -1370,13 +1424,13 @@ dispatchAuthBody =
 globLogAllQuotes =
   [ ( TimeStamp {hr = 8, min = 47, sec = 48}
     , Quotation
-      "What novelty is worth that sweet monotony where everything is known, and _loved_ because it is known?"
+      "What novelty is worth that sweet monotony where everything is known,\nand _loved_ because it is known?"
       ""
       Nothing
     )
   , ( TimeStamp {hr = 8, min = 48, sec = 52}
     , Quotation
-      "...that fly-fishers fail in preparing their bait so as to make it alluring in the right quarter, for want of a due acquaintance with the subjectivity of fishes."
+      "...that fly-fishers fail in preparing their bait so as to make it \nalluring in the right quarter, for want of a due acquaintance with \nthe subjectivity of fishes."
       ""
       Nothing
     )
@@ -1390,13 +1444,13 @@ globLogAllQuotes =
     )
   , ( TimeStamp {hr = 17, min = 52, sec = 49}
     , Quotation
-      "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
+      "Miss Morland, no one can think more highly of the understanding of\nwomen than I do. In my opinion, nature has given them so much, that\nthey never find it necessary to use more than half."
       ""
       Nothing
     )
   , ( TimeStamp {hr = 19, min = 31, sec = 2}
     , Quotation
-      "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and we get very angry at people who don't."
+      "...\8212oh, don't go in for accuracy at this house. We all exaggerate, and\nwe get very angry at people who don't."
       ""
       Nothing
     )
@@ -1425,7 +1479,7 @@ globLogAllQuotes =
 globAustenQs =
   [ ( TimeStamp {hr = 17, min = 52, sec = 49}
     , Quotation
-      "Miss Morland, no one can think more highly of the understanding of women than I do. In my opinion, nature has given them so much, that they never find it necessary to use more than half."
+      "Miss Morland, no one can think more highly of the understanding of\nwomen than I do. In my opinion, nature has given them so much, that\nthey never find it necessary to use more than half."
       ""
       Nothing
     )
@@ -1446,23 +1500,23 @@ globAustenEmma =
 
 globCommentLexical =
   [ ( TimeStamp {hr = 17, min = 33, sec = 59}
-    , Commentary "<Insightful lexical ejaculate /here/>\n"
+    , Commentary "<Insightful lexical ejaculate /here/>"
     )
   , ( TimeStamp {hr = 17, min = 52, sec = 50}
-    , Commentary "<A second jettisoned insight /here/>\n"
+    , Commentary "<A second jettisoned insight /here/>"
     )
   ]
 
 globMultiPhrQt =
   [ ( TimeStamp {hr = 8, min = 47, sec = 48}
     , Quotation
-      "What novelty is worth that sweet monotony where everything is known, and _loved_ because it is known?"
+      "What novelty is worth that sweet monotony where everything is known,\nand _loved_ because it is known?"
       ""
       Nothing
     )
   , ( TimeStamp {hr = 8, min = 48, sec = 52}
     , Quotation
-      "...that fly-fishers fail in preparing their bait so as to make it alluring in the right quarter, for want of a due acquaintance with the subjectivity of fishes."
+      "...that fly-fishers fail in preparing their bait so as to make it \nalluring in the right quarter, for want of a due acquaintance with \nthe subjectivity of fishes."
       ""
       Nothing
     )
@@ -1485,7 +1539,7 @@ globMultiDefVsQt =
       (DefVersus "putter"
                  "one who puts; to potter"
                  "potter"
-                 "one who makes pots; to trifle; to walk lazily"
+                 "one who makes pots; to trifle; to walk lazily "
       )
     )
   ]

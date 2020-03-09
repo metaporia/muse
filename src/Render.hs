@@ -14,20 +14,27 @@
 -----------------------------------------------------------------------------
 module Render where
 
-import           Data.Char                      ( toUpper )
+import           Data.Char                      ( isSpace
+                                                , toUpper
+                                                )
 import           Data.Foldable                  ( traverse_ )
-import           Data.List                      ( intercalate )
+import           Data.List                      ( dropWhileEnd
+                                                , intercalate
+                                                )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Parse
-import           Parse.Entry
+import           Helpers                        ( trim
+                                                , trim'
+                                                )
+import           Parse.Types
 import           Prelude                 hiding ( log
                                                 , lookup
                                                 , min
                                                 )
 import           System.Console.ANSI
 import           Text.Wrap
+
 
 showAll :: ColRender a => [a] -> IO ()
 showAll = traverse_ (colRender True)

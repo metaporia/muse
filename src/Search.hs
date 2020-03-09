@@ -16,7 +16,6 @@ module Search
   ( isTopLevel
   , isRead
   , isIndentedTo
-  , pathToDay
   )
 where
 
@@ -30,8 +29,7 @@ import           Control.Monad                  ( (>=>)
 import           Data.Maybe                     ( isJust )
 import           Data.Time
 import           Helpers
-import           Parse
-import           Parse.Entry
+import           Parse.Types
 import           Prelude                 hiding ( log
                                                 , lookup
                                                 , min
@@ -50,10 +48,6 @@ data SearchResult
   | Null'
   | Entry' String -- ?
   deriving (Eq, Show)
-
--- | Parse basename /not/ absolute path into 'Day'.
-pathToDay :: FilePath -> Maybe Day
-pathToDay = join . preview _Right . showErr . parse day'
 
 -- auto-complete
 -- Qs:
@@ -168,4 +162,3 @@ projectDef (TabTsEntry (_, _, Def dq)) = case dq of
   InlineDef hw  meaning   -> [(hw, Just meaning)]
   DefVersus hw m hw' m'   -> [(hw, Just m), (hw', Just m')]
 projectDef _ = []
-

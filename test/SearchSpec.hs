@@ -16,16 +16,13 @@ module SearchSpec where
 import           Data.List                      ( isInfixOf )
 import           Data.Time
 import           Helpers
-import           Parse
-import           Parse.Entry
+import           Parse.Types
 import           Prelude                 hiding ( min )
 import           Render
 import           Search
 import           Test.Hspec
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Text.Trifecta
-import qualified Text.Trifecta.Result          as Tri
 
 -- TODO BUG `muse -c search --all -d -t Warlock` does not yield the expected
 -- "concho" definition. Is this a LogEntry entry problem (i.e., incorrect

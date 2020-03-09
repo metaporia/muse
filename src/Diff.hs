@@ -19,8 +19,8 @@ module Diff where
 import           Data.List                      ( intercalate )
 import qualified Data.Text                     as T
 import           Data.Text.Metrics              ( levenshtein )
-import           Parse
-import           Parse.Entry
+import           Helpers                        ( trim )
+import           Parse.Types                    ( Entry(Read) )
 
 type Tag = String
 

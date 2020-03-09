@@ -1,13 +1,28 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module CLI.Parser.Types
   ( BoolExpr(..)
   , parseBoolExpr
   , interpretBoolExpr
+  , evalMapBoolExpr
   )
 where
 
 import           Control.Applicative
-import           Text.Trifecta
+import           Control.Monad.Combinators.Expr
+import           Data.Char                      ( isAlpha )
+import           Data.Void                      ( Void )
+import           Text.Megaparsec
+import qualified Text.Megaparsec.Char.Lexer    as L
 
+type Parser = Parsec Void String
+
+sc :: Parser ()
+sc = L.space (() <$ takeWhile1P Nothing (== ' ')) empty empty
+
+lexeme = L.lexeme sc
+
+symbol = L.symbol sc
 
 data BoolExpr a = AndE (BoolExpr a) (BoolExpr a)
                 | OrE (BoolExpr a) (BoolExpr a)
@@ -24,6 +39,21 @@ instance Foldable BoolExpr where
   foldr f base (OrE l r) = foldr f (foldr f base r) l
   foldr f base (LitE a) = f a base
 
+litE :: Parser (BoolExpr String)
+litE = LitE <$> lexeme (takeWhile1P Nothing isAlpha)
+
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+
+term :: Parser (BoolExpr String)
+term = choice [parens boolExpr, litE]
+
+boolExpr :: Parser (BoolExpr String)
+boolExpr = makeExprParser term operatorTable
+
+operatorTable :: [[Operator Parser (BoolExpr String)]]
+operatorTable = [[binary "&" AndE, binary "|" OrE]]
+  where binary name f = InfixL (f <$ symbol name)
 
 -- | @evalMapBoolExpr f andOp orOp litOp@ applies @f@ to all 'LitE' leaves; and
 -- @andOp@ and @orOp to all 'AndE' and 'OrE' forks, respectively.
@@ -53,14 +83,7 @@ interpretBoolExpr pred = evalMapBoolExpr pred (&&) (||) id
 -- > evalMapBoolExpr (`isInfixOf` searchCandidate)
 --
 parseBoolExpr :: Parser (BoolExpr String)
-parseBoolExpr = expr
- where
-  expr   = term `chainr1` andE
-  term   = factor `chainr1` orE
-  factor = parens expr <|> litE
-  litE   = LitE <$> token (some letter)
-  andE   = AndE <$ symbolic '&'
-  orE    = OrE <$ symbolic '|'
+parseBoolExpr = boolExpr
 
 --- UNUSED
 
@@ -77,5 +100,3 @@ parseBoolExpr = expr
 
 --interpretBoolExpr' :: BoolExpr Bool -> Bool
 --interpretBoolExpr' = interpretBoolExpr id
-
-

@@ -31,13 +31,13 @@ dependencies:
 - criterion
 - directory
 - esqueleto
-- hspec
-- ixset
 - lens
+- megaparsec
 - monad-logger
 - mtl >= 2.2.2
 - optparse-applicative
 - parsers
+- parser-combinators
 - path-pieces
 - persistent
 - persistent-sqlite
@@ -46,13 +46,11 @@ dependencies:
 - QuickCheck
 - raw-strings-qq
 - resourcet
-- safecopy
 - split
 - text
 - text-metrics
 - time
 - transformers
-- trifecta
 - word-wrap
 - yaml-config
 
@@ -60,10 +58,12 @@ library:
   source-dirs: src
   exposed-modules:
     - CLI.Parser.Types
+    - CLI.Parser.Custom
     - Diff
     - Lib
-    - Parse.Entry
     - Parse
+    - Parse.Types
+    - Parse.Helpers
     - Helpers
     - Search
     - Render
@@ -75,7 +75,7 @@ library:
     - Time
 
 executables:
-# bench: 
+# bench:
 #   main: Main.hs
 #   source-dirs: bench
 #   ghc-options:
@@ -85,7 +85,7 @@ executables:
 #   dependencies:
 #   - muse
 #   - criterion
-  
+
   muse:
     main:                Main.hs
     source-dirs:         app
@@ -110,6 +110,7 @@ tests:
     dependencies:
     - muse
     - hspec
+    - hspec-megaparsec
     - QuickCheck
     - trifecta
     - optparse-applicative

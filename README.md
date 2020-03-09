@@ -166,6 +166,15 @@ N.B. `[<expr>]` in an entry example or grammar specification indicates that
 `<expr>` is optional; and `(<variant0> | ... | <variantN>)` denotes one of the
 listed options must be selected, but that any one of which is accepted.
 
+### Timestamp
+
+All entry variants except dumps (which are for version >= 0.3.0 ignored) begin
+with a timestamp, e.g.,
+
+```
+04:53:09 λ. <entry>
+```
+
 ### Definition Comparison
 ```
 dvs <headword>[ ]: <meaning>
@@ -192,15 +201,23 @@ d headword : meaning
 As in a definition comparison, the space before the colon is optional.
 
 ### Quotation
-```
-quotation [<page-num>]
 
-"<body>"
+```
+14:53:09 λ. (q|quotation) [<page-num>] 
+
+       "<quote-body>"
 
 <attribution>
 ```
 
-A `<page-num>` consists of arbitrarily many digits.
+Notes: 
+* A `<page-num>` consists of arbitrarily many digits.
+* A `<quote-body>` may contain any characters except double quotes, which must
+  be escaped.
+* _Any_ time is acceptable; 14:53:09 is by no means the logging second. It must
+  however by a valid `<timestamp>`.
+* The quote body and optional attribution line must be indented more than the
+  timestamp.
 
 ### Read
 One of:

@@ -12,8 +12,8 @@
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- This module merely exports modules "Diff", "Helpers", "Parse", "Parse.Entry",
--- "Search", and "Render".
+-- This module merely exports modules "Diff", "Helpers", "Parse", "Search",
+-- and "Render".
 --
 -- TODO
 --
@@ -31,7 +31,7 @@
 --    indentation suits the log file's plain text origin may not suit the
 --    CLI's prettified output.
 --
--- □   (!!!) usablility: dispatch bucket filters so that a option for a given
+-- ▣   (!!!) usablility: dispatch bucket filters so that a option for a given
 --     flag, say, `--qb <word>`, implies the presence of its associated bucket type
 --     filter, in this
 --     case, `-q`.
@@ -40,13 +40,13 @@
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
 --
--- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files
+-- ▣  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files
 --    and/or update parser to accomodate desirable aspects of the old syntax.
 --
 --    DIRECTIVE: fail loudly: WE DO NOT WANT HALF-PARSED FILES ANY MORE
 --
 --
--- □  (convenience) CLI: add `search --all` option to include all entries in
+-- ▣  (convenience) CLI: add `search --all` option to include all entries in
 --    search.
 --
 -- □  switch to list identifying characteristics of entries, viz. full
@@ -64,6 +64,9 @@ module Lib
   )
 where
 
+import           Control.Lens                   ( _Left
+                                                , over
+                                                )
 import           Control.Monad                  ( void )
 import           Control.Monad.State
 
@@ -92,9 +95,20 @@ import           Database.Persist.Sqlite        ( runMigration
                                                 )
 import           Helpers
 import           Options.Applicative
-import           Parse
-import           Parse.Entry
-import           CLI.Parser.Custom
+import           Parse.Types                    ( allDefVariants
+                                                , LogEntry
+                                                , DefQueryVariant(..)
+                                                , DefQuery
+                                                , RelDur(..)
+                                                )
+--import           Parse
+import           Parse.Helpers                  ( parsePretty )
+import qualified Parse
+import           CLI.Parser.Custom              ( pathToDay
+                                                , searchArgument
+                                                , reldur
+                                                , caretedPreds
+                                                )
 import           CLI.Parser.Types
 import           Prelude                 hiding ( init
                                                 , log
@@ -122,8 +136,9 @@ import           System.Directory               ( createDirectoryIfMissing
                                                 )
 import           System.Environment             ( getEnv )
 import           System.Exit                    ( exitFailure )
+import           Text.Megaparsec                ( errorBundlePretty )
+import qualified Text.Megaparsec               as M
 import           Text.Show.Pretty               ( pPrint )
-import qualified Text.Trifecta                 as Tri
 
 version :: String
 version = "muse 0.3.0"
@@ -166,14 +181,8 @@ version = "muse 0.3.0"
 --
 -- N.B.: ordered parsing on first pass
 relDurReader :: ReadM RelDur
-relDurReader = eitherReader $ \s -> case parse reldur s of
-  Tri.Success rd -> Right rd
-  Tri.Failure err ->
-    Left
-      $  "Cannot parse relative date by (dmy): "
-      ++ s
-      ++ "\nErrInfo: "
-      ++ show err
+relDurReader =
+  eitherReader $ \s -> over _Left errorBundlePretty $ M.parse reldur "" s
   -- d m y
   -- y m d
   -- m d y
@@ -464,7 +473,7 @@ defSearchFlag
        , Maybe (BoolExpr (StrSearch String))
        )
 defSearchFlag = option
-  (eitherReader (parseEither searchArgument))
+  (eitherReader (parsePretty searchArgument))
   (  long "def-search"
   <> long "ds"
   <> help
@@ -558,22 +567,8 @@ titleS =
     <> value []
     <> help "Collect entries attributed to satisfactory authors."
 
--- | Parse caret separated list of strings.
-parsePreds :: String -> Either String [String] -- search type, rest of string
-parsePreds s = case parse preds s of
-  Tri.Success rd -> Right rd
-  Tri.Failure err ->
-    Left
-      $  "Cannot parse '^' separated predicate list: "
-      ++ s
-      ++ "\nErrInfo: "
-      ++ show err
-
--- | Run a "Trifecta" parser on a string and convert it to 'Either'.
-parseEither :: Tri.Parser a -> String -> Either String a
-parseEither p s = case parse p s of
-  Tri.Success a   -> Right a
-  Tri.Failure err -> Left $ "parseEither: error: " ++ show err
+parsePreds :: String -> Either String [String]
+parsePreds = parsePretty caretedPreds
 
 -- | FIXME: cache date of first log file.
 sinceAll :: Parser RelDur
@@ -614,13 +609,7 @@ testMain s = do
 
 -- TODO
 --
--- □  (!) complete 'parseAllEntriesR' (caching (add table w date of insertion
--- for each entry, proper db path unification, etc.)
---
--- □  wrap 'dispatchSearch' to pretty print output; see 'colRender'
---
 -- □  lint: run parse but don't write to DB
---
 --
 dispatch :: Opts -> IO ()
 dispatch Bare = putStrLn version
@@ -649,11 +638,8 @@ dispatch (Opts color (Parse it)) = do
   mc <- loadMuseConf
   putStrLn "parsing..."
   s <- case it of
-    -- TODO factor out a function 'parseDay' which parses to json, with a
-    -- storage flag for debugging
     File  fp           -> readFile fp
     StdIn s            -> return s
-    -- TODO update 'parseAllEntries'
     All silence ignore -> parseAllEntries silence ignore mc >> return ""
   putStrLn s
 
@@ -777,16 +763,6 @@ lsEntrySource = listDirectory . T.unpack . entrySource
 --    See `entryCache` and `entrySource`
 -- on parse failure, show user err info
 -- | Parse all entries from logDir into cacheDir/entries.
-
-
--- | Parse all entries into sqlite database.
---
--- TODO
---
--- □  caching
---
--- □  overwrite vs insert 'wrteDay' mode
---
 parseAllEntries :: Bool -> Bool -> MuseConf -> IO ()
 parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
   fps <- sort <$> lsEntrySource mc
@@ -810,30 +786,30 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
               (&&) <$> hasBeenModified fp <*> return (isJust (pathToDay fp))
             )
             fps
-    parse :: String -> IO (String, Either String [LogEntry])
-    parse fp =
-      (,)
-        <$> pure fp
-        <*> (showErr . Tri.parseByteString logEntries mempty <$> B.readFile
-              (T.unpack (entrySource mc) ++ "/" ++ fp)
-            )
-    -- TODO group `logEntry`s by day for use with 'addDay'
+    --parse :: String -> IO (String, Either (ErrorBundle ...) [LogEntry])
+    parse fp = do
+      eitherLogEntry <- Parse.parseLogEntries
+        <$> T.readFile (T.unpack (entrySource mc) <> "/" <> fp)
+      return (fp, fst eitherLogEntry)
     parseAndShowErrs :: [FilePath] -> IO [(String, [LogEntry])]
     parseAndShowErrs fs = sequence (parse <$> fs) >>= showOrCollect
-    showOrCollect :: [(String, Either String res)] -> IO [(String, res)]
-    showOrCollect =
-      let sideBar = unlines . fmap ("> " ++) . lines
-      in
-        foldr
-          (\(fp, e) rest -> case e of
-            Left err -> if quiet
-              then rest
-              else putStrLn ("File: " ++ fp ++ "\n" ++ sideBar err) >> rest
-            Right res -> do
-              when showDebug $ putStrLn $ "Success: " ++ fp
-              ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
-          )
-          (return [])
+    showOrCollect
+      = let sideBar = unlines . fmap ("> " ++) . lines
+        in
+          foldr
+            (\(fp, e) rest -> case e of
+              Left err -> if quiet
+                then rest
+                else
+                  putStrLn
+                      ("File: " ++ fp ++ "\n" ++ sideBar (errorBundlePretty err)
+                      )
+                    >> rest
+              Right res -> do
+                when showDebug $ putStrLn $ "Success: " ++ fp
+                ((fp, res) :) <$> rest -- render errros w filename, `ErrInfo`
+            )
+            (return [])
   when quiet $ putStrLn "\nSuppressing entry parse error output"
   runSqlite (home <> "/.muse/state/sqlite.db") $ do
     -- FIXME remove before merging feature into master.
@@ -863,5 +839,3 @@ parseAllEntries quiet ignoreCache mc@(MuseConf log cache home) = do
     -- FIXME LastParse only reflects the time of the last successful parses.
     Sql.setLastParseTime now ignoreCache
   return ()
-  -- read in log file names; parse 'em
-  --putStrLn $ show mc

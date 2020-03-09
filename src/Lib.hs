@@ -31,7 +31,7 @@
 --    indentation suits the log file's plain text origin may not suit the
 --    CLI's prettified output.
 --
--- □   (!!!) usablility: dispatch bucket filters so that a option for a given
+-- ▣   (!!!) usablility: dispatch bucket filters so that a option for a given
 --     flag, say, `--qb <word>`, implies the presence of its associated bucket type
 --     filter, in this
 --     case, `-q`.
@@ -40,13 +40,13 @@
 --    as yet the --phrase is both a flag and an option, the latter having been
 --    shadowed by the former.
 --
--- □  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files
+-- ▣  (!!!) PARSER: clean up (that is, mangle further) non-compliant log files
 --    and/or update parser to accomodate desirable aspects of the old syntax.
 --
 --    DIRECTIVE: fail loudly: WE DO NOT WANT HALF-PARSED FILES ANY MORE
 --
 --
--- □  (convenience) CLI: add `search --all` option to include all entries in
+-- ▣  (convenience) CLI: add `search --all` option to include all entries in
 --    search.
 --
 -- □  switch to list identifying characteristics of entries, viz. full

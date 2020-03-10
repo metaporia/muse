@@ -309,8 +309,19 @@ spec' = do
   --                 ]
   --    )
 
+
 spec :: Spec
 spec = do
+  describe "tag list" $ do
+    it "single: [phrase]" $ pt tagList "[phrase]" `shouldParse` ["phrase"]
+    it "double: [phrase,french]" $ pt tagList "[phrase,french]" `shouldParse` ["phrase", "french"]
+    it "single no trailing pipe: [phrase" $ pt tagList `shouldFailOn` "[phrase" 
+    it "single no leading pipe: phrase]" $ pt tagList `shouldFailOn` "phrase]" 
+    it "(should fail) double w space 0: [ phrase,french]" $ pt tagList `shouldFailOn` "[ phrase,french]" 
+    it "(should fail) double w space 1: [phrase ,french]" $ pt tagList `shouldFailOn` "[phrase ,french]" 
+    it "(should fail) double w space 2: [phrase, french]" $ pt tagList `shouldFailOn` "[phrase, french]" 
+    it "(should fail) double w space 3: [phrase,french ]" $ pt tagList `shouldFailOn` "[phrase,french ]" 
+
   spec'
   describe "logEntries" $ do
     it "ascending" $ pt logEntries `shouldFailOn` outOfOrder

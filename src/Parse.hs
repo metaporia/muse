@@ -37,7 +37,7 @@ import           Control.Monad.State            ( State
                                                 , modify
                                                 , runState
                                                 )
-import           Data.Char                      ( digitToInt )
+import           Data.Char                      ( isDigit, isAlpha, digitToInt )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Text                      ( Text )
@@ -582,6 +582,26 @@ twoDigitNatural = do
   tens <- digitToInt <$> digitChar
   ones <- digitToInt <$> digitChar
   return $ tens * 10 + ones
+
+
+--------------
+-- TAG LIST --
+--------------
+
+-- | A tag list (expected between the entry prefix and the beginning of the
+-- entry body) is a square-bracketed list of comma-separated alpha-numeric tags
+-- (underscores, hyphens, and forward slashes are valid tag characters), each of
+-- which must be at least one character long. Spaces are not permitted.
+--
+-- E.g., @[cool_phrase37a,pg-wodehouse/backformation]@ is a valid tag.
+tagList :: Parser [String]
+tagList = bracketed (commaSeparated tag)
+ where
+  isTagChar c = isDigit c || isAlpha c || c == '_' || c == '-' || c == '/'
+  tag            = some (satisfy isTagChar)
+  commaSeparated = flip sepBy1 (char ',')
+  bracketed p = char '[' *> p <* char ']'
+
 
 -------------
 -- HELPERS --

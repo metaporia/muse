@@ -256,12 +256,18 @@ phrase = do
 definition :: Parser Entry
 definition = label "definition" $ do
   let
-    dvs     = symbol "dvs" *> defVersus'
-    dPrefix = try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+    dvs     = do symbol "dvs" 
+                 tags <- tagList 
+                 (tags,) <$> defVersus'
+    dPrefix = do try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+                 tagList
     inline =
-      dPrefix *> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
-    hws = dPrefix *> (uncurry Defn <$> headwords)
-  fmap Def $ try dvs <|> try inline <|> hws
+      (,) <$> dPrefix <*> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
+    hws = do dPrefix 
+             (,) <$> tagList <*> (uncurry Defn <$> headwords)
+  (tags, defQuery) <- try dvs <|> try inline <|> hws
+  trace ("tags: " <> show tags) (return ()) -- FIXME remove
+  return (Def tags defQuery)
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
 headwords :: Parser (Maybe Integer, [String])

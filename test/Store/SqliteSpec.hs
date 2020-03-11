@@ -55,6 +55,7 @@ import qualified Parse.Types                   as P
 import           Render                         ( showAll )
 import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
+import           Store.Sqlite.Types             ( Tags(..) )
 import           Test.Hspec              hiding ( before )
 import           Test.Hspec.Megaparsec          ( shouldParse )
 import           Text.RawString.QQ
@@ -806,6 +807,7 @@ demoLogEntries
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf"
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -816,6 +818,7 @@ demoLogEntries
                    "benign"
                    "gentle, mild, or, medically, non-threatening"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -827,21 +830,25 @@ demoLogEntries
           "malign"
           "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
       , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
       , Def (Defn (Just 38) ["sublime", "lintel"])
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
       , Read "Silas Marner" "George Eliot (Mary Ann Evans)"
+      , Tags []
       )
       -- N.B. this read block is here to ensure that manually attributed (indented)
       -- entries are treated by search predicates as belonging to both.
@@ -852,6 +859,7 @@ demoLogEntries
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -859,16 +867,19 @@ demoLogEntries
       , Quotation "Her simplicity fathomed what clever people falsified."
                   "In \"To the Lighthouse\", by Virginia Woolf"
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
       , Def (Defn Nothing ["plover"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -877,6 +888,7 @@ demoLogEntries
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf"
         (Just 38)
+      , Tags []
       )
     ]
 

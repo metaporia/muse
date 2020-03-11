@@ -37,7 +37,10 @@ import           Control.Monad.State            ( State
                                                 , modify
                                                 , runState
                                                 )
-import           Data.Char                      ( isDigit, isAlpha, digitToInt )
+import           Data.Char                      ( isDigit
+                                                , isAlpha
+                                                , digitToInt
+                                                )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Text                      ( Text )
@@ -58,6 +61,7 @@ import qualified Text.Megaparsec.Char.Lexer    as L
 import           Text.Megaparsec.Debug          ( dbg )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
+import           Store.Sqlite.Types             ( Tags(..) )
 
 -- TODO test compliance:
 -- - Dump handling (as discard)
@@ -79,7 +83,7 @@ logEntries = many (try emptyLine) *> some logEntry' <* eof
 
 logEntries' = many (try emptyLine) *> some logEntry <* eof
 
-logEntry :: Parser (Int, TimeStamp, Entry)
+logEntry :: Parser (Int, TimeStamp, Entry, Tags)
 logEntry = entry <* many (try emptyLine)
  where
   entry = do
@@ -93,19 +97,21 @@ logEntry = entry <* many (try emptyLine)
       Nothing -> pure ()
     --dbg ("updateIndentation " <> show indentLevel) $
     updateIndentation indentLevel
-    entry <-
-      try read
-      <|> try commentary
-      <|> try dialogue
-      <|> try quotation
+    -- FIXME entry tags: add tags to other variants (save Nul and PageNUm)
+    let noTags = fmap (Tags [],)
+    (tags, entry) <-
+      try (noTags read)
+      <|> try (noTags commentary)
+      <|> try (noTags dialogue)
+      <|> try (noTags quotation)
       <|> try definition
-      <|> try pageNum
-      <|> try phrase
-      <|> nullEntry
+      <|> try (noTags pageNum)
+      <|> try (noTags phrase)
+      <|> noTags nullEntry
 
     --dbg (show indentLevel <> ": " <> show ts) (pure ())
     updateTimeStamp ts
-    return (indentLevel, ts, entry)
+    return (indentLevel, ts, entry, tags)
 
 updateTimeStamp :: TimeStamp -> Parser ()
 updateTimeStamp ts = modify $ \(a, _) -> (a, Just ts)
@@ -253,21 +259,27 @@ phrase = do
 
 -- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
 -- 'DefVersus').
-definition :: Parser Entry
+definition :: Parser (Tags, Entry)
 definition = label "definition" $ do
   let
-    dvs     = do symbol "dvs" 
-                 tags <- tagList 
-                 (tags,) <$> defVersus'
-    dPrefix = do try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
-                 tagList
+    dvs = do
+      symbol "dvs"
+      --tags <- try tagList <|> pure (Tags [])
+      tags <- pure (Tags [])
+      (tags, ) <$> defVersus'
+    dPrefix = do
+      try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+      try tagList <|> pure (Tags [])
     inline =
-      (,) <$> dPrefix <*> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
-    hws = do dPrefix 
-             (,) <$> tagList <*> (uncurry Defn <$> headwords)
+      (,)
+        <$> dPrefix
+        <*> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
+    hws = do
+      dPrefix
+      (,) <$> (try tagList <|> pure (Tags [])) <*> (uncurry Defn <$> headwords)
   (tags, defQuery) <- try dvs <|> try inline <|> hws
-  trace ("tags: " <> show tags) (return ()) -- FIXME remove
-  return (Def tags defQuery)
+  --trace ("tags: " <> show tags) (return ()) -- FIXME remove
+  return (tags, Def defQuery)
 
 -- | Parses a list of comma separated headwords. It must not exceed one line.
 headwords :: Parser (Maybe Integer, [String])
@@ -600,8 +612,8 @@ twoDigitNatural = do
 -- which must be at least one character long. Spaces are not permitted.
 --
 -- E.g., @[cool_phrase37a,pg-wodehouse/backformation]@ is a valid tag.
-tagList :: Parser [String]
-tagList = bracketed (commaSeparated tag)
+tagList :: Parser Tags
+tagList = Tags <$> bracketed (commaSeparated tag)
  where
   isTagChar c = isDigit c || isAlpha c || c == '_' || c == '-' || c == '/'
   tag            = some (satisfy isTagChar)

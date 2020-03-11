@@ -69,6 +69,7 @@ import           Helpers
 import qualified Parse.Types                   as P
 import           Parse.Types             hiding ( DefQuery(..)
                                                 , DefQueryVariant(..)
+                                                , Tags
                                                 )
 import           Search
 import           Store                          ( Result(..) )
@@ -105,6 +106,7 @@ DefEntry
     Id UTCTime default=CURRENT_TIME
     definitions TL.Text
     definitionTag DefTag
+    tags TL.Text
     attributionTag (Key ReadEntry) Maybe
     phraseOrDef PhraseOrDef
     pgNum Int Maybe
@@ -390,11 +392,12 @@ writeLogEntry day logEntry mAttrTag =
     -- For now, we return for each dump a UTCTime with 0 hrs, 0 mins, 0 secs
     -- reflecting the date of the log file (its name, that is).
     (Right $ toUTC day (TimeStamp 0 0 0)) <$ insertDump day dumpContents
-  TabTsEntry (indentation, timestamp, entry)
+  -- FIXME entry tags: update db schema, write JSON-encoded tags
+  TabTsEntry (indentation, timestamp, entry, tags)
     -> let utc = toUTC day timestamp
        in
          (case entry of
-             Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag dq
+             Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag tags dq
              Read title author ->
                repsert (ReadEntryKey utc) $ ReadEntry title author
                            -- FIXME relies on empty attribution string when manual
@@ -419,7 +422,7 @@ writeLogEntry day logEntry mAttrTag =
                    repsert (PageNumberEntryKey utc)
                      $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
              Phr phrase ->
-               repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
+               repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag tags phrase
              Dialogue dialogueBody ->
                repsert (DialogueEntryKey utc)
                  $   DialogueEntry dialogueBody
@@ -444,6 +447,7 @@ main = runSqlite "test.db" $ do
       defEntryId = DefEntryKey now'
   insertKey defEntryId $ DefEntry inline
                                   Inline'
+                                  ""
                                   (Just wutheringHeightsId)
                                   Definition'
                                   Nothing
@@ -457,6 +461,7 @@ main = runSqlite "test.db" $ do
         (TL.decodeUtf8 $ encode $ Inlines [InlineDef "mizzle" "a misty drizzle"]
         )
         Inline'
+        ""
         Nothing
         Definition'
         Nothing
@@ -588,11 +593,12 @@ instance ToEntry String PageNumberEntry where
 --
 -- Note: in the future, the parser may directly marshal to the more db-friendly
 -- format; for the present, however, we mourn and carry on as best we know how.
-toDefEntry :: Maybe AttrTag -> P.DefQuery -> DefEntry
-toDefEntry mAttrTag dq = case dq of
+toDefEntry :: Maybe AttrTag -> Tags -> P.DefQuery -> DefEntry
+toDefEntry mAttrTag tags dq = case dq of
   P.Defn mPg hws -> DefEntry
     (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
     Headwords'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
     Definition'
     (fromIntegral <$> mPg)
@@ -602,6 +608,7 @@ toDefEntry mAttrTag dq = case dq of
       [InlineDef (T.pack headword) (T.pack meaning)]
     )
     Inline'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
     Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
@@ -614,6 +621,7 @@ toDefEntry mAttrTag dq = case dq of
       ]
     )
     Comparison'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
     Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
@@ -621,11 +629,12 @@ toDefEntry mAttrTag dq = case dq of
     Nothing
 
 -- | Like 'toDefEntry' but converts from
-phraseToDefEntry :: Maybe AttrTag -> Phrase -> DefEntry
-phraseToDefEntry mAttrTag phrase = case phrase of
+phraseToDefEntry :: Maybe AttrTag -> Tags -> Phrase -> DefEntry
+phraseToDefEntry mAttrTag tags phrase = case phrase of
   Plural hws -> DefEntry
     (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
     Headwords'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
     Phrase'
     Nothing
@@ -635,6 +644,7 @@ phraseToDefEntry mAttrTag phrase = case phrase of
       [InlineDef (T.pack headword) (T.pack meaning)]
     )
     Inline'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
     Phrase'
     -- TODO add page nums (prefix types?) for all definition/phrase types.

@@ -12,6 +12,7 @@ import           Data.Aeson                     ( ToJSON
                                                 , toEncoding
                                                 )
 import           GHC.Generics                   ( Generic )
+import           Store.Sqlite.Types             ( Tags )
 
 
 type Author = String
@@ -22,13 +23,14 @@ type Meaning = String
 type Title = String
 type Quote = String
 
+
 data LogEntry
   = Dump String
-  | TabTsEntry (Int, TimeStamp, Entry)
+  | TabTsEntry (Int, TimeStamp, Entry, Tags)
   deriving (Eq, Show, Generic)
 
 getTimeStamp :: LogEntry -> Maybe TimeStamp
-getTimeStamp (TabTsEntry (_, ts, _)) = Just ts
+getTimeStamp (TabTsEntry (_, ts, _, _)) = Just ts
 getTimeStamp _                       = Nothing
 
 instance ToJSON LogEntry where

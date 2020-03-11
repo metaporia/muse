@@ -105,7 +105,7 @@ newtype QuoteBody = QuoteBody String
 
 instance ColRender LogEntry where
   colRender col (Dump s) = putStr "Dump:    " >> colRender col (T.pack s)
-  colRender col (TabTsEntry (_, _, entry)) = colRender col entry
+  colRender col (TabTsEntry (_, _, entry, _)) = colRender col entry -- FIXME entry tags: render tags ?
 
 instance ColRender Entry where
   colRender col (Def dq) = colRender col dq

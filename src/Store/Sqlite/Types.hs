@@ -54,3 +54,11 @@ instance ToJSON PageTag where
 instance FromJSON PageTag
 
 derivePersistField "PageTag"
+
+-- | A list of tags, possesed by all variants but 'Null' & 'PageNum'.
+newtype Tags = Tags [String] deriving (Eq, Show, Generic)
+
+instance ToJSON Tags where
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Tags

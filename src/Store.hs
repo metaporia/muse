@@ -59,8 +59,8 @@ getUTC (DumpR _  ) = Nothing
 getUTC (TsR utc _) = Just utc
 
 fromLogEntry :: Day -> LogEntry -> Result
-fromLogEntry _   (Dump       s         ) = DumpR (T.pack s)
-fromLogEntry day (TabTsEntry (_, ts, e)) = fromEntry (toUTC day ts) e
+fromLogEntry _   (Dump       s            ) = DumpR (T.pack s)
+fromLogEntry day (TabTsEntry (_, ts, e, _)) = fromEntry (toUTC day ts) e -- FIXME entry tags: update Result to include tags
 
 class ToResult ctx a where
   toResult :: ctx -> a -> Result

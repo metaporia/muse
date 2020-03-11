@@ -74,20 +74,20 @@ idea = undefined
 -- | Checks whether a 'LogEntry' is indented at least as much as the given
 -- depth; for 'Dump's returns @False@ when depth >= 1.
 isIndentedTo :: Int -> LogEntry -> Bool
-isIndentedTo depth (Dump       _                  ) = depth == 0
-isIndentedTo depth (TabTsEntry (indentation, _, _)) = indentation >= depth
+isIndentedTo depth (Dump       _                     ) = depth == 0
+isIndentedTo depth (TabTsEntry (indentation, _, _, _)) = indentation >= depth
 
 -- | Checks whether a 'LogEntry' is indented _exactly_ to the given depth;
 -- for 'Dump's returns @False@ unless the given depth is 0.
 isIndentedExactlyTo :: Int -> LogEntry -> Bool
 isIndentedExactlyTo depth (Dump _) = depth == 0
-isIndentedExactlyTo depth (TabTsEntry (indentation, _, _)) =
+isIndentedExactlyTo depth (TabTsEntry (indentation, _, _, _)) =
   indentation == depth
 
 -- | Checks whether a 'LogEntry' is not indented.
 -- 'Dumps' are considered to be top-level.
 isTopLevel :: LogEntry -> Bool
-isTopLevel (TabTsEntry (0, _, _)) = True
+isTopLevel (TabTsEntry (0, _, _, _)) = True
 isTopLevel (Dump       _        ) = True
 isTopLevel _                      = False
 
@@ -153,11 +153,11 @@ projectPhrase = getEntry >=> getPhrase
 projectDialogue = getEntry >=> getDialogue
 
 project :: LogEntry -> Maybe DefQuery
-project (TabTsEntry (_, _, Def dq)) = Just dq
+project (TabTsEntry (_, _, Def dq, _)) = Just dq
 project _                           = Nothing
 
 projectDef :: LogEntry -> [(Headword, Maybe Meaning)]
-projectDef (TabTsEntry (_, _, Def dq)) = case dq of
+projectDef (TabTsEntry (_, _, Def dq, _)) = case dq of
   Defn      mPg headwords -> (, Nothing) <$> headwords
   InlineDef hw  meaning   -> [(hw, Just meaning)]
   DefVersus hw m hw' m'   -> [(hw, Just m), (hw', Just m')]

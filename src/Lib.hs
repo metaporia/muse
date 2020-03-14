@@ -61,15 +61,22 @@
 -----------------------------------------------------------------------------
 module Lib
   ( main
+  , testSearchConfig
   )
 where
 
+import           CLI.Parser.Custom              ( caretedPreds
+                                                , parseTags
+                                                , pathToDay
+                                                , reldur
+                                                , searchArgument
+                                                )
+import           CLI.Parser.Types
 import           Control.Lens                   ( _Left
                                                 , over
                                                 )
 import           Control.Monad                  ( void )
 import           Control.Monad.State
-
 import           Data.Aeson              hiding ( Null )
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
@@ -85,6 +92,7 @@ import           Data.Maybe                     ( isJust
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
+import qualified Data.Text.Lazy                as TL
 import           Data.Time
 import           Data.Time.Clock                ( utctDay )
 import           Data.Yaml.Config               ( load
@@ -226,7 +234,8 @@ search today = do
     (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
 
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
-  ps    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
+  tags  <- tagsList
+  --phraseTag    <- flag' ("phrase" :: TL.Text) $ long "phrases" <> short 'p' <> help "Collect phrases."
   qs    <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
   dials <-
     switch
@@ -243,8 +252,8 @@ search today = do
   dhw'      <- defHW
   dm'       <- defMeaning
   q'        <- quoteBody
-  phw'      <- phraseHW
-  pm'       <- phraseMeaning
+  --phw'      <- phraseHW
+  --pm'       <- phraseMeaning
   dias'     <- dialogueBody
   comments' <- commentBody
 
@@ -268,6 +277,7 @@ search today = do
     (padForSqlLike <$> comments')
     (padForSqlLike <$> dias')
     []
+    tags
 
 padForSqlLike s = '%' : s ++ "%"
 
@@ -507,7 +517,7 @@ phraseHW :: Parser [String]
 phraseHW =
   fmap (either (const []) id . parsePreds)
     $  option str
-    $  (long "phrases" <> short 'p' <> value [])
+    $  (long "phr-hw" <> long "ph" <> value [])
     <> help "Collect only satisfactory phrases"
 
 phraseMeaning :: Parser [String]
@@ -516,6 +526,15 @@ phraseMeaning =
     $  option str
     $  (long "pm" <> long "phr-meaning" <> value [])
     <> help "Search for strings within meaning/definition."
+
+-- | Restrict search to entries that exactly match all tags passed via the
+-- `--tags/--tag/-T` option. The string argument is expected to be a comma separated
+-- list of tags. A tag must match the regex @[a-zA-Z0-9_-]+@.
+tagsList :: Parser [TL.Text]
+tagsList =
+  option tags $ long "tags" <> long "tag" <> short 'T' <> value [] <> help
+    "Restrict search to entries with the given comma-separted tags."
+  where tags = eitherReader $ parsePretty parseTags . TL.pack
 
 -- variant flag
 quoteBody :: Parser [String]
@@ -606,6 +625,14 @@ testMain s = do
     Options.Applicative.Success opts -> dispatch opts
     _ -> pPrint result
 
+testSearchConfig :: String -> IO (Maybe SearchConfig)
+testSearchConfig s = do
+  today <- utctDay <$> getCurrentTime
+  let res =
+        execParserPure defaultPrefs (info (search today) briefDesc) $ words s
+  return $ case res of
+    Options.Applicative.Success opts -> Just opts
+    _ -> Nothing
 
 -- TODO
 --

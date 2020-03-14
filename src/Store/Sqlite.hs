@@ -688,6 +688,7 @@ data SearchConfig = SearchConfig
   , commentarySearch :: CommentarySearch
   , dialogueSearch :: DialogueSearch
   , dumpSearch :: [String]
+  , tags :: [TL.Text]
   } deriving Show
 
 
@@ -738,11 +739,12 @@ dispatchSearch logPath SearchConfig {..} =
         then -- show all in date range matching attribution requirements
           join <$> sequence
             [ -- replaces 'DefSearch' with 'allDefVariants'.
-          --filterDumps since before [] ,
+      --filterDumps since before [] ,
               filterDefs' since
                           before
                           authPreds
                           titlePreds
+                          tags
                           defSearch { defVariants = allDefVariants }
             , filterQuotes' since before authPreds titlePreds quoteSearch
             , filterCommentaries' since
@@ -773,6 +775,7 @@ dispatchSearch logPath SearchConfig {..} =
                 before
                 authPreds
                 titlePreds
+                tags
 -- when the definition flag is passed, but no def variants
 -- are specified, return all variants; otherwise, use the
 -- defSearch unmodified.
@@ -956,6 +959,19 @@ attributionConstraints readEntry authPreds titlePreds =
           titlePreds
 
 
+-- | Checks that an (def , for the present) entry has the given tags.
+--
+-- This is little more than 'genericSearchConstraint'.
+hasTags
+  :: (IsString s, Semigroup s, SqlString s)
+  => [s]
+  -> SqlExpr (Value s)
+  -> SqlExpr (Value Bool)
+hasTags requiredTags jsonTagList = genericSearchConstraint
+  jsonTagList
+  (prepTag <$> requiredTags)
+  where prepTag t = "%\"" <> t <> "\"%"
+
 
 --- DEFINITION SEARCH
 
@@ -1093,14 +1109,16 @@ filterDefs'
   -> Day
   -> [String]
   -> [String]
+  -> [TL.Text]
   -> DefSearch
   -> DB m [Either String Result]
-filterDefs' since before authPreds titlePreds defSearch = do
+filterDefs' since before authPreds titlePreds tags defSearch = do
   let
   defEntries <- selectDefs' since
                             before
                             authPreds
                             titlePreds
+                            tags
                             (headwordPreds defSearch)
                             (meaningPreds defSearch)
                             (defVariants defSearch) -- collect all strings
@@ -1170,11 +1188,12 @@ selectDefs'
   -> Day
   -> [String]
   -> [String]
+  -> [TL.Text]
   -> Maybe (BoolExpr (StrSearch String))
   -> Maybe (BoolExpr (StrSearch String))
   -> [P.DefQueryVariant]
   -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
+selectDefs' since before authPreds titlePreds tags hwBoolExpr mnBoolExpr defVariants
   = do
     let
       querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
@@ -1229,6 +1248,7 @@ selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
               -- FIXME (blocked on tag refactor) JANK WORKAROUND
               &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
                                     querysDefTags
+              &&. hasTags tags (defEntry ^. DefEntryTags)
 
               -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
               -- a tag than a structural distinction

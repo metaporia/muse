@@ -332,6 +332,8 @@ spec = do
     it "(should fail) double w space 3: [phrase,french ]"
       $              pt tagList
       `shouldFailOn` "[phrase,french ]"
+  describe "tagged definitions" $ do
+    it "skip whitespace after taglist" $ pt logEntries' taggedDefinitions `shouldParse` taggedDefinitionsOut
 
   spec'
   describe "logEntries" $ do
@@ -766,6 +768,36 @@ logs = [r|
 08:50:04 λ. d brimful
 |]
 
+taggedDefinitions :: Text
+taggedDefinitions = [r|
+08:47:47 λ. read "The Mill on the Floss" by George Eliot (Mary Ann Evans)
+08:47:48 λ. d [phrase] propinquity
+
+08:48:52 λ. q
+
+    "...that fly-fishers fail in preparing their bait so as to make it
+    alluring in the right quarter, for want of a due acquaintance with
+    the subjectivity of fishes."
+
+08:50:04 λ. d [anki] brimful
+|]
+
+-- TODO add tag support for other entry variants
+taggedEntries :: Text
+taggedEntries = [r|
+08:47:47 λ. read "The Mill on the Floss" by George Eliot (Mary Ann Evans)
+08:47:48 λ. d  [phrase]  propinquity 
+
+08:48:52 λ. q
+
+    "...that fly-fishers fail in preparing their bait so as to make it
+    alluring in the right quarter, for want of a due acquaintance with
+    the subjectivity of fishes."
+
+08:50:04 λ. d [anki]      brimful
+|]
+
+
 logsIndented = [r|
 08:47:47 λ. read "The Mill on the Floss" by George Eliot (Mary Ann Evans)
     08:47:48 λ. q
@@ -785,6 +817,32 @@ logsIndented = [r|
 
 
 |]
+
+taggedDefinitionsOut =
+  [ ( 0
+    , TimeStamp {hr = 8, min = 47, sec = 47}
+    , Read "The Mill on the Floss" "George Eliot (Mary Ann Evans)"
+    , Tags []
+    )
+  , ( 0
+    , TimeStamp {hr = 8, min = 47, sec = 48}
+    , Def (Defn Nothing ["propinquity"])
+    , Tags []
+    )
+  , ( 0
+    , TimeStamp {hr = 8, min = 48, sec = 52}
+    , Quotation
+      "...that fly-fishers fail in preparing their bait so as to make it\nalluring in the right quarter, for want of a due acquaintance with\nthe subjectivity of fishes."
+      ""
+      Nothing
+    , Tags []
+    )
+  , ( 0
+    , TimeStamp {hr = 8, min = 50, sec = 4}
+    , Def (Defn Nothing ["brimful"])
+    , Tags []
+    )
+  ]
 
 excerptOut =
   [ ( 0

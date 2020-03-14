@@ -618,7 +618,7 @@ tagList = Tags <$> bracketed (commaSeparated tag)
   isTagChar c = isDigit c || isAlpha c || c == '_' || c == '-' || c == '/'
   tag            = some (satisfy isTagChar)
   commaSeparated = flip sepBy1 (char ',')
-  bracketed p = char '[' *> p <* char ']'
+  bracketed p = lexeme (char '[' *> p <* char ']')
 
 
 -------------

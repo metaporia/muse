@@ -46,9 +46,19 @@ import           Data.Time                      ( UTCTime(..)
                                                 )
 import           Data.Time.Calendar             ( Day )
 import           Data.Time.Clock                ( getCurrentTime )
-import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Esqueleto             ( (&&.)
+                                                , (==.)
+                                                , from
+                                                , like
+                                                , select
+                                                , val
+                                                , where_
+                                                )
+import qualified Database.Esqueleto            as E
+import           Database.Persist        hiding ( (==.) )
+import           Database.Persist.Sqlite hiding ( (==.) )
 import           Helpers
+import           Lib                            ( testSearchConfig )
 import           Parse                          ( parseLogEntries )
 import           Parse.Types
 import qualified Parse.Types                   as P
@@ -123,6 +133,7 @@ spec = do
         before
         []
         []
+        []
         (DefSearch [Defn', Phrase', InlineDef', DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
@@ -131,16 +142,18 @@ spec = do
                                         before
                                         []
                                         []
+                                        []
                                         (DefSearch [DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs' since before [] [] (DefSearch [Defn'] Nothing Nothing)
+      defs <- filterDefs' since before [] [] [] (DefSearch [Defn'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
       defs               <- filterDefs' since
                                         before
+                                        []
                                         []
                                         []
                                         (DefSearch [InlineDef'] Nothing Nothing)
@@ -149,6 +162,7 @@ spec = do
       (since, before, _) <- defVarSetup
       defs               <- filterDefs' since
                                         before
+                                        []
                                         []
                                         []
                                         (DefSearch [Phrase'] Nothing Nothing)
@@ -206,6 +220,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         (searchErrs, results) <- dispatchSearch' (searchAllBare before)
         when
           debug
@@ -240,6 +255,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              [] -- tags
         -- all variants
         (searchErrs, results) <- dispatchSearch' (search allDefVariants)
 
@@ -290,6 +306,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -352,6 +369,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -417,6 +435,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               []
               filters
               []
+              []
 
         -- all dialogues
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
@@ -458,6 +477,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               (DefSearch [] Nothing Nothing)
               []
               filters
+              []
               []
               []
 
@@ -503,6 +523,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               defs -- include defs?
               ([], [])
               (DefSearch defnVariants (Just headwords) mn)
+              []
               []
               []
               []
@@ -594,6 +615,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- phrases and quotes by eliot
         (searchErrs, results) <- dispatchSearch'
           (search ["%Eliot%"] [] [Phrase'] [])
@@ -614,6 +636,36 @@ testSearchDispatch = describe "dispatchSearch" $ do
               then liftIO $ showAll $ fmap snd results
               else liftIO $ pPrint' results
           )
+  it "write tagged defns"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        runMigrationSilent migrateAll
+        today                 <- liftIO $ utctDay <$> getCurrentTime
+        timestamps            <- writeDay today tagDemoEntries
+        -- search for "phrase"
+        searchConfig <- liftIO $ fromJust <$> testSearchConfig "--tags phrase"
+        (searchErrs, results) <- dispatchSearch' searchConfig
+        let expected =
+              [ ( TimeStamp {hr = 10, min = 17, sec = 40}
+                , Def (Defn Nothing ["inimical", "traduce", "virulent"])
+                )
+              ]
+        liftIO $ results `shouldBe` expected
+        -- search for "some_tag"
+        searchConfig <- liftIO $ fromJust <$> testSearchConfig "--tags some_tag"
+        (searchErrs, results) <- dispatchSearch' searchConfig
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 10, min = 18, sec = 12}
+                       , Def (Defn Nothing ["sublime", "lintel"])
+                       )
+                     ]
+
+
+
+
+
 
 pSearch search = runSqlInMem $ do
   (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
@@ -702,6 +754,7 @@ run' = runSqlInMem $ do
                                  before
                                  []
                                  []
+                                 []
                                  (DefSearch allDefVariants Nothing Nothing)
 --  liftIO $ pPrint $ mapMaybe resultToEntry defs
   liftIO $ showAll $ mapMaybe resultToEntry defs
@@ -780,7 +833,7 @@ demo = runSqlite "sqliteSpec.db" $ do
   --liftIO $ putStrLn "after repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
-  defs <- filterDefs' since before [] [] (DefSearch [Defn'] Nothing Nothing)
+  defs <- filterDefs' since before [] [] [] (DefSearch [Defn'] Nothing Nothing)
   liftIO $ pPrint defs
 
   return ()
@@ -799,7 +852,23 @@ clear' = do
   deleteWhere ([] :: [Filter DialogueEntry])
   deleteWhere ([] :: [Filter PageNumberEntry])
   deleteWhere ([] :: [Filter LastParse])
+  deleteWhere ([] :: [Filter DumpEntry])
 
+
+tagDemoEntries =
+  [ TabTsEntry
+    ( 1
+    , TimeStamp {hr = 10, min = 17, sec = 40}
+    , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+    , Tags ["other", "phrase", "wodehouse"]
+    )
+  , TabTsEntry
+    ( 1
+    , TimeStamp {hr = 10, min = 18, sec = 12}
+    , Def (Defn (Just 38) ["sublime", "lintel"])
+    , Tags ["some_tag"]
+    )
+  ]
 
 demoLogEntries :: [LogEntry]
 demoLogEntries

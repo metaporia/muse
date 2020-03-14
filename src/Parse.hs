@@ -45,6 +45,7 @@ import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as T
+import qualified Data.Text.Lazy                as TL
 import           Data.Void                      ( Void )
 import           Debug.Trace                    ( trace )
 import           Parse.Types                    ( DefQuery(..)

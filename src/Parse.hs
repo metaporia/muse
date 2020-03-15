@@ -523,7 +523,7 @@ quotation = label "quotation" $ do
     $  try
     $  count indentLevel (satisfy isTabOrSpace)
     *> someTill anySingle newline
-    -- *> takeWhile1P (/= '\n') someTill anySingle newline
+  -- takeWhile1P (/= '\n') someTill anySingle newline
   return $ Quotation (T.unpack body) (fromMaybe "" attr) pg
 
 -- | Parses quoted content. Assumes that whitespace preceding the opening

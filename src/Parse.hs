@@ -37,9 +37,9 @@ import           Control.Monad.State            ( State
                                                 , modify
                                                 , runState
                                                 )
-import           Data.Char                      ( isDigit
+import           Data.Char                      ( digitToInt
                                                 , isAlpha
-                                                , digitToInt
+                                                , isDigit
                                                 )
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Semigroup                 ( (<>) )
@@ -56,13 +56,13 @@ import           Parse.Types                    ( DefQuery(..)
                                                 , TimeStamp(..)
                                                 )
 import           Prelude                 hiding ( read )
+import           Store.Sqlite.Types             ( Tags(..) )
 import           Text.Megaparsec         hiding ( State )
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
 import           Text.Megaparsec.Debug          ( dbg )
 import           Text.RawString.QQ
 import           Text.Show.Pretty               ( pPrint )
-import           Store.Sqlite.Types             ( Tags(..) )
 
 -- TODO test compliance:
 -- - Dump handling (as discard)
@@ -99,7 +99,7 @@ logEntry = entry <* many (try emptyLine)
     --dbg ("updateIndentation " <> show indentLevel) $
     updateIndentation indentLevel
     -- FIXME entry tags: add tags to other variants (save Nul and PageNUm)
-    let noTags = fmap (Tags [],)
+    let noTags = fmap (Tags [], )
     (tags, entry) <-
       try (noTags read)
       <|> try (noTags commentary)

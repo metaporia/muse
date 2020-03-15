@@ -17,12 +17,12 @@ module Store.SqliteSpec where
 
 
 import           CLI.Parser.Types               ( BoolExpr(..) )
-import           Control.Lens                   ( (^?)
-                                                , (^.)
+import           Control.Lens                   ( (^.)
+                                                , (^?)
                                                 , _1
+                                                , _Right
                                                 , over
                                                 , preview
-                                                , _Right
                                                 )
 import           Control.Monad                  ( unless
                                                 , when

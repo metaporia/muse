@@ -85,9 +85,9 @@ import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( isInfixOf
                                                 , sort
                                                 )
-import           Data.Maybe                     ( isJust
+import           Data.Maybe                     ( fromMaybe
+                                                , isJust
                                                 , mapMaybe
-                                                , fromMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
@@ -103,21 +103,14 @@ import           Database.Persist.Sqlite        ( runMigration
                                                 )
 import           Helpers
 import           Options.Applicative
-import           Parse.Types                    ( allDefVariants
-                                                , LogEntry
-                                                , DefQueryVariant(..)
-                                                , DefQuery
-                                                , RelDur(..)
-                                                )
---import           Parse
-import           Parse.Helpers                  ( parsePretty )
 import qualified Parse
-import           CLI.Parser.Custom              ( pathToDay
-                                                , searchArgument
-                                                , reldur
-                                                , caretedPreds
+import           Parse.Helpers                  ( parsePretty )
+import           Parse.Types                    ( DefQuery
+                                                , DefQueryVariant(..)
+                                                , LogEntry
+                                                , RelDur(..)
+                                                , allDefVariants
                                                 )
-import           CLI.Parser.Types
 import           Prelude                 hiding ( init
                                                 , log
                                                 , lookup
@@ -132,9 +125,9 @@ import           Store                   hiding ( Author
                                                 )
 import           Store.Render                   ( )
 import qualified Store.Sqlite                  as Sql
-import           Store.Sqlite                   ( SearchConfig
+import           Store.Sqlite                   ( DefSearch(..)
+                                                , SearchConfig
                                                 , StrSearch(..)
-                                                , DefSearch(..)
                                                 , fetchLastRead
                                                 )
 import           System.Directory               ( createDirectoryIfMissing

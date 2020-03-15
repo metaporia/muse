@@ -932,7 +932,7 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::       -- Esqueleto query expr backend =>
+  ::        -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)

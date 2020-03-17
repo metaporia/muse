@@ -228,7 +228,7 @@ search today = do
 
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
   tags  <- tagsList
-  --phraseTag    <- flag' ("phrase" :: TL.Text) $ long "phrases" <> short 'p' <> help "Collect phrases."
+  collectPhrases    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
   qs    <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
   dials <-
     switch
@@ -259,7 +259,7 @@ search today = do
     qs
     dials
     cmts
-    ds
+    (ds || collectPhrases)
                         -- turn search strings into infx
                         -- searches for SQL's LIKE clause
     (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
@@ -270,7 +270,7 @@ search today = do
     (padForSqlLike <$> comments')
     (padForSqlLike <$> dias')
     []
-    tags
+    (if collectPhrases then "phrase":tags else tags)
 
 padForSqlLike s = '%' : s ++ "%"
 

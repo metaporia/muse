@@ -35,14 +35,14 @@ tDialogueOut
   = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 7, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
-      , Tags []
+      , Def (Defn Nothing ["sine qua non"])
+      , Tags ["phrase"]
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 7, min = 36, sec = 34}
-      , Phr (Plural ["sine qua non"])
-      , Tags []
+      , Def (Defn Nothing ["sine qua non"])
+      , Tags ["phrase"]
       )
     , TabTsEntry
       ( 0
@@ -71,45 +71,44 @@ tPhrase =
 13:36:36 λ. d casement
 |]
 
-tPhraseOut
-  = [ TabTsEntry
-      ( 0
-      , TimeStamp {hr = 10, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
-      , Tags []
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 10, min = 55, sec = 26}
-      , Def
-        (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"])
-      , Tags []
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
-      , Tags []
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 34}
-      , Phr (Defined "sine qua non" "an essential condition")
-      , Tags []
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 35}
-      , Phr (Defined "sine qua non" "an essential condition")
-      , Tags []
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 36}
-      , Def (Defn Nothing ["casement"])
-      , Tags []
-      )
-    ]
+tPhraseOut =
+  [ TabTsEntry
+    ( 0
+    , TimeStamp {hr = 10, min = 36, sec = 33}
+    , Def (Defn Nothing ["sine qua non"])
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 10, min = 55, sec = 26}
+    , Def (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"])
+    , Tags []
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 33}
+    , Def (Defn Nothing ["sine qua non"])
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 34}
+    , Def (InlineDef "sine qua non" "an essential condition")
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 35}
+    , Def (InlineDef "sine qua non" "an essential condition")
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 36}
+    , Def (Defn Nothing ["casement"])
+    , Tags []
+    )
+  ]
 
 testLogWithDumpOutput' :: [LogEntry]
 testLogWithDumpOutput'
@@ -1017,19 +1016,19 @@ brokenOut
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 0}
-      , Phr (Plural ["\"as well by...as...\""])
+      , Def (Defn Nothing ["\"as well by...as...\""])
       , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 22}
-      , Phr (Plural ["\"despair of\""])
+      , Def (Defn Nothing ["\"despair of\""])
       , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 33}
-      , Phr (Plural ["\"savors of\""])
+      , Def (Defn Nothing ["\"savors of\""])
       , Tags []
       )
     , TabTsEntry
@@ -1124,7 +1123,7 @@ brokenOut
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 57, sec = 40}
-      , Phr (Plural ["\"hopeless of remedy\""])
+      , Def (Defn Nothing ["\"hopeless of remedy\""])
       , Tags []
       )
     , TabTsEntry
@@ -1181,7 +1180,7 @@ brokenOut
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 2, sec = 35}
-      , Phr (Plural ["\"bent their steps thither\""])
+      , Def (Defn Nothing ["\"bent their steps thither\""])
       , Tags []
       )
     , TabTsEntry
@@ -1262,7 +1261,7 @@ brokenOut
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 22, min = 8, sec = 52}
-      , Phr (Plural ["\"their characters suffered no revolution\""])
+      , Def (Defn Nothing ["\"their characters suffered no revolution\""])
       , Tags []
       )
     ]

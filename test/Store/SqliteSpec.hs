@@ -164,8 +164,8 @@ spec = do
                                         before
                                         []
                                         []
-                                        []
-                                        (DefSearch [Phrase'] Nothing Nothing)
+                                        ["phrase"]
+                                        (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
   testSearchDispatch
 
@@ -513,7 +513,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
     $ do
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search headwords mn defs defnVariants = SearchConfig
+        let search headwords mn defs defnVariants tags = SearchConfig
               since
               before
               False
@@ -527,9 +527,9 @@ testSearchDispatch = describe "dispatchSearch" $ do
               []
               []
               []
-              []
+              tags
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'])
+          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'] [])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 19, min = 7, sec = 0}
@@ -537,11 +537,16 @@ testSearchDispatch = describe "dispatchSearch" $ do
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "fail of")) Nothing False [Phrase'])
+          (search (LitE (InfixSearch "fail of"))
+                  Nothing
+                  False
+                  allDefVariants
+                  ["phrase"]
+          )
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 8, min = 51, sec = 44}
-                       , Phr (Plural ["\"omit to\"", "\"fail of\""])
+                       , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
@@ -550,6 +555,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             Nothing
             False
             [Defn']
+            []
           )
         liftIO
           $          results
@@ -571,6 +577,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             )
             False
             allDefVariants
+            []
           )
         liftIO
           $          results
@@ -601,7 +608,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search auth title variants qs = SearchConfig
+        let search auth title variants qs tags = SearchConfig
               since
               before
               False -- dump support unimplemented as yet
@@ -617,14 +624,15 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- dump       ^ (ignore)
               []
         -- phrases and quotes by eliot
-        (searchErrs, results) <- dispatchSearch'
-          (search ["%Eliot%"] [] [Phrase'] [])
+        config <- liftIO $ fromJust <$> testSearchConfig "-q --phrases -aEliot"
+        (searchErrs, results) <- dispatchSearch' config
+
 
         liftIO $ results `shouldBe` globMultiPhrQt
 
         -- defversus and quotes matching "holiness"
         (searchErrs, results) <- dispatchSearch'
-          (search [] [] [DefVersus'] ["%holiness%"])
+          (search [] [] [DefVersus'] ["%holiness%"] [])
 
         liftIO $ results `shouldBe` globMultiDefVsQt
 
@@ -1097,8 +1105,8 @@ varInline =
   ]
 
 varPhrase =
-  [ Phr (Plural ["\"fever of suspense\""])
-  , Phr (Plural ["\"smarting under an obligation\""])
+  [ Def (Defn Nothing ["\"fever of suspense\""])
+  , Def (Defn Nothing ["\"smarting under an obligation\""])
   ]
 
 dispatchAllBare =
@@ -1157,7 +1165,7 @@ dispatchAllBare =
     , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1315,7 +1323,7 @@ dispatchOnlyDefs =
     , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1395,7 +1403,7 @@ dispatchOnlyInline =
     , Def (InlineDef "afflate" "(obs.) to inspire; to blow upon")
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire " "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 18, min = 58, sec = 53}
     , Def (InlineDef "callipygous" "having beautiful buttocks")
@@ -1601,12 +1609,12 @@ globMultiPhrQt =
       ""
       Nothing
     )
-  , (TimeStamp {hr = 8, min = 50, sec = 29}, Phr (Plural ["\"rapt in\""]))
+  , (TimeStamp {hr = 8, min = 50, sec = 29}, Def (Defn Nothing ["\"rapt in\""]))
   , ( TimeStamp {hr = 8, min = 51, sec = 44}
-    , Phr (Plural ["\"omit to\"", "\"fail of\""])
+    , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
     )
   , ( TimeStamp {hr = 8, min = 53, sec = 16}
-    , Phr (Plural ["\"be hindered of\""])
+    , Def (Defn Nothing ["\"be hindered of\""])
     )
   ]
 

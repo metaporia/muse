@@ -107,7 +107,7 @@ logEntry = entry <* many (try emptyLine)
       <|> try (noTags quotation)
       <|> try definition
       <|> try (noTags pageNum)
-      <|> try (noTags phrase)
+      -- <|> try (noTags phrase)
       <|> noTags nullEntry
 
     --dbg (show indentLevel <> ": " <> show ts) (pure ())
@@ -262,22 +262,26 @@ phrase = do
 -- 'DefVersus').
 definition :: Parser (Tags, Entry)
 definition = label "definition" $ do
-  let
-    dvs = do
-      symbol "dvs"
-      --tags <- try tagList <|> pure (Tags [])
-      tags <- pure (Tags [])
-      (tags, ) <$> defVersus'
-    dPrefix = do
-      try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
-      try tagList <|> pure (Tags [])
-    inline =
-      (,)
-        <$> dPrefix
-        <*> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
-    hws = do
-      dPrefix
-      (,) <$> (try tagList <|> pure (Tags [])) <*> (uncurry Defn <$> headwords)
+  let phraseTags = do
+        try (symbol "phrase") <|> symbol "phr"
+        Tags tags <- try tagList <|> pure (Tags [])
+        return (Tags $ "phrase" : tags)
+      dvs = do
+        symbol "dvs"
+        tags <- try tagList <|> pure (Tags [])
+        --tags <- pure (Tags [])
+        (tags, ) <$> defVersus'
+      dPrefix = do
+        try (symbol "definition") <|> try (symbol "def") <|> symbol "d"
+        try tagList <|> pure (Tags [])
+      inline =
+        (,)
+          <$> (dPrefix <|> phraseTags)
+          <*> (uncurry InlineDef . over _2 T.unpack <$> inlineMeaning False)
+      hws = do
+        tags <- try dPrefix <|> phraseTags
+        hws  <- headwords
+        return (tags, uncurry Defn hws)
   (tags, defQuery) <- try dvs <|> try inline <|> hws
   --trace ("tags: " <> show tags) (return ()) -- FIXME remove
   return (tags, Def defQuery)

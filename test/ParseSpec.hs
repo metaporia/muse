@@ -334,7 +334,8 @@ spec = do
       `shouldFailOn` "[phrase,french ]"
   describe "tagged definitions" $ do
     it "skip whitespace after taglist" $ pt logEntries' taggedDefinitions `shouldParse` taggedDefinitionsOut
-
+  describe "tagged comparison" $ do
+    it "" $ pt definition taggedDefVersus `shouldParse` ( Tags [ "wode" ] , Def (DefVersus "hell" "aeou" "aoue" "aoeu") )
   spec'
   describe "logEntries" $ do
     it "ascending" $ pt logEntries `shouldFailOn` outOfOrder
@@ -818,6 +819,11 @@ logsIndented = [r|
 
 |]
 
+taggedDefVersus = [r|dvs [wode] hell: aeou
+                   --- vs ---
+                   aoue : aoeu
+|]
+
 taggedDefinitionsOut =
   [ ( 0
     , TimeStamp {hr = 8, min = 47, sec = 47}
@@ -827,7 +833,7 @@ taggedDefinitionsOut =
   , ( 0
     , TimeStamp {hr = 8, min = 47, sec = 48}
     , Def (Defn Nothing ["propinquity"])
-    , Tags []
+    , Tags ["phrase"]
     )
   , ( 0
     , TimeStamp {hr = 8, min = 48, sec = 52}
@@ -840,7 +846,7 @@ taggedDefinitionsOut =
   , ( 0
     , TimeStamp {hr = 8, min = 50, sec = 4}
     , Def (Defn Nothing ["brimful"])
-    , Tags []
+    , Tags ["anki"]
     )
   ]
 
@@ -920,8 +926,8 @@ globLog =
     )
   , ( 4
     , TimeStamp {hr = 8, min = 50, sec = 29}
-    , Phr (Plural ["\"rapt in\""])
-    , Tags []
+    , Def (Defn Nothing ["\"rapt in\""])
+    , Tags ["phrase"]
     )
   , ( 4
     , TimeStamp {hr = 8, min = 51, sec = 24}
@@ -940,8 +946,8 @@ globLog =
     )
   , ( 4
     , TimeStamp {hr = 8, min = 51, sec = 44}
-    , Phr (Plural ["\"omit to\"", "\"fail of\""])
-    , Tags []
+    , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
+    , Tags ["phrase"]
     )
   , ( 4
     , TimeStamp {hr = 8, min = 51, sec = 58}
@@ -970,8 +976,8 @@ globLog =
     )
   , ( 4
     , TimeStamp {hr = 8, min = 53, sec = 16}
-    , Phr (Plural ["\"be hindered of\""])
-    , Tags []
+    , Def (Defn Nothing ["\"be hindered of\""])
+    , Tags ["phrase"]
     )
   , ( 4
     , TimeStamp {hr = 8, min = 53, sec = 38}
@@ -996,17 +1002,17 @@ globLog =
     )
   , ( 4
     , TimeStamp {hr = 12, min = 39, sec = 46}
-    , Phr (Plural ["salutary terror"])
-    , Tags []
+    , Def (Defn Nothing ["salutary terror"])
+    , Tags ["phrase"]
     )
   , ( 4
     , TimeStamp {hr = 12, min = 41, sec = 28}
-    , Phr
-      (Defined
+    , Def
+      (InlineDef
         "\"in view of\""
         "as regards the accord of a thing to some other \nobject, upcoming event, or circumstance"
       )
-    , Tags []
+    , Tags ["phrase"]
     )
   , ( 4
     , TimeStamp {hr = 12, min = 45, sec = 24}

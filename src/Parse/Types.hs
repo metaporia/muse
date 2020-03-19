@@ -124,12 +124,10 @@ defHasType :: DefQueryVariant -> DefQuery -> Bool
 --defHasType InlineDef' (Right (DefVersus _ _ _ _)) = True
 defHasType variant    dq                   = variant == defQueryVariant dq
 
--- FIXME PHR
 defQueryVariant :: DefQuery -> DefQueryVariant
 defQueryVariant (Defn      _ _    ) = Defn'
 defQueryVariant (InlineDef _ _    ) = InlineDef'
 defQueryVariant (DefVersus _ _ _ _) = DefVersus'
---defQueryVariant (Left  _                  ) = Phrase'
 
 isDefn :: DefQuery -> Bool
 isDefn (Defn _ _) = True

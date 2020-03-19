@@ -250,15 +250,6 @@ dump = do
 -- Definition --
 ----------------
 
--- FIXME PHR
---phrase :: Parser Entry
---phrase = do
---  let pPrefix = try (symbol "phrase") <|> symbol "phr"
---      inline =
---        pPrefix *> (uncurry Defined . over _2 T.unpack <$> inlineMeaning False)
---      hws = pPrefix *> (Plural . snd <$> headwords)
---  fmap Phr $ try inline <|> hws
-
 -- TODO use prefix "d" for all def types (blocked on unifying 'InlineDef' and
 -- 'DefVersus').
 definition :: Parser (Tags, Entry)

@@ -90,7 +90,11 @@ dullYellow = mkColor False Yellow
 
 dullCyan = mkColor False Cyan
 
--- Colorizable alternative to `Render`.
+-- TODO PHR: add ColRender Instance for LogEntry that adds special case for
+-- tags (so that we can customize based on tags how Entry variants are
+-- displayed).
+--
+-- | Colorizable alternative to `Render`.
 class Show a =>
       ColRender a where
   colRender ::
@@ -124,11 +128,6 @@ instance ColRender Entry where
   colRender col (Commentary s) =
     putStr "Comment: " >> colorize col cyan (colRender col (T.pack s))
   colRender col (PN pg) = colRender col pg
-  -- FIXME PHR: add ColRender Instance for LogEntry that adds special case for
-  -- tags (so that we can customize based on tags how Entry variants are
-  -- displayed).
-  --colRender col (Phr p) =
-  --  colorize col magenta (putStr "Phrase:  ") >> colRender col p
   colRender col (Dialogue s) =
     putStr "Dialog.:  \n" >> colorize col cyan (putStrLn $ fmt s)
   colRender _ Null = return ()

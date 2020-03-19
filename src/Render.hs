@@ -124,8 +124,11 @@ instance ColRender Entry where
   colRender col (Commentary s) =
     putStr "Comment: " >> colorize col cyan (colRender col (T.pack s))
   colRender col (PN pg) = colRender col pg
-  colRender col (Phr p) =
-    colorize col magenta (putStr "Phrase:  ") >> colRender col p
+  -- FIXME PHR: add ColRender Instance for LogEntry that adds special case for
+  -- tags (so that we can customize based on tags how Entry variants are
+  -- displayed).
+  --colRender col (Phr p) =
+  --  colorize col magenta (putStr "Phrase:  ") >> colRender col p
   colRender col (Dialogue s) =
     putStr "Dialog.:  \n" >> colorize col cyan (putStrLn $ fmt s)
   colRender _ Null = return ()

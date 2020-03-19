@@ -89,7 +89,7 @@ data Entry
               (Maybe PgNum)
   | Commentary Body
   | PN PageNum
-  | Phr Phrase
+  -- | Phr Phrase
   | Dialogue String
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)

@@ -101,8 +101,9 @@ isRead = isJust . projectRead
 isQuote :: LogEntry -> Bool
 isQuote = isJust . projectQuotation
 
-isPhrase :: LogEntry -> Bool
-isPhrase = isJust . projectPhrase
+-- FIXME PHR
+-- isPhrase :: LogEntry -> Bool
+-- isPhrase = isJust . projectPhrase
 
 isDialogue :: LogEntry -> Bool
 isDialogue = isJust . projectDialogue
@@ -130,8 +131,9 @@ getQuotation = preview _Quotation
 getCommentary :: Entry -> Maybe Body
 getCommentary = preview _Commentary
 
-getPhrase :: Entry -> Maybe Phrase
-getPhrase = preview _Phr
+-- FIXME PHR
+-- getPhrase :: Entry -> Maybe Phrase
+-- getPhrase = preview _Phr
 
 getDialogue :: Entry -> Maybe String
 getDialogue = preview _Dialogue
@@ -148,7 +150,8 @@ projectRead = getEntry >=> getRead
 
 projectCommentary = getEntry >=> getCommentary
 
-projectPhrase = getEntry >=> getPhrase
+-- FIXME PHR
+-- projectPhrase = getEntry >=> getPhrase
 
 projectDialogue = getEntry >=> getDialogue
 

@@ -421,8 +421,9 @@ writeLogEntry day logEntry mAttrTag =
                  -- trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $
                    repsert (PageNumberEntryKey utc)
                      $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
-             Phr phrase ->
-               repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag tags phrase
+             -- FIXME PHR
+             --Phr phrase ->
+             --  repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag tags phrase
              Dialogue dialogueBody ->
                repsert (DialogueEntryKey utc)
                  $   DialogueEntry dialogueBody
@@ -552,17 +553,18 @@ instance ToEntry String DefEntry where
                   _ ->
                     Left
                       "toEntry: definition: found more than two inline defs, corrupt input."
-          Phrase' ->
-            case defTag of
-              Headwords hws -> Right $ Phr $ Plural $ TL.unpack <$> hws
-              Inlines inlineDefs ->
-                case inlineDefs of
-                  [] -> Left "toEntry: phrase: found empty list of inline defs"
-                  [InlineDef {..}] ->
-                    Right $ Phr $ Defined (T.unpack headword) (T.unpack meaning)
-                  _ ->
-                    Left
-                      "toEntry: phrase: found more than two inline defs, corrupt input."
+          -- FIXME PHR
+          Phrase' -> Left "toEntry: found phrase. wtf. this is a bug."
+            --case defTag of
+            --  Headwords hws -> Right $ Phr $ Plural $ TL.unpack <$> hws
+            --  Inlines inlineDefs ->
+            --    case inlineDefs of
+            --      [] -> Left "toEntry: phrase: found empty list of inline defs"
+            --      [InlineDef {..}] ->
+            --        Right $ Phr $ Defined (T.unpack headword) (T.unpack meaning)
+            --      _ ->
+            --        Left
+            --          "toEntry: phrase: found more than two inline defs, corrupt input."
       Left err -> Left err
 
 instance ToEntry String ReadEntry where
@@ -1333,7 +1335,8 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
           :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
         (DefEntryKey ts)   = entityKey
-        applyHeadwordPreds = fmap (applyBoolExpr headwordPreds)
+        -- FIXME PHR
+        --applyHeadwordPreds = fmap (applyBoolExpr headwordPreds)
     entry <- toEntry entityVal :: Either String Entry
     (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
@@ -1353,14 +1356,15 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
                 && applyBoolExpr meaningPreds  mn'
                 )
              )
-      Phr x@(Plural hws) ->
-        Right $ variantSatisfies defVariants (Left x) && or
-          (applyHeadwordPreds hws)
-      Phr x@(Defined hw mn) ->
-        Right
-          $  variantSatisfies defVariants (Left x)
-          && applyBoolExpr headwordPreds hw
-          && applyBoolExpr meaningPreds  mn
+      -- FIXME PHR
+      --Phr x@(Plural hws) ->
+      --  Right $ variantSatisfies defVariants (Left x) && or
+      --    (applyHeadwordPreds hws)
+      --Phr x@(Defined hw mn) ->
+      --  Right
+      --    $  variantSatisfies defVariants (Left x)
+      --    && applyBoolExpr headwordPreds hw
+      --    && applyBoolExpr meaningPreds  mn
       _ ->
         Left
           "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\

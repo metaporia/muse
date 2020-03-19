@@ -61,15 +61,22 @@
 -----------------------------------------------------------------------------
 module Lib
   ( main
+  , testSearchConfig
   )
 where
 
+import           CLI.Parser.Custom              ( caretedPreds
+                                                , parseTags
+                                                , pathToDay
+                                                , reldur
+                                                , searchArgument
+                                                )
+import           CLI.Parser.Types
 import           Control.Lens                   ( _Left
                                                 , over
                                                 )
 import           Control.Monad                  ( void )
 import           Control.Monad.State
-
 import           Data.Aeson              hiding ( Null )
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Lazy          as BL
@@ -78,13 +85,14 @@ import           Data.Foldable                  ( traverse_ )
 import           Data.List                      ( isInfixOf
                                                 , sort
                                                 )
-import           Data.Maybe                     ( isJust
+import           Data.Maybe                     ( fromMaybe
+                                                , isJust
                                                 , mapMaybe
-                                                , fromMaybe
                                                 )
 import           Data.Monoid                    ( (<>) )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
+import qualified Data.Text.Lazy                as TL
 import           Data.Time
 import           Data.Time.Clock                ( utctDay )
 import           Data.Yaml.Config               ( load
@@ -95,21 +103,14 @@ import           Database.Persist.Sqlite        ( runMigration
                                                 )
 import           Helpers
 import           Options.Applicative
-import           Parse.Types                    ( allDefVariants
-                                                , LogEntry
-                                                , DefQueryVariant(..)
-                                                , DefQuery
-                                                , RelDur(..)
-                                                )
---import           Parse
-import           Parse.Helpers                  ( parsePretty )
 import qualified Parse
-import           CLI.Parser.Custom              ( pathToDay
-                                                , searchArgument
-                                                , reldur
-                                                , caretedPreds
+import           Parse.Helpers                  ( parsePretty )
+import           Parse.Types                    ( DefQuery
+                                                , DefQueryVariant(..)
+                                                , LogEntry
+                                                , RelDur(..)
+                                                , allDefVariants
                                                 )
-import           CLI.Parser.Types
 import           Prelude                 hiding ( init
                                                 , log
                                                 , lookup
@@ -124,9 +125,9 @@ import           Store                   hiding ( Author
                                                 )
 import           Store.Render                   ( )
 import qualified Store.Sqlite                  as Sql
-import           Store.Sqlite                   ( SearchConfig
+import           Store.Sqlite                   ( DefSearch(..)
+                                                , SearchConfig
                                                 , StrSearch(..)
-                                                , DefSearch(..)
                                                 , fetchLastRead
                                                 )
 import           System.Directory               ( createDirectoryIfMissing
@@ -226,7 +227,8 @@ search today = do
     (long "dvs" <> long "def-versus" <> help "Select definition comparisons.")
 
   ds <- switch $ long "definitions" <> short 'd' <> help "Collect definitions."
-  ps    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
+  tags  <- tagsList
+  collectPhrases    <- switch $ long "phrases" <> short 'p' <> help "Collect phrases."
   qs    <- switch $ long "quotes" <> short 'q' <> help "Collect quotes."
   dials <-
     switch
@@ -243,8 +245,8 @@ search today = do
   dhw'      <- defHW
   dm'       <- defMeaning
   q'        <- quoteBody
-  phw'      <- phraseHW
-  pm'       <- phraseMeaning
+  --phw'      <- phraseHW
+  --pm'       <- phraseMeaning
   dias'     <- dialogueBody
   comments' <- commentBody
 
@@ -257,7 +259,7 @@ search today = do
     qs
     dials
     cmts
-    ds
+    (ds || collectPhrases)
                         -- turn search strings into infx
                         -- searches for SQL's LIKE clause
     (padForSqlLike <$> authPreds, padForSqlLike <$> titlePreds)
@@ -268,6 +270,7 @@ search today = do
     (padForSqlLike <$> comments')
     (padForSqlLike <$> dias')
     []
+    (if collectPhrases then "phrase":tags else tags)
 
 padForSqlLike s = '%' : s ++ "%"
 
@@ -456,6 +459,8 @@ parseDefSearch =
         (Just hw, Just mn) ->
           DefSearch [InlineDef', DefVersus'] (Just hw) (Just mn)
         (Nothing, Just mn) -> DefSearch [InlineDef', DefVersus'] Nothing (Just mn)
+        (Just (LitE (InfixSearch "")), Nothing) ->
+          DefSearch [InlineDef', DefVersus'] Nothing Nothing
         (Just hw, Nothing) -> DefSearch allDefVariants (Just hw) Nothing
         -- this is really an error, right? yes. see 'searchArgument' it's
         -- impossible
@@ -507,7 +512,7 @@ phraseHW :: Parser [String]
 phraseHW =
   fmap (either (const []) id . parsePreds)
     $  option str
-    $  (long "phrases" <> short 'p' <> value [])
+    $  (long "phr-hw" <> long "ph" <> value [])
     <> help "Collect only satisfactory phrases"
 
 phraseMeaning :: Parser [String]
@@ -516,6 +521,15 @@ phraseMeaning =
     $  option str
     $  (long "pm" <> long "phr-meaning" <> value [])
     <> help "Search for strings within meaning/definition."
+
+-- | Restrict search to entries that exactly match all tags passed via the
+-- `--tags/--tag/-T` option. The string argument is expected to be a comma separated
+-- list of tags. A tag must match the regex @[a-zA-Z0-9_-]+@.
+tagsList :: Parser [TL.Text]
+tagsList =
+  option tags $ long "tags" <> long "tag" <> short 'T' <> value [] <> help
+    "Restrict search to entries with the given comma-separted tags."
+  where tags = eitherReader $ parsePretty parseTags . TL.pack
 
 -- variant flag
 quoteBody :: Parser [String]
@@ -606,6 +620,14 @@ testMain s = do
     Options.Applicative.Success opts -> dispatch opts
     _ -> pPrint result
 
+testSearchConfig :: String -> IO (Maybe SearchConfig)
+testSearchConfig s = do
+  today <- utctDay <$> getCurrentTime
+  let res =
+        execParserPure defaultPrefs (info (search today) briefDesc) $ words s
+  return $ case res of
+    Options.Applicative.Success opts -> Just opts
+    _ -> Nothing
 
 -- TODO
 --

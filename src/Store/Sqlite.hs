@@ -69,6 +69,7 @@ import           Helpers
 import qualified Parse.Types                   as P
 import           Parse.Types             hiding ( DefQuery(..)
                                                 , DefQueryVariant(..)
+                                                , Tags
                                                 )
 import           Search
 import           Store                          ( Result(..) )
@@ -105,8 +106,8 @@ DefEntry
     Id UTCTime default=CURRENT_TIME
     definitions TL.Text
     definitionTag DefTag
+    tags TL.Text
     attributionTag (Key ReadEntry) Maybe
-    phraseOrDef PhraseOrDef
     pgNum Int Maybe
     pageTag PageTag Maybe
     deriving Show
@@ -390,11 +391,12 @@ writeLogEntry day logEntry mAttrTag =
     -- For now, we return for each dump a UTCTime with 0 hrs, 0 mins, 0 secs
     -- reflecting the date of the log file (its name, that is).
     (Right $ toUTC day (TimeStamp 0 0 0)) <$ insertDump day dumpContents
-  TabTsEntry (indentation, timestamp, entry)
+  -- FIXME entry tags: update db schema, write JSON-encoded tags
+  TabTsEntry (indentation, timestamp, entry, tags)
     -> let utc = toUTC day timestamp
        in
          (case entry of
-             Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag dq
+             Def dq -> repsert (DefEntryKey utc) $ toDefEntry mAttrTag tags dq
              Read title author ->
                repsert (ReadEntryKey utc) $ ReadEntry title author
                            -- FIXME relies on empty attribution string when manual
@@ -418,8 +420,6 @@ writeLogEntry day logEntry mAttrTag =
                  -- trace (show pageTag <> ", " <> show pgNum <> ", " <> show utc) $
                    repsert (PageNumberEntryKey utc)
                      $ PageNumberEntry pgNum pageTag (fromAttrTag <$> mAttrTag)
-             Phr phrase ->
-               repsert (DefEntryKey utc) $ phraseToDefEntry mAttrTag phrase
              Dialogue dialogueBody ->
                repsert (DialogueEntryKey utc)
                  $   DialogueEntry dialogueBody
@@ -444,8 +444,8 @@ main = runSqlite "test.db" $ do
       defEntryId = DefEntryKey now'
   insertKey defEntryId $ DefEntry inline
                                   Inline'
+                                  ""
                                   (Just wutheringHeightsId)
-                                  Definition'
                                   Nothing
                                   Nothing
   (allDefs :: [Entity DefEntry]  ) <- selectList [] []
@@ -457,8 +457,8 @@ main = runSqlite "test.db" $ do
         (TL.decodeUtf8 $ encode $ Inlines [InlineDef "mizzle" "a misty drizzle"]
         )
         Inline'
+        ""
         Nothing
-        Definition'
         Nothing
         Nothing
   liftIO $ putStr "entry: " >> pPrint entry
@@ -525,39 +525,24 @@ instance ToEntry String DefEntry where
    =
     case eitherDecode $ TL.encodeUtf8 defEntryDefinitions of
       Right defTag ->
-        case defEntryPhraseOrDef of
-          Definition' ->
-            case defTag of
-              Headwords hws -> Right $ Def $ P.Defn Nothing $ TL.unpack <$> hws
-              Inlines inlineDefs ->
-                case inlineDefs of
-                  [] ->
-                    Left "toEntry: definition: found empty list of inline defs"
-                  [InlineDef {..}] ->
-                    Right $
-                    Def $ P.InlineDef (T.unpack headword) (T.unpack meaning)
-                  [h, t] ->
-                    Right $
-                    Def $
-                    P.DefVersus
-                      (T.unpack $ headword h)
-                      (T.unpack $ meaning h)
-                      (T.unpack $ headword t)
-                      (T.unpack $ meaning t)
-                  _ ->
-                    Left
-                      "toEntry: definition: found more than two inline defs, corrupt input."
-          Phrase' ->
-            case defTag of
-              Headwords hws -> Right $ Phr $ Plural $ TL.unpack <$> hws
-              Inlines inlineDefs ->
-                case inlineDefs of
-                  [] -> Left "toEntry: phrase: found empty list of inline defs"
-                  [InlineDef {..}] ->
-                    Right $ Phr $ Defined (T.unpack headword) (T.unpack meaning)
-                  _ ->
-                    Left
-                      "toEntry: phrase: found more than two inline defs, corrupt input."
+        case defTag of
+          Headwords hws -> Right $ Def $ P.Defn Nothing $ TL.unpack <$> hws
+          Inlines inlineDefs ->
+            case inlineDefs of
+              [] -> Left "toEntry: definition: found empty list of inline defs"
+              [InlineDef {..}] ->
+                Right $ Def $ P.InlineDef (T.unpack headword) (T.unpack meaning)
+              [h, t] ->
+                Right $
+                Def $
+                P.DefVersus
+                  (T.unpack $ headword h)
+                  (T.unpack $ meaning h)
+                  (T.unpack $ headword t)
+                  (T.unpack $ meaning t)
+              _ ->
+                Left
+                  "toEntry: definition: found more than two inline defs, corrupt input."
       Left err -> Left err
 
 instance ToEntry String ReadEntry where
@@ -588,13 +573,13 @@ instance ToEntry String PageNumberEntry where
 --
 -- Note: in the future, the parser may directly marshal to the more db-friendly
 -- format; for the present, however, we mourn and carry on as best we know how.
-toDefEntry :: Maybe AttrTag -> P.DefQuery -> DefEntry
-toDefEntry mAttrTag dq = case dq of
+toDefEntry :: Maybe AttrTag -> Tags -> P.DefQuery -> DefEntry
+toDefEntry mAttrTag tags dq = case dq of
   P.Defn mPg hws -> DefEntry
     (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
     Headwords'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
     (fromIntegral <$> mPg)
     Nothing
   P.InlineDef headword meaning -> DefEntry
@@ -602,8 +587,8 @@ toDefEntry mAttrTag dq = case dq of
       [InlineDef (T.pack headword) (T.pack meaning)]
     )
     Inline'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
@@ -614,20 +599,20 @@ toDefEntry mAttrTag dq = case dq of
       ]
     )
     Comparison'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
 
 -- | Like 'toDefEntry' but converts from
-phraseToDefEntry :: Maybe AttrTag -> Phrase -> DefEntry
-phraseToDefEntry mAttrTag phrase = case phrase of
+phraseToDefEntry :: Maybe AttrTag -> Tags -> Phrase -> DefEntry
+phraseToDefEntry mAttrTag tags phrase = case phrase of
   Plural hws -> DefEntry
     (TL.decodeUtf8 $ encode $ Headwords $ TL.pack <$> hws)
     Headwords'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Phrase'
     Nothing
     Nothing
   Defined headword meaning -> DefEntry
@@ -635,8 +620,8 @@ phraseToDefEntry mAttrTag phrase = case phrase of
       [InlineDef (T.pack headword) (T.pack meaning)]
     )
     Inline'
+    (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Phrase'
     -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
@@ -678,6 +663,7 @@ data SearchConfig = SearchConfig
   , commentarySearch :: CommentarySearch
   , dialogueSearch :: DialogueSearch
   , dumpSearch :: [String]
+  , tags :: [TL.Text]
   } deriving Show
 
 
@@ -728,11 +714,12 @@ dispatchSearch logPath SearchConfig {..} =
         then -- show all in date range matching attribution requirements
           join <$> sequence
             [ -- replaces 'DefSearch' with 'allDefVariants'.
-          --filterDumps since before [] ,
+      --filterDumps since before [] ,
               filterDefs' since
                           before
                           authPreds
                           titlePreds
+                          tags
                           defSearch { defVariants = allDefVariants }
             , filterQuotes' since before authPreds titlePreds quoteSearch
             , filterCommentaries' since
@@ -763,6 +750,7 @@ dispatchSearch logPath SearchConfig {..} =
                 before
                 authPreds
                 titlePreds
+                tags
 -- when the definition flag is passed, but no def variants
 -- are specified, return all variants; otherwise, use the
 -- defSearch unmodified.
@@ -919,7 +907,7 @@ dateRangeConstraint idType keyWrapper entityUTC sinceDay beforeDay =
 -- list of search strings, the syntax for which is specified by the Sqlite docs
 -- for @LIKE@.
 attributionConstraint
-  ::       -- Esqueleto query expr backend =>
+  ::        -- Esqueleto query expr backend =>
      SqlExpr (Value (Maybe String)) -> [String] -> SqlExpr (Value Bool)
 attributionConstraint bodyStr = foldr
   (\searchStr rest -> (bodyStr `like` just (val searchStr)) &&. rest)
@@ -945,6 +933,19 @@ attributionConstraints readEntry authPreds titlePreds =
           (val True)
           titlePreds
 
+
+-- | Checks that an (def , for the present) entry has the given tags.
+--
+-- This is little more than 'genericSearchConstraint'.
+hasTags
+  :: (IsString s, Semigroup s, SqlString s)
+  => [s]
+  -> SqlExpr (Value s)
+  -> SqlExpr (Value Bool)
+hasTags requiredTags jsonTagList = genericSearchConstraint
+  jsonTagList
+  (prepTag <$> requiredTags)
+  where prepTag t = "%\"" <> t <> "\"%"
 
 
 --- DEFINITION SEARCH
@@ -1083,14 +1084,16 @@ filterDefs'
   -> Day
   -> [String]
   -> [String]
+  -> [TL.Text]
   -> DefSearch
   -> DB m [Either String Result]
-filterDefs' since before authPreds titlePreds defSearch = do
+filterDefs' since before authPreds titlePreds tags defSearch = do
   let
   defEntries <- selectDefs' since
                             before
                             authPreds
                             titlePreds
+                            tags
                             (headwordPreds defSearch)
                             (meaningPreds defSearch)
                             (defVariants defSearch) -- collect all strings
@@ -1118,7 +1121,6 @@ filterDefs' since before authPreds titlePreds defSearch = do
 -- Let's just ignore phrases to explore the performance gains of this approach.
 --
 jankyConvertDefQueryVariantToDefEntryTags :: P.DefQueryVariant -> DefTag
-jankyConvertDefQueryVariantToDefEntryTags P.Phrase'    = Inline' -- inline or defn? unaccountable behavior; we've chosen to (temporarily) weather the false positives
 jankyConvertDefQueryVariantToDefEntryTags P.Defn'      = Headwords'
 jankyConvertDefQueryVariantToDefEntryTags P.InlineDef' = Inline'
 jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'
@@ -1160,11 +1162,12 @@ selectDefs'
   -> Day
   -> [String]
   -> [String]
+  -> [TL.Text]
   -> Maybe (BoolExpr (StrSearch String))
   -> Maybe (BoolExpr (StrSearch String))
   -> [P.DefQueryVariant]
   -> DB m [Entity DefEntry]
-selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
+selectDefs' since before authPreds titlePreds tags hwBoolExpr mnBoolExpr defVariants
   = do
     let
       querysDefTags = jankyConvertDefQueryVariantToDefEntryTags <$> defVariants
@@ -1219,6 +1222,7 @@ selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
               -- FIXME (blocked on tag refactor) JANK WORKAROUND
               &&. variantConstraint (defEntry ^. DefEntryDefinitionTag)
                                     querysDefTags
+              &&. hasTags tags (defEntry ^. DefEntryTags)
 
               -- FIXME blocked on subsumption of Phrase by Def -- phrase is more
               -- a tag than a structural distinction
@@ -1249,6 +1253,7 @@ selectDefs' since before authPreds titlePreds hwBoolExpr mnBoolExpr defVariants
           &&. attributionConstraint (just $ readEntry ^. ReadEntryTitle)
                                     titlePreds
           &&. dateConstraint defEntry
+          &&. hasTags tags (defEntry ^. DefEntryTags)
         return defEntry
 
 
@@ -1299,37 +1304,28 @@ filterDefR :: DefSearch -> Entity DefEntry -> Either String (Maybe Result)
 filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal, entityKey }
   = do
     let variantSatisfies
-          :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
+          :: [P.DefQueryVariant] -> P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
         (DefEntryKey ts)   = entityKey
-        applyHeadwordPreds = fmap (applyBoolExpr headwordPreds)
     entry <- toEntry entityVal :: Either String Entry
     (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
-        Right $ variantSatisfies defVariants (Right x) && or
+        Right $ variantSatisfies defVariants x && or
           (applyBoolExpr headwordPreds <$> hws)
       Def x@(P.InlineDef hw mn) ->
         Right
-          $  variantSatisfies defVariants (Right x)
+          $  variantSatisfies defVariants x
           && applyBoolExpr headwordPreds hw
           && applyBoolExpr meaningPreds  mn
       Def x@(P.DefVersus hw mn hw' mn') ->
         Right
           $ -- only one of the two compared definitions need satisfy
-             variantSatisfies defVariants (Right x)
+             variantSatisfies defVariants x
           && ((applyBoolExpr headwordPreds hw && applyBoolExpr meaningPreds mn)
              || (  applyBoolExpr headwordPreds hw'
                 && applyBoolExpr meaningPreds  mn'
                 )
              )
-      Phr x@(Plural hws) ->
-        Right $ variantSatisfies defVariants (Left x) && or
-          (applyHeadwordPreds hws)
-      Phr x@(Defined hw mn) ->
-        Right
-          $  variantSatisfies defVariants (Left x)
-          && applyBoolExpr headwordPreds hw
-          && applyBoolExpr meaningPreds  mn
       _ ->
         Left
           "filterDef: expected 'toEntry (entity :: Entity DefEntry)' to be a 'Def' or a 'Phr'\n\

@@ -12,6 +12,7 @@ import           Data.Aeson                     ( ToJSON
                                                 , toEncoding
                                                 )
 import           GHC.Generics                   ( Generic )
+import           Store.Sqlite.Types             ( Tags )
 
 
 type Author = String
@@ -22,13 +23,14 @@ type Meaning = String
 type Title = String
 type Quote = String
 
+
 data LogEntry
   = Dump String
-  | TabTsEntry (Int, TimeStamp, Entry)
+  | TabTsEntry (Int, TimeStamp, Entry, Tags)
   deriving (Eq, Show, Generic)
 
 getTimeStamp :: LogEntry -> Maybe TimeStamp
-getTimeStamp (TabTsEntry (_, ts, _)) = Just ts
+getTimeStamp (TabTsEntry (_, ts, _, _)) = Just ts
 getTimeStamp _                       = Nothing
 
 instance ToJSON LogEntry where
@@ -87,7 +89,7 @@ data Entry
               (Maybe PgNum)
   | Commentary Body
   | PN PageNum
-  | Phr Phrase
+  -- | Phr Phrase
   | Dialogue String
   | Null -- ^ represents entry of only a timestamp
   deriving (Eq, Generic, Show)
@@ -103,31 +105,29 @@ isQuotation _                 = False
 
 -- TODO TAG REFACTOR (Phrase and Def unification)
 data DefQueryVariant
-  = Phrase'
-  | Defn'
+  = Defn'
   | InlineDef'
   | DefVersus'
   deriving (Eq, Show)
 
 allDefVariants :: [DefQueryVariant]
-allDefVariants = [Phrase', Defn', InlineDef', DefVersus']
+allDefVariants = [Defn', InlineDef', DefVersus']
 
 -- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
 -- are unified under a single type with a tag list (the tags refactor will
 -- allow this), the below jank will treat defined phrases as inline
 -- definititions.
 --
--- Should 'DefVersus' count as inline definitions?
-defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
-defHasType InlineDef' (Left (Defined _ _)) = True
+-- TODO Should 'DefVersus' count as inline definitions?
+defHasType :: DefQueryVariant -> DefQuery -> Bool
+--defHasType InlineDef' (Defined _ _) = True
 --defHasType InlineDef' (Right (DefVersus _ _ _ _)) = True
 defHasType variant    dq                   = variant == defQueryVariant dq
 
-defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant
-defQueryVariant (Right (Defn      _ _    )) = Defn'
-defQueryVariant (Right (InlineDef _ _    )) = InlineDef'
-defQueryVariant (Right (DefVersus _ _ _ _)) = DefVersus'
-defQueryVariant (Left  _                  ) = Phrase'
+defQueryVariant :: DefQuery -> DefQueryVariant
+defQueryVariant (Defn      _ _    ) = Defn'
+defQueryVariant (InlineDef _ _    ) = InlineDef'
+defQueryVariant (DefVersus _ _ _ _) = DefVersus'
 
 isDefn :: DefQuery -> Bool
 isDefn (Defn _ _) = True

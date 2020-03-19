@@ -7,6 +7,7 @@ import           Data.Text                      ( Text )
 import           Parse.Types
 import           Prelude                 hiding ( min )
 import           Text.RawString.QQ
+import           Store.Sqlite.Types             ( Tags(..) )
 
 tNoValidPrefix  :: Text
 tNoValidPrefix = [r|
@@ -34,23 +35,27 @@ tDialogueOut
   = [ TabTsEntry
       ( 0
       , TimeStamp {hr = 7, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
+      , Def (Defn Nothing ["sine qua non"])
+      , Tags ["phrase"]
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 7, min = 36, sec = 34}
-      , Phr (Plural ["sine qua non"])
+      , Def (Defn Nothing ["sine qua non"])
+      , Tags ["phrase"]
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 8, min = 34, sec = 34}
       , Dialogue
         "(After ~1hr of unbridled loquacity, having mercifully dammed the torrent)\nMOM: Do you mind me telling all my favorite moments?\n\n\n(Without looking up from his guitar playing)\nDAD: No, just get it over with."
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 8, min = 35, sec = 27}
       , Read "Great Expectations" "Charles Dickens"
+      , Tags []
       )
     ]
 
@@ -66,39 +71,44 @@ tPhrase =
 13:36:36 λ. d casement
 |]
 
-tPhraseOut
-  = [ TabTsEntry
-      ( 0
-      , TimeStamp {hr = 10, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 10, min = 55, sec = 26}
-      , Def
-        (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"])
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 33}
-      , Phr (Plural ["sine qua non"])
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 34}
-      , Phr (Defined "sine qua non" "an essential condition")
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 35}
-      , Phr (Defined "sine qua non" "an essential condition")
-      )
-    , TabTsEntry
-      ( 0
-      , TimeStamp {hr = 13, min = 36, sec = 36}
-      , Def (Defn Nothing ["casement"])
-      )
-    ]
+tPhraseOut =
+  [ TabTsEntry
+    ( 0
+    , TimeStamp {hr = 10, min = 36, sec = 33}
+    , Def (Defn Nothing ["sine qua non"])
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 10, min = 55, sec = 26}
+    , Def (Defn Nothing ["raillery", "coppice", "disquisition", "dissertation"])
+    , Tags []
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 33}
+    , Def (Defn Nothing ["sine qua non"])
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 34}
+    , Def (InlineDef "sine qua non" "an essential condition")
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 35}
+    , Def (InlineDef "sine qua non" "an essential condition")
+    , Tags ["phrase"]
+    )
+  , TabTsEntry
+    ( 0
+    , TimeStamp {hr = 13, min = 36, sec = 36}
+    , Def (Defn Nothing ["casement"])
+    , Tags []
+    )
+  ]
 
 testLogWithDumpOutput' :: [LogEntry]
 testLogWithDumpOutput'
@@ -106,6 +116,7 @@ testLogWithDumpOutput'
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf"
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -116,6 +127,7 @@ testLogWithDumpOutput'
                    "benign"
                    "gentle, mild, or, medically, non-threatening"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -127,16 +139,19 @@ testLogWithDumpOutput'
           "malign"
           "(adj.) having an evil disposition; spiteful;\nmedically trheatening; (v.) to slander; to asperse; to show\nhatred toward."
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
       , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
       , Def (Defn (Just 38) ["sublime", "lintel"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -145,6 +160,7 @@ testLogWithDumpOutput'
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -152,16 +168,19 @@ testLogWithDumpOutput'
       , Quotation "Her simplicity fathomed what clever people falsified."
                   "In \"To the Lighthouse\", by Virginia Woolf"
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
       , Def (Defn Nothing ["plover"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -170,6 +189,7 @@ testLogWithDumpOutput'
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf"
         (Just 38)
+      , Tags []
       )
     ]
 
@@ -196,12 +216,13 @@ testDumpOutput :: [LogEntry]
 testDumpOutput =
   [ Dump "dump aeouoaeu\nsecond line"
   , TabTsEntry
-    (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+    (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]), Tags [])
   , Dump "dump body\nmultiple lines"
   , TabTsEntry
     ( 0
     , TimeStamp {hr = 14, min = 19, sec = 0}
     , Read "Witches Abroad" "Terry Pratchett"
+    , Tags []
     )
   ]
 
@@ -212,7 +233,8 @@ testNull =
 |]
 
 testNullOutput :: [LogEntry]
-testNullOutput = [TabTsEntry (4, TimeStamp {hr = 12, min = 10, sec = 1}, Null)]
+testNullOutput =
+  [TabTsEntry (4, TimeStamp {hr = 12, min = 10, sec = 1}, Null, Tags [])]
 
 testLonelySpaces :: Text
 testLonelySpaces =
@@ -232,9 +254,14 @@ testLonelySpacesOutput =
     ( 0
     , TimeStamp {hr = 11, min = 19, sec = 0}
     , Read "Witches Abroad" "Terry Pratchett"
+    , Tags []
     )
   , TabTsEntry
-    (1, TimeStamp {hr = 12, min = 10, sec = 1}, Def (Defn Nothing ["sylvan"]))
+    ( 1
+    , TimeStamp {hr = 12, min = 10, sec = 1}
+    , Def (Defn Nothing ["sylvan"])
+    , Tags []
+    )
   ]
 
 -- `parse entries teslog`
@@ -244,6 +271,7 @@ output
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf"
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -254,6 +282,7 @@ output
                    "benign"
                    "gentle, mild, or, medically, non-threatening"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -265,16 +294,19 @@ output
           "malign"
           "(adj.) having an evil disposition; spiteful;\nmedically trheatening; (v.) to slander; to asperse; to show\nhatred toward."
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
       , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
       , Def (Defn (Just 38) ["sublime", "lintel"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -283,6 +315,7 @@ output
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -290,16 +323,19 @@ output
       , Quotation "Her simplicity fathomed what clever people falsified."
                   "In \"To the Lighthouse\", by Virginia Woolf"
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
       , Def (Defn Nothing ["plover"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -308,6 +344,7 @@ output
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf"
         (Just 38)
+      , Tags []
       )
     ]
 
@@ -330,6 +367,7 @@ commentTsOutput =
       , TimeStamp {hr = 20, min = 30, sec = 0}
       , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n"
+      , Tags []
       )
   ]
 
@@ -353,9 +391,14 @@ commentTsOutput'
       , TimeStamp {hr = 10, min = 30, sec = 0}
       , Commentary
         "I found myself extremely aggravated by the claustrophobia-inducing parental\nharassment Alan and Buddy's Father--with his anger--, and the Mother--with\nher hypochondriacal whining. This repressive treatment--nay, parental\nabuse--may have tapped long-suppressed issues of mine with authoritarian\nhyper-management.\n"
+      , Tags []
       )
     , TabTsEntry
-      (0, TimeStamp {hr = 15, min = 39, sec = 30}, Def (Defn Nothing ["hello"]))
+      ( 0
+      , TimeStamp {hr = 15, min = 39, sec = 30}
+      , Def (Defn Nothing ["hello"])
+      , Tags []
+      )
     ]
 
 -- test data
@@ -386,13 +429,18 @@ testPgNum =
 |]
 
 testPgNumOutput :: [LogEntry]
-testPgNumOutput =
-  [ TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 21}, PN (PStart 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 22}, PN (PEnd 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 23}, PN (PFinish 38))
-  , TabTsEntry (0, TimeStamp {hr = 8, min = 38, sec = 24}, PN (Page 38))
-  ]
+testPgNumOutput
+  = [ TabTsEntry
+      (0, TimeStamp {hr = 8, min = 38, sec = 20}, PN (Page 38), Tags [])
+    , TabTsEntry
+      (0, TimeStamp {hr = 8, min = 38, sec = 21}, PN (PStart 38), Tags [])
+    , TabTsEntry
+      (0, TimeStamp {hr = 8, min = 38, sec = 22}, PN (PEnd 38), Tags [])
+    , TabTsEntry
+      (0, TimeStamp {hr = 8, min = 38, sec = 23}, PN (PFinish 38), Tags [])
+    , TabTsEntry
+      (0, TimeStamp {hr = 8, min = 38, sec = 24}, PN (Page 38), Tags [])
+    ]
 
 testLog :: Text
 testLog =
@@ -514,7 +562,7 @@ tNull =
 |]
 
 tNullOut
-  = [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null)
+  = [ TabTsEntry (0, TimeStamp {hr = 21, min = 32, sec = 5}, Null, Tags [])
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 22, min = 31, sec = 38}
@@ -522,6 +570,7 @@ tNullOut
         "I am merely coping with the collosal shame of having found out that I exist."
         "Keane Yahn-Krafft"
         Nothing
+      , Tags []
       )
     ]
 
@@ -669,21 +718,25 @@ autoAttrOut
       , Def
         (Defn Nothing ["offering", "sacrifice", "expiate", "propitiate", "gift"]
         )
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 32, sec = 17}
       , Def (Defn Nothing ["expectorate", "exsputory", "exspuition"])
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 36, sec = 14}
       , Def (Defn Nothing ["exorate", "exoration", "entreaty"])
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 13, min = 38, sec = 51}
       , Read "Pride and Prejudice" "Jane Austen"
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -693,6 +746,7 @@ autoAttrOut
           Nothing
           ["ductility", "stricture", "negative", "archness", "arch", "celerity"]
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -700,6 +754,7 @@ autoAttrOut
       , Quotation "Happiness in marriage is entirely a matter of chance."
                   "In \"Pride and Prejudice\" by Jane Austen"
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -708,11 +763,13 @@ autoAttrOut
         "Mary had neither genius nor taste; and though vanity had given her application, it had likewise given her a pedantic air and a conceited manner, which would have injured a higher degree of excellence than she had reached."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 13, min = 43, sec = 38}
       , Quotation "Your humility must disarm reproof." "" Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -721,6 +778,7 @@ autoAttrOut
         "To yield without conviction is no compliment to the understanding of either [party]."
         ""
         Nothing
+      , Tags []
       )
     ]
 
@@ -887,32 +945,38 @@ brokenOut
       ( 0
       , TimeStamp {hr = 9, min = 44, sec = 14}
       , Read "Pride And Prejudice" "Jane Austen"
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 44, sec = 45}
       , Def (Defn Nothing ["repine", "abseil"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 45, sec = 7}
       , Def
         (Defn Nothing ["repute", "dispute", "compute", "impute", "putative"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 49, sec = 36}
       , Def (Defn Nothing ["disoblige"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 51, sec = 8}
       , Def (Defn Nothing ["perforce"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 9, min = 51, sec = 15}
       , Def (Defn Nothing ["manifold"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -920,6 +984,7 @@ brokenOut
       , Quotation "Is not general incivility the very essence of love?"
                   ""
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -928,6 +993,7 @@ brokenOut
         "There are few people whom I really love and fewer still of whom I think well."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -936,6 +1002,7 @@ brokenOut
         "We must not be so ready to fancy ourselves intentionally injured."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -944,46 +1011,55 @@ brokenOut
         "The stupidity with which he was favored by nature, must guard his courtship from any charm that could make a woman wish for its continuance."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 0}
-      , Phr (Plural ["\"as well by...as...\""])
+      , Def (Defn Nothing ["\"as well by...as...\""])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 22}
-      , Phr (Plural ["\"despair of\""])
+      , Def (Defn Nothing ["\"despair of\""])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 11, sec = 33}
-      , Phr (Plural ["\"savors of\""])
+      , Def (Defn Nothing ["\"savors of\""])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 13, sec = 40}
       , Def (Defn Nothing ["insupportable"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 14, sec = 18}
       , Def (Defn Nothing ["paling"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 27, sec = 13}
       , Def (Defn Nothing ["trepidity", "trepid"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 14, min = 10, sec = 42}
       , Def (Defn Nothing ["fortnight"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 14, min = 20, sec = 14}
       , Def (Defn Nothing ["politic", "impolitic"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -994,56 +1070,67 @@ brokenOut
                    "alacrity"
                    "cheerful readiness; sprightliness; promptness"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 3, sec = 36}
       , Def (Defn Nothing ["rencontre", "rencounter"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 6, sec = 9}
       , Def (Defn Nothing ["immure", "durance", "inure"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 10, sec = 55}
       , Def (Defn Nothing ["tractable"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 11, sec = 31}
       , Def (Defn Nothing ["officious"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 16, sec = 31}
       , Def (Defn Nothing ["intimate"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 26, sec = 12}
       , Def (Defn Nothing ["verdure"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 49, sec = 25}
       , Def (Defn Nothing ["obeisance", "obedience"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 53, sec = 15}
       , Def (Defn Nothing ["derogate", "derogation"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 57, sec = 40}
-      , Phr (Plural ["\"hopeless of remedy\""])
+      , Def (Defn Nothing ["\"hopeless of remedy\""])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 15, min = 57, sec = 56}
       , Def (Defn Nothing ["upbraid"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1052,11 +1139,13 @@ brokenOut
         "One may be continually abusive to a man without saying any thing just; but one cannot be always laughing at a man without now and then stumbling upon something witty."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 16, min = 18, sec = 34}
       , Def (Defn Nothing ["ecstasy"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1068,6 +1157,7 @@ brokenOut
           "reproach"
           "to blame, censure severely or contemptuously. (\"reproach\" seems the stronger term; reproof is orthogonal to civility, whereas reproach connotes a conveyance of contempt, disdain, or disgrace--not necessarily, but such are present in its definition.)"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1079,56 +1169,67 @@ brokenOut
           "refute"
           "to repel; to disprove by argument or evidence"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 16, min = 52, sec = 3}
       , Def (Defn Nothing ["rather", "injunction"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 2, sec = 35}
-      , Phr (Plural ["\"bent their steps thither\""])
+      , Def (Defn Nothing ["\"bent their steps thither\""])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 6, sec = 35}
       , Def (Defn Nothing ["ovate", "obovate"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 15, sec = 53}
       , Def (Defn Nothing ["coppice"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 22, sec = 38}
       , Def (Defn Nothing ["occasion"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 17, min = 59, sec = 26}
       , Def (Defn Nothing ["diffidence"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 18, min = 43, sec = 22}
       , Def (Defn Nothing ["paddock"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 20, min = 3, sec = 19}
       , Def (Defn Nothing ["connubial"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 20, min = 31, sec = 28}
       , Def (Defn Nothing ["abominate"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 20, min = 39, sec = 0}
       , Def (Defn Nothing ["canvass"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1137,6 +1238,7 @@ brokenOut
         "We all love to instruct, though we can teach only what is not worth knowing."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1145,6 +1247,7 @@ brokenOut
         "But in such cases as these, a good memory is unpardonable. This is the last time I shall ever remember it myself."
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -1153,11 +1256,13 @@ brokenOut
         "How unlucky that you should have a reasonable answer to give, and that I should be so reasonable as to admit it!"
         ""
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 22, min = 8, sec = 52}
-      , Phr (Plural ["\"their characters suffered no revolution\""])
+      , Def (Defn Nothing ["\"their characters suffered no revolution\""])
+      , Tags []
       )
     ]
 
@@ -1203,13 +1308,13 @@ anotherDay = [r|
         Frederick J.E. Woodbridge, and poet-critic (poet and critic, not critic
         of poets, I surmise) George Edward Woodberry.
 
-        
+
     17:14:27 λ. q
 
         "To have a literary ambition as we contemplate another's misery, would
         seem possible only for a fiend; ..."
 
-    17:22:22 λ. 
+    17:22:22 λ.
     17:23:09 λ. commentary
 
         Note: Homer laid down principles of comedy "by dramatizing the
@@ -1218,7 +1323,7 @@ anotherDay = [r|
         Think of all your favorite chortlers in Austen, Eliot, Forster,
         consider the termagant, the harridan, the oppressively benevolent
         maternal shrew, and realize they take on the aspect of humour not in
-        derision; they do not scathe; they proffer (with admitted hyperbole) 
+        derision; they do not scathe; they proffer (with admitted hyperbole)
         the absurd with a straight face, leaving to you whether to rage,
         sublimating your own Oedipal woes, to accuse of silliness, that highest
         of calumnies, to sympathize with the most available proxy for your own
@@ -1226,7 +1331,7 @@ anotherDay = [r|
         in context, finding it simply to be amusing, of pleasure, a depiction
         which though we find (to our immeasurable ease of mind) stripped of
         judgement diminishes not at all as a vehicle for wisdom, an
-        inoculation against flash-pan prejudice; that is likewise no less fit 
+        inoculation against flash-pan prejudice; that is likewise no less fit
         to be a quintain in the image of the greater, inescapable absurdities
         which our our own against which we might joust from the safety of an
         armchair, and comforted by our liberty to skip the displeasing,
@@ -1243,5 +1348,5 @@ anotherDay = [r|
         side-effect produces laughter (or the soft exhalations with which we
         make do in solitude).
 
-    17:23:56 λ. 
+    17:23:56 λ.
 |]

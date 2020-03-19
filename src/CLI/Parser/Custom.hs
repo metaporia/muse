@@ -20,6 +20,7 @@ module CLI.Parser.Custom
   , pathToDay
   , reldur
   , caretedPreds
+  , parseTags
   )
 where
 
@@ -32,7 +33,11 @@ import           Control.Lens                   ( _Left
                                                 )
 import           Control.Monad                  ( join )
 import           Data.Bifunctor                 ( bimap )
+import           Data.Char                      ( isAlpha
+                                                , isDigit
+                                                )
 import           Data.Maybe                     ( isJust )
+import qualified Data.Text.Lazy                as TL
 import           Data.Time                      ( Day
                                                 , fromGregorianValid
                                                 )
@@ -46,6 +51,23 @@ import           Store.Sqlite                   ( StrSearch(..) )
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer    as L
+
+
+----------
+-- TAGS --
+----------
+
+type Parser' = Parsec Void TL.Text
+
+parseTags :: CLI.Parser.Custom.Parser' [TL.Text]
+parseTags = sepBy1 tag (char ',') <* eof
+ where
+  tag = takeWhile1P Nothing isTagChar
+  isTagChar c = isDigit c || isAlpha c || c == '_' || c == '-' || c == '/'
+
+------------------
+-- SEARCH PREDS --
+------------------
 
 type Parser = Parsec Void String
 
@@ -79,9 +101,12 @@ searchArgument =
   bimap Just Just
     <$> try headwordAndMeaning
     <|> ((Nothing, ) . Just <$> try meaningOnly)
-    <|> ((, Nothing) . Just <$> headwordOnly)
+    <|> ((, Nothing) . Just <$> try headwordOnly)
+    <|> colonOnly
  where
-  colon = lexeme (char ':')
+  -- Indicates that only defined terms should be searched for.
+  colonOnly = colon *> pure (Just (LitE (InfixSearch "")), Nothing)
+  colon     = lexeme (char ':')
   headwordOnly :: Parser (BoolExpr (StrSearch String))
   headwordOnly = do
     expr <- parseBoolExpr
@@ -116,7 +141,6 @@ searchVariant =
   try (DefVersus' <$ symbol "dvs")
     <|> try (Defn' <$ symbol "d")
     <|> (InlineDef' <$ symbol "inline")
-    <|> try (Phrase' <$ symbol "p")
 
 data DefSearchInput
   = DefPred (Maybe (String -> Bool))

@@ -17,12 +17,12 @@ module Store.SqliteSpec where
 
 
 import           CLI.Parser.Types               ( BoolExpr(..) )
-import           Control.Lens                   ( (^?)
-                                                , (^.)
+import           Control.Lens                   ( (^.)
+                                                , (^?)
                                                 , _1
+                                                , _Right
                                                 , over
                                                 , preview
-                                                , _Right
                                                 )
 import           Control.Monad                  ( unless
                                                 , when
@@ -46,15 +46,26 @@ import           Data.Time                      ( UTCTime(..)
                                                 )
 import           Data.Time.Calendar             ( Day )
 import           Data.Time.Clock                ( getCurrentTime )
-import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Esqueleto             ( (&&.)
+                                                , (==.)
+                                                , from
+                                                , like
+                                                , select
+                                                , val
+                                                , where_
+                                                )
+import qualified Database.Esqueleto            as E
+import           Database.Persist        hiding ( (==.) )
+import           Database.Persist.Sqlite hiding ( (==.) )
 import           Helpers
+import           Lib                            ( testSearchConfig )
 import           Parse                          ( parseLogEntries )
 import           Parse.Types
 import qualified Parse.Types                   as P
 import           Render                         ( showAll )
 import           Store                          ( Result(..) )
 import           Store.Sqlite            hiding ( InlineDef )
+import           Store.Sqlite.Types             ( Tags(..) )
 import           Test.Hspec              hiding ( before )
 import           Test.Hspec.Megaparsec          ( shouldParse )
 import           Text.RawString.QQ
@@ -122,7 +133,8 @@ spec = do
         before
         []
         []
-        (DefSearch [Defn', Phrase', InlineDef', DefVersus'] Nothing Nothing)
+        []
+        (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
@@ -130,16 +142,18 @@ spec = do
                                         before
                                         []
                                         []
+                                        []
                                         (DefSearch [DefVersus'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs' since before [] [] (DefSearch [Defn'] Nothing Nothing)
+      defs <- filterDefs' since before [] [] [] (DefSearch [Defn'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
       defs               <- filterDefs' since
                                         before
+                                        []
                                         []
                                         []
                                         (DefSearch [InlineDef'] Nothing Nothing)
@@ -150,7 +164,8 @@ spec = do
                                         before
                                         []
                                         []
-                                        (DefSearch [Phrase'] Nothing Nothing)
+                                        ["phrase"]
+                                        (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
   testSearchDispatch
 
@@ -205,6 +220,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         (searchErrs, results) <- dispatchSearch' (searchAllBare before)
         when
           debug
@@ -239,6 +255,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              [] -- tags
         -- all variants
         (searchErrs, results) <- dispatchSearch' (search allDefVariants)
 
@@ -289,6 +306,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -351,6 +369,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- all quotes, no body preds
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
 
@@ -416,6 +435,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               []
               filters
               []
+              []
 
         -- all dialogues
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
@@ -459,6 +479,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
               filters
               []
               []
+              []
 
         -- all comments
         (searchErrs, results) <- dispatchSearch' (search [] [] [])
@@ -492,7 +513,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
     $ do
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search headwords mn defs defnVariants = SearchConfig
+        let search headwords mn defs defnVariants tags = SearchConfig
               since
               before
               False
@@ -506,8 +527,9 @@ testSearchDispatch = describe "dispatchSearch" $ do
               []
               []
               []
+              tags
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'])
+          (search (LitE (InfixSearch "twaddle")) Nothing True [Defn'] [])
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 19, min = 7, sec = 0}
@@ -515,11 +537,16 @@ testSearchDispatch = describe "dispatchSearch" $ do
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
-          (search (LitE (InfixSearch "fail of")) Nothing False [Phrase'])
+          (search (LitE (InfixSearch "fail of"))
+                  Nothing
+                  False
+                  allDefVariants
+                  ["phrase"]
+          )
         liftIO
           $          results
           `shouldBe` [ ( TimeStamp {hr = 8, min = 51, sec = 44}
-                       , Phr (Plural ["\"omit to\"", "\"fail of\""])
+                       , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
                        )
                      ]
         (searchErrs, results) <- dispatchSearch'
@@ -528,6 +555,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             Nothing
             False
             [Defn']
+            []
           )
         liftIO
           $          results
@@ -549,6 +577,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             )
             False
             allDefVariants
+            []
           )
         liftIO
           $          results
@@ -579,7 +608,7 @@ testSearchDispatch = describe "dispatchSearch" $ do
             pretty = False
         (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
         liftIO $ unless (null parseErrs) (pPrint' parseErrs)
-        let search auth title variants qs = SearchConfig
+        let search auth title variants qs tags = SearchConfig
               since
               before
               False -- dump support unimplemented as yet
@@ -593,15 +622,17 @@ testSearchDispatch = describe "dispatchSearch" $ do
               [] -- commentary ^
               [] -- dialogue   ^
               [] -- dump       ^ (ignore)
+              []
         -- phrases and quotes by eliot
-        (searchErrs, results) <- dispatchSearch'
-          (search ["%Eliot%"] [] [Phrase'] [])
+        config <- liftIO $ fromJust <$> testSearchConfig "-q --phrases -aEliot"
+        (searchErrs, results) <- dispatchSearch' config
+
 
         liftIO $ results `shouldBe` globMultiPhrQt
 
         -- defversus and quotes matching "holiness"
         (searchErrs, results) <- dispatchSearch'
-          (search [] [] [DefVersus'] ["%holiness%"])
+          (search [] [] [DefVersus'] ["%holiness%"] [])
 
         liftIO $ results `shouldBe` globMultiDefVsQt
 
@@ -613,6 +644,36 @@ testSearchDispatch = describe "dispatchSearch" $ do
               then liftIO $ showAll $ fmap snd results
               else liftIO $ pPrint' results
           )
+  it "write tagged defns"
+    $ asIO
+    $ runSqlInMem
+    $ do
+        runMigrationSilent migrateAll
+        today                 <- liftIO $ utctDay <$> getCurrentTime
+        timestamps            <- writeDay today tagDemoEntries
+        -- search for "phrase"
+        searchConfig <- liftIO $ fromJust <$> testSearchConfig "--tags phrase"
+        (searchErrs, results) <- dispatchSearch' searchConfig
+        let expected =
+              [ ( TimeStamp {hr = 10, min = 17, sec = 40}
+                , Def (Defn Nothing ["inimical", "traduce", "virulent"])
+                )
+              ]
+        liftIO $ results `shouldBe` expected
+        -- search for "some_tag"
+        searchConfig <- liftIO $ fromJust <$> testSearchConfig "--tags some_tag"
+        (searchErrs, results) <- dispatchSearch' searchConfig
+        liftIO
+          $          results
+          `shouldBe` [ ( TimeStamp {hr = 10, min = 18, sec = 12}
+                       , Def (Defn Nothing ["sublime", "lintel"])
+                       )
+                     ]
+
+
+
+
+
 
 pSearch search = runSqlInMem $ do
   (since, before, (parseErrs, _)) <- setup'' "examples/globLog"
@@ -701,6 +762,7 @@ run' = runSqlInMem $ do
                                  before
                                  []
                                  []
+                                 []
                                  (DefSearch allDefVariants Nothing Nothing)
 --  liftIO $ pPrint $ mapMaybe resultToEntry defs
   liftIO $ showAll $ mapMaybe resultToEntry defs
@@ -779,7 +841,7 @@ demo = runSqlite "sqliteSpec.db" $ do
   --liftIO $ putStrLn "after repsert"
   --selectList ([] :: [Filter ReadEntry]) [] >>= liftIO . traverse_
   --  (pPrint . entityVal)
-  defs <- filterDefs' since before [] [] (DefSearch [Defn'] Nothing Nothing)
+  defs <- filterDefs' since before [] [] [] (DefSearch [Defn'] Nothing Nothing)
   liftIO $ pPrint defs
 
   return ()
@@ -798,7 +860,23 @@ clear' = do
   deleteWhere ([] :: [Filter DialogueEntry])
   deleteWhere ([] :: [Filter PageNumberEntry])
   deleteWhere ([] :: [Filter LastParse])
+  deleteWhere ([] :: [Filter DumpEntry])
 
+
+tagDemoEntries =
+  [ TabTsEntry
+    ( 1
+    , TimeStamp {hr = 10, min = 17, sec = 40}
+    , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+    , Tags ["other", "phrase", "wodehouse"]
+    )
+  , TabTsEntry
+    ( 1
+    , TimeStamp {hr = 10, min = 18, sec = 12}
+    , Def (Defn (Just 38) ["sublime", "lintel"])
+    , Tags ["some_tag"]
+    )
+  ]
 
 demoLogEntries :: [LogEntry]
 demoLogEntries
@@ -806,6 +884,7 @@ demoLogEntries
       ( 0
       , TimeStamp {hr = 9, min = 55, sec = 6}
       , Read "To the Lighthouse" "Virginia Woolf"
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -816,6 +895,7 @@ demoLogEntries
                    "benign"
                    "gentle, mild, or, medically, non-threatening"
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -827,21 +907,25 @@ demoLogEntries
           "malign"
           "(adj.) having an evil disposition; spiteful; medically trheatening; (v.) to slander; to asperse; to show hatred toward."
         )
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 17, sec = 40}
       , Def (Defn (Just 38) ["inimical", "traduce", "virulent"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 18, sec = 12}
       , Def (Defn (Just 38) ["sublime", "lintel"])
+      , Tags []
       )
     , TabTsEntry
       ( 0
       , TimeStamp {hr = 10, min = 23, sec = 0}
       , Read "Silas Marner" "George Eliot (Mary Ann Evans)"
+      , Tags []
       )
       -- N.B. this read block is here to ensure that manually attributed (indented)
       -- entries are treated by search predicates as belonging to both.
@@ -852,6 +936,7 @@ demoLogEntries
         "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
         "In \"To the Lighthouse\", by Virginia Woolf"
         Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -859,16 +944,19 @@ demoLogEntries
       , Quotation "Her simplicity fathomed what clever people falsified."
                   "In \"To the Lighthouse\", by Virginia Woolf"
                   Nothing
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 28, sec = 49}
       , Def (Defn Nothing ["plover"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
       , TimeStamp {hr = 10, min = 47, sec = 59}
       , Def (Defn Nothing ["cosmogony"])
+      , Tags []
       )
     , TabTsEntry
       ( 1
@@ -877,6 +965,7 @@ demoLogEntries
         "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
         "In \"To the Lighthouse\", by Virginia Woolf"
         (Just 38)
+      , Tags []
       )
     ]
 
@@ -1016,8 +1105,8 @@ varInline =
   ]
 
 varPhrase =
-  [ Phr (Plural ["\"fever of suspense\""])
-  , Phr (Plural ["\"smarting under an obligation\""])
+  [ Def (Defn Nothing ["\"fever of suspense\""])
+  , Def (Defn Nothing ["\"smarting under an obligation\""])
   ]
 
 dispatchAllBare =
@@ -1076,7 +1165,7 @@ dispatchAllBare =
     , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1234,7 +1323,7 @@ dispatchOnlyDefs =
     , Def (Defn Nothing ["incarnadine", "maudlin "])
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire" "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire" "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 13, min = 27, sec = 30}
     , Def (Defn Nothing ["tameless", "foredoom", "hirsute", "cadaverous"])
@@ -1314,7 +1403,7 @@ dispatchOnlyInline =
     , Def (InlineDef "afflate" "(obs.) to inspire; to blow upon")
     )
   , ( TimeStamp {hr = 13, min = 26, sec = 41}
-    , Phr (Defined "savoir faire " "(lit.) know-how; sauvity; social grace")
+    , Def (InlineDef "savoir faire " "(lit.) know-how; sauvity; social grace")
     )
   , ( TimeStamp {hr = 18, min = 58, sec = 53}
     , Def (InlineDef "callipygous" "having beautiful buttocks")
@@ -1520,12 +1609,12 @@ globMultiPhrQt =
       ""
       Nothing
     )
-  , (TimeStamp {hr = 8, min = 50, sec = 29}, Phr (Plural ["\"rapt in\""]))
+  , (TimeStamp {hr = 8, min = 50, sec = 29}, Def (Defn Nothing ["\"rapt in\""]))
   , ( TimeStamp {hr = 8, min = 51, sec = 44}
-    , Phr (Plural ["\"omit to\"", "\"fail of\""])
+    , Def (Defn Nothing ["\"omit to\"", "\"fail of\""])
     )
   , ( TimeStamp {hr = 8, min = 53, sec = 16}
-    , Phr (Plural ["\"be hindered of\""])
+    , Def (Defn Nothing ["\"be hindered of\""])
     )
   ]
 

@@ -134,7 +134,7 @@ spec = do
         []
         []
         []
-        (DefSearch [Defn', Phrase', InlineDef', DefVersus'] Nothing Nothing)
+        (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup

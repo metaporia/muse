@@ -105,31 +105,31 @@ isQuotation _                 = False
 
 -- TODO TAG REFACTOR (Phrase and Def unification)
 data DefQueryVariant
-  = Phrase'
-  | Defn'
+  = Defn'
   | InlineDef'
   | DefVersus'
   deriving (Eq, Show)
 
 allDefVariants :: [DefQueryVariant]
-allDefVariants = [Phrase', Defn', InlineDef', DefVersus']
+allDefVariants = [Defn', InlineDef', DefVersus']
 
 -- | Note that until the much needed refactor in which 'DefQuery' and 'Phrase'
 -- are unified under a single type with a tag list (the tags refactor will
 -- allow this), the below jank will treat defined phrases as inline
 -- definititions.
 --
--- Should 'DefVersus' count as inline definitions?
-defHasType :: DefQueryVariant -> Either Phrase DefQuery -> Bool
-defHasType InlineDef' (Left (Defined _ _)) = True
+-- TODO Should 'DefVersus' count as inline definitions?
+defHasType :: DefQueryVariant -> DefQuery -> Bool
+--defHasType InlineDef' (Defined _ _) = True
 --defHasType InlineDef' (Right (DefVersus _ _ _ _)) = True
 defHasType variant    dq                   = variant == defQueryVariant dq
 
-defQueryVariant :: Either Phrase DefQuery -> DefQueryVariant
-defQueryVariant (Right (Defn      _ _    )) = Defn'
-defQueryVariant (Right (InlineDef _ _    )) = InlineDef'
-defQueryVariant (Right (DefVersus _ _ _ _)) = DefVersus'
-defQueryVariant (Left  _                  ) = Phrase'
+-- FIXME PHR
+defQueryVariant :: DefQuery -> DefQueryVariant
+defQueryVariant (Defn      _ _    ) = Defn'
+defQueryVariant (InlineDef _ _    ) = InlineDef'
+defQueryVariant (DefVersus _ _ _ _) = DefVersus'
+--defQueryVariant (Left  _                  ) = Phrase'
 
 isDefn :: DefQuery -> Bool
 isDefn (Defn _ _) = True

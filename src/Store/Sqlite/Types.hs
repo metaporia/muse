@@ -29,18 +29,6 @@ instance FromJSON DefTag
 
 derivePersistField "DefTag"
 
-data PhraseOrDef
-  = Phrase'
-  | Definition'
-  deriving (Eq, Show, Read, Generic)
-
-derivePersistField "PhraseOrDef"
-
-instance ToJSON PhraseOrDef where
-  toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON PhraseOrDef
-
 data PageTag
   = Page'
   | PStart'

@@ -138,7 +138,7 @@ searchVariant =
   try (DefVersus' <$ symbol "dvs")
     <|> try (Defn' <$ symbol "d")
     <|> (InlineDef' <$ symbol "inline")
-    <|> try (Phrase' <$ symbol "p")
+    -- FIXME PHR <|> try (Phrase' <$ symbol "p")
 
 data DefSearchInput
   = DefPred (Maybe (String -> Bool))

@@ -108,7 +108,6 @@ DefEntry
     definitionTag DefTag
     tags TL.Text
     attributionTag (Key ReadEntry) Maybe
-    phraseOrDef PhraseOrDef
     pgNum Int Maybe
     pageTag PageTag Maybe
     deriving Show
@@ -450,7 +449,6 @@ main = runSqlite "test.db" $ do
                                   Inline'
                                   ""
                                   (Just wutheringHeightsId)
-                                  Definition'
                                   Nothing
                                   Nothing
   (allDefs :: [Entity DefEntry]  ) <- selectList [] []
@@ -464,7 +462,6 @@ main = runSqlite "test.db" $ do
         Inline'
         ""
         Nothing
-        Definition'
         Nothing
         Nothing
   liftIO $ putStr "entry: " >> pPrint entry
@@ -531,40 +528,24 @@ instance ToEntry String DefEntry where
    =
     case eitherDecode $ TL.encodeUtf8 defEntryDefinitions of
       Right defTag ->
-        case defEntryPhraseOrDef of
-          Definition' ->
-            case defTag of
-              Headwords hws -> Right $ Def $ P.Defn Nothing $ TL.unpack <$> hws
-              Inlines inlineDefs ->
-                case inlineDefs of
-                  [] ->
-                    Left "toEntry: definition: found empty list of inline defs"
-                  [InlineDef {..}] ->
-                    Right $
-                    Def $ P.InlineDef (T.unpack headword) (T.unpack meaning)
-                  [h, t] ->
-                    Right $
-                    Def $
-                    P.DefVersus
-                      (T.unpack $ headword h)
-                      (T.unpack $ meaning h)
-                      (T.unpack $ headword t)
-                      (T.unpack $ meaning t)
-                  _ ->
-                    Left
-                      "toEntry: definition: found more than two inline defs, corrupt input."
-          -- FIXME PHR
-          Phrase' -> Left "toEntry: found phrase. wtf. this is a bug."
-            --case defTag of
-            --  Headwords hws -> Right $ Phr $ Plural $ TL.unpack <$> hws
-            --  Inlines inlineDefs ->
-            --    case inlineDefs of
-            --      [] -> Left "toEntry: phrase: found empty list of inline defs"
-            --      [InlineDef {..}] ->
-            --        Right $ Phr $ Defined (T.unpack headword) (T.unpack meaning)
-            --      _ ->
-            --        Left
-            --          "toEntry: phrase: found more than two inline defs, corrupt input."
+        case defTag of
+          Headwords hws -> Right $ Def $ P.Defn Nothing $ TL.unpack <$> hws
+          Inlines inlineDefs ->
+            case inlineDefs of
+              [] -> Left "toEntry: definition: found empty list of inline defs"
+              [InlineDef {..}] ->
+                Right $ Def $ P.InlineDef (T.unpack headword) (T.unpack meaning)
+              [h, t] ->
+                Right $
+                Def $
+                P.DefVersus
+                  (T.unpack $ headword h)
+                  (T.unpack $ meaning h)
+                  (T.unpack $ headword t)
+                  (T.unpack $ meaning t)
+              _ ->
+                Left
+                  "toEntry: definition: found more than two inline defs, corrupt input."
       Left err -> Left err
 
 instance ToEntry String ReadEntry where
@@ -602,7 +583,6 @@ toDefEntry mAttrTag tags dq = case dq of
     Headwords'
     (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
     (fromIntegral <$> mPg)
     Nothing
   P.InlineDef headword meaning -> DefEntry
@@ -612,7 +592,6 @@ toDefEntry mAttrTag tags dq = case dq of
     Inline'
     (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
@@ -625,7 +604,6 @@ toDefEntry mAttrTag tags dq = case dq of
     Comparison'
     (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Definition'
       -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
@@ -638,7 +616,6 @@ phraseToDefEntry mAttrTag tags phrase = case phrase of
     Headwords'
     (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Phrase'
     Nothing
     Nothing
   Defined headword meaning -> DefEntry
@@ -648,7 +625,6 @@ phraseToDefEntry mAttrTag tags phrase = case phrase of
     Inline'
     (TL.decodeUtf8 $ encode tags)
     (fromAttrTag <$> mAttrTag)
-    Phrase'
     -- TODO add page nums (prefix types?) for all definition/phrase types.
     Nothing
     Nothing
@@ -1148,7 +1124,6 @@ filterDefs' since before authPreds titlePreds tags defSearch = do
 -- Let's just ignore phrases to explore the performance gains of this approach.
 --
 jankyConvertDefQueryVariantToDefEntryTags :: P.DefQueryVariant -> DefTag
-jankyConvertDefQueryVariantToDefEntryTags P.Phrase'    = Inline' -- inline or defn? unaccountable behavior; we've chosen to (temporarily) weather the false positives
 jankyConvertDefQueryVariantToDefEntryTags P.Defn'      = Headwords'
 jankyConvertDefQueryVariantToDefEntryTags P.InlineDef' = Inline'
 jankyConvertDefQueryVariantToDefEntryTags P.DefVersus' = Comparison'
@@ -1332,7 +1307,7 @@ filterDefR :: DefSearch -> Entity DefEntry -> Either String (Maybe Result)
 filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entityVal, entityKey }
   = do
     let variantSatisfies
-          :: [P.DefQueryVariant] -> Either Phrase P.DefQuery -> Bool
+          :: [P.DefQueryVariant] -> P.DefQuery -> Bool
         variantSatisfies variants x = or (defHasType <$> variants <*> pure x)
         (DefEntryKey ts)   = entityKey
         -- FIXME PHR
@@ -1340,17 +1315,17 @@ filterDefR DefSearch { defVariants, headwordPreds, meaningPreds } Entity { entit
     entry <- toEntry entityVal :: Either String Entry
     (\b -> if b then Just $ TsR ts entry else Nothing) <$> case entry of
       Def x@(P.Defn mPg hws) ->
-        Right $ variantSatisfies defVariants (Right x) && or
+        Right $ variantSatisfies defVariants x && or
           (applyBoolExpr headwordPreds <$> hws)
       Def x@(P.InlineDef hw mn) ->
         Right
-          $  variantSatisfies defVariants (Right x)
+          $  variantSatisfies defVariants x
           && applyBoolExpr headwordPreds hw
           && applyBoolExpr meaningPreds  mn
       Def x@(P.DefVersus hw mn hw' mn') ->
         Right
           $ -- only one of the two compared definitions need satisfy
-             variantSatisfies defVariants (Right x)
+             variantSatisfies defVariants x
           && ((applyBoolExpr headwordPreds hw && applyBoolExpr meaningPreds mn)
              || (  applyBoolExpr headwordPreds hw'
                 && applyBoolExpr meaningPreds  mn'

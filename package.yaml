@@ -21,9 +21,10 @@ description: Please see the README on GitHub at <https://gitlab.com/metaporia/mu
 
 dependencies:
 
-- ansi-wl-pprint
+- QuickCheck
 - aeson
 - ansi-terminal
+- ansi-wl-pprint
 - base >= 4.7 && < 5
 - basic-prelude
 - bytestring
@@ -36,14 +37,13 @@ dependencies:
 - monad-logger
 - mtl >= 2.2.2
 - optparse-applicative
-- parsers
 - parser-combinators
+- parsers
 - path-pieces
 - persistent
 - persistent-sqlite
 - persistent-template
 - pretty-show
-- QuickCheck
 - raw-strings-qq
 - resourcet
 - split

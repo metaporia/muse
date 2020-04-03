@@ -203,21 +203,21 @@ search today = do
   authPreds  <- authorS
   titlePreds <- titleS
 
-  attrs      <-
-    fmap
-        (<>)
-        (   fmap
-            (\s (Attribution _ a) ->
-              (toLower <$> s) `isInfixOf` T.unpack (T.toLower a)
-            )
-        <$> authorS
-        )
-      <*> (   fmap
-              (\s (Attribution t _) ->
-                (toLower <$> s) `isInfixOf` T.unpack (T.toLower t)
-              )
-          <$> titleS
-          )
+  --attrs      <-
+  --  fmap
+  --      (<>)
+  --      (   fmap
+  --          (\s (Attribution _ a) ->
+  --            (toLower <$> s) `isInfixOf` T.unpack (T.toLower a)
+  --          )
+  --      <$> authorS
+  --      )
+  --    <*> (   fmap
+  --            (\s (Attribution t _) ->
+  --              (toLower <$> s) `isInfixOf` T.unpack (T.toLower t)
+  --            )
+  --        <$> titleS
+  --        )
 
   defSearch <- parseDefSearch
 

@@ -107,6 +107,35 @@ spec = do
             selectList ([] :: [Filter QuoteEntry]) []
               >>= applyReadPreds ["Woolf"] ["Light"]
           liftIO $ length satisfactoryDefs `shouldBe` 3
+    it "quote filtration dispatched via CLI" $ asIO $ runSqlInMem $ do
+      runMigrationSilent migrateAll
+      today        <- liftIO $ utctDay <$> getCurrentTime
+      timestamps   <- writeDay today demoLogEntries
+      searchConfig <- liftIO $ fromJust <$> testSearchConfig
+        "-q --author Woolf --title Lighthouse"
+      (searchErrs, results) <- dispatchSearch' searchConfig
+      liftIO $ length results `shouldBe` 3
+      liftIO
+        $          results
+        `shouldBe` [ ( TimeStamp {hr = 10, min = 24, sec = 2}
+                     , Quotation
+                       "There was no treachery too base for the world to commit. She knew this. No happiness lasted."
+                       "In \"To the Lighthouse\", by Virginia Woolf"
+                       Nothing
+                     )
+                   , ( TimeStamp {hr = 10, min = 25, sec = 27}
+                     , Quotation
+                       "Her simplicity fathomed what clever people falsified."
+                       "In \"To the Lighthouse\", by Virginia Woolf"
+                       Nothing
+                     )
+                   , ( TimeStamp {hr = 10, min = 49, sec = 58}
+                     , Quotation
+                       "But nevertheless, the fact remained, that is was nearly impossbile to dislike anyone if one looked at them."
+                       "In \"To the Lighthouse\", by Virginia Woolf"
+                       Nothing
+                     )
+                   ]
     it "filterQuotes" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
       matchingQuotes     <- filterQuotes since
@@ -128,13 +157,12 @@ spec = do
   describe "definition filtration" $ do
     it "all def variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs               <- filterDefs'
-        since
-        before
-        []
-        []
-        []
-        (DefSearch allDefVariants Nothing Nothing)
+      defs <- filterDefs' since
+                          before
+                          []
+                          []
+                          []
+                          (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefsAll
     it "def versus variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
@@ -147,7 +175,12 @@ spec = do
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefVersus
     it "vanilla definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- filterQuotesSetup
-      defs <- filterDefs' since before [] [] [] (DefSearch [Defn'] Nothing Nothing)
+      defs               <- filterDefs' since
+                                        before
+                                        []
+                                        []
+                                        []
+                                        (DefSearch [Defn'] Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` demoDefn
     it "inline def definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
@@ -160,14 +193,27 @@ spec = do
       liftIO $ resultsToEntry (rights defs) `shouldBe` varInline
     it "phrase definition variants" $ asIO $ runSqlInMem $ do
       (since, before, _) <- defVarSetup
-      defs               <- filterDefs' since
-                                        before
-                                        []
-                                        []
-                                        ["phrase"]
-                                        (DefSearch allDefVariants Nothing Nothing)
+      defs <- filterDefs' since
+                          before
+                          []
+                          []
+                          ["phrase"]
+                          (DefSearch allDefVariants Nothing Nothing)
       liftIO $ resultsToEntry (rights defs) `shouldBe` varPhrase
-  testSearchDispatch
+  describe "search dispatch" testSearchDispatch
+  describe "DefSearch parser" $ do
+    it "`search --ds ':'` returns only defined (i.e., inline and dvs)"
+      $ asIO
+      $ runSqlInMem
+      $ do
+          (since, before, _) <- defVarSetup
+          searchConfig       <- liftIO $ fromJust <$> testSearchConfig "--ds :"
+          liftIO
+            $          (defVariants $ definitionSearch $ searchConfig)
+            `shouldBe` [InlineDef', DefVersus']
+          (searchErrs, results) <- dispatchSearch' searchConfig
+          liftIO $ results `shouldBe` defSearchAllInline
+
 
 
 
@@ -1630,5 +1676,21 @@ globMultiDefVsQt =
                  "potter"
                  "one who makes pots; to trifle; to walk lazily "
       )
+    )
+  ]
+
+
+defSearchAllInline =
+  [ ( TimeStamp {hr = 10, min = 38, sec = 0}
+    , Def (InlineDef "whorl" "(to form) a pattern of concentric circles")
+    )
+  , ( TimeStamp {hr = 13, min = 52, sec = 17}
+    , Def (InlineDef "mizzle" "a misty drizzle")
+    )
+  , ( TimeStamp {hr = 16, min = 40, sec = 5}
+    , Def (InlineDef "shillelagh" "an Irish, knob-ended cudgel")
+    )
+  , ( TimeStamp {hr = 18, min = 38, sec = 48}
+    , Def (InlineDef "saccadic" "of jerky, discontinous movement")
     )
   ]

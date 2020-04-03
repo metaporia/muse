@@ -575,6 +575,8 @@ authorS =
 titleS :: Parser [String]
 titleS =
   fmap (either (const []) id . parsePreds)
+  --fmap return -- NOTE: this allows  double-quoted strings. if parsePreds
+  --doesn't ban spaces, it, too, will work.
     $  option str
     $  long "title"
     <> short 't'

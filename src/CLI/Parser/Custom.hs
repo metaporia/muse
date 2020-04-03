@@ -71,10 +71,16 @@ parseTags = sepBy1 tag (char ',') <* eof
 
 type Parser = Parsec Void String
 
--- TODO update sqlite queries to all use 'BoolExpr'
+-- | TODO update sqlite queries to all use 'BoolExpr'
+--
+-- TODO spec out search string grammar, decide on valid characters.
+-- That is, constructively define valid search string spec.
+--
+-- Double-quotes enable multi-word searches.
 caretedPreds :: Parser [String]
-caretedPreds = label "^ separated list of strings"
-  $ sepBy (takeWhile1P Nothing (\x -> x /= ' ' && x /= '\n')) (char '^')
+caretedPreds =
+  label "^ separated list of strings" $ sepBy (takeWhile1P Nothing (/= '\n')) (char '^')
+
 
 --- CLI's custom search argument parser.
 -- Revised for 'StrSearch' refactor depended on by DefEntry search

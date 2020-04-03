@@ -65,84 +65,55 @@ module Lib
   )
 where
 
-import           CLI.Parser.Custom              ( caretedPreds
-                                                , parseTags
-                                                , pathToDay
-                                                , reldur
-                                                , searchArgument
-                                                )
-import           CLI.Parser.Types
-import           Control.Lens                   ( _Left
-                                                , over
-                                                )
-import           Control.Monad                  ( void )
-import           Control.Monad.State
-import           Data.Aeson              hiding ( Null )
-import qualified Data.ByteString               as B
-import qualified Data.ByteString.Lazy          as BL
-import           Data.Char                      ( toLower )
-import           Data.Foldable                  ( traverse_ )
-import           Data.List                      ( isInfixOf
-                                                , sort
-                                                )
-import           Data.Maybe                     ( fromMaybe
-                                                , isJust
-                                                , mapMaybe
-                                                )
-import           Data.Monoid                    ( (<>) )
-import qualified Data.Text                     as T
-import qualified Data.Text.IO                  as T
-import qualified Data.Text.Lazy                as TL
-import           Data.Time
-import           Data.Time.Clock                ( utctDay )
-import           Data.Yaml.Config               ( load
-                                                , lookupDefault
-                                                )
-import           Database.Persist.Sqlite        ( runMigration
-                                                , runSqlite
-                                                )
-import           Helpers
-import           Options.Applicative
+import CLI.Parser.Custom
+       (caretedPreds, parseTags, pathToDay, reldur, searchArgument)
+import CLI.Parser.Types
+import Control.Lens (_Left, over)
+import Control.Monad (void)
+import Control.Monad.State
+import Data.Aeson hiding (Null)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import Data.Char (toLower)
+import Data.Foldable (traverse_)
+import Data.List (isInfixOf, sort)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Monoid ((<>))
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy as TL
+import Data.Time
+import Data.Time.Clock (utctDay)
+import Data.Version (showVersion)
+import Data.Yaml.Config (load, lookupDefault)
+import Database.Persist.Sqlite (runMigration, runSqlite)
+import Helpers
+import Options.Applicative
 import qualified Parse
-import           Parse.Helpers                  ( parsePretty )
-import           Parse.Types                    ( DefQuery
-                                                , DefQueryVariant(..)
-                                                , LogEntry
-                                                , RelDur(..)
-                                                , allDefVariants
-                                                )
-import           Prelude                 hiding ( init
-                                                , log
-                                                , lookup
-                                                )
-import           Render
-import           Search
-import           Store                   hiding ( Author
-                                                , Search
-                                                , Title
-                                                , defs
-                                                , quotes
-                                                )
-import           Store.Render                   ( )
-import qualified Store.Sqlite                  as Sql
-import           Store.Sqlite                   ( DefSearch(..)
-                                                , SearchConfig
-                                                , StrSearch(..)
-                                                , fetchLastRead
-                                                )
-import           System.Directory               ( createDirectoryIfMissing
-                                                , doesFileExist
-                                                , getModificationTime
-                                                , listDirectory
-                                                )
-import           System.Environment             ( getEnv )
-import           System.Exit                    ( exitFailure )
-import           Text.Megaparsec                ( errorBundlePretty )
-import qualified Text.Megaparsec               as M
-import           Text.Show.Pretty               ( pPrint )
+import Parse.Helpers (parsePretty)
+import Parse.Types
+       (DefQuery, DefQueryVariant(..), LogEntry, RelDur(..),
+        allDefVariants)
+import qualified Paths_muse
+import Prelude hiding (init, log, lookup)
+import Render
+import Search
+import Store hiding (Author, Search, Title, defs, quotes)
+import Store.Render ()
+import qualified Store.Sqlite as Sql
+import Store.Sqlite
+       (DefSearch(..), SearchConfig, StrSearch(..), fetchLastRead)
+import System.Directory
+       (createDirectoryIfMissing, doesFileExist, getModificationTime,
+        listDirectory)
+import System.Environment (getEnv)
+import System.Exit (exitFailure)
+import Text.Megaparsec (errorBundlePretty)
+import qualified Text.Megaparsec as M
+import Text.Show.Pretty (pPrint)
 
 version :: String
-version = "muse 0.3.0"
+version = showVersion Paths_muse.version --"muse 0.3.0"
 
 -- Questions:
 --
@@ -380,7 +351,7 @@ toplevel today
            )
       )
     )
-    <|> (infoOption version (long "version" <> short 'V') <*> pure Bare) -- VERSION
+    <|> (infoOption version (long "version" <> short 'V') <*> pure Bare)
 
 
 

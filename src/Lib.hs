@@ -2,6 +2,7 @@
   OverloadedStrings, ApplicativeDo #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -87,6 +88,7 @@ import Data.Time.Clock (utctDay)
 import Data.Version (showVersion)
 import Data.Yaml.Config (load, lookupDefault)
 import Database.Persist.Sqlite (runMigration, runSqlite)
+import Development.GitRev (gitHash)
 import Helpers
 import Options.Applicative
 import qualified Parse
@@ -113,7 +115,7 @@ import qualified Text.Megaparsec as M
 import Text.Show.Pretty (pPrint)
 
 version :: String
-version = showVersion Paths_muse.version --"muse 0.3.0"
+version = showVersion Paths_muse.version <> ", commit:" <> take 7 $(gitHash) --"muse 0.3.0"
 
 -- Questions:
 --
@@ -598,9 +600,9 @@ testSearchConfig s = do
   today <- utctDay <$> getCurrentTime
   let res =
         execParserPure defaultPrefs (info (search today) briefDesc) $ words s
-  return $ case res of
-    Options.Applicative.Success opts -> Just opts
-    _ -> Nothing
+  case res of
+    Options.Applicative.Success opts -> return $ Just opts
+    err -> do pPrint err; return Nothing
 
 -- TODO
 --

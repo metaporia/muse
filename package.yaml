@@ -32,6 +32,7 @@ dependencies:
 - criterion
 - directory
 - esqueleto
+- gitrev
 - lens
 - megaparsec
 - monad-logger
